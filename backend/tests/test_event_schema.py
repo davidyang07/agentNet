@@ -2,7 +2,7 @@ import uuid
 
 from app.engine.simulate import run_full
 from app.events.emitter import EventEmitter
-from app.schemas.events import M0_EVENT_TYPES
+from app.schemas.events import M1_EVENT_TYPES
 from app.schemas.experiment import ExperimentConfig
 
 
@@ -14,4 +14,4 @@ def test_event_schema_invariants():
     assert len(events) > 0
     assert all(e.schema_version == 1 for e in events)
     assert [e.seq for e in events] == list(range(len(events)))
-    assert all(e.event_type in M0_EVENT_TYPES for e in events)
+    assert all(e.event_type in M1_EVENT_TYPES for e in events)

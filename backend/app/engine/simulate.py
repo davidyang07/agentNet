@@ -1,4 +1,5 @@
-from app.engine.propagation import is_finished, step
+from app.engine.propagation import is_finished
+from app.engine.tick import advance
 from app.engine.topology import build_world
 from app.schemas.events import EventDraft, EventType
 from app.schemas.experiment import ExperimentConfig
@@ -18,7 +19,7 @@ def run_full(config: ExperimentConfig) -> list[EventDraft]:
     drafts.extend(topology_drafts)
 
     while not is_finished(world, config):
-        world, step_drafts = step(world, config)
-        drafts.extend(step_drafts)
+        world, tick_drafts = advance(world, config)
+        drafts.extend(tick_drafts)
 
     return drafts

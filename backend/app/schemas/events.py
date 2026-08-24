@@ -49,6 +49,14 @@ M0_EVENT_TYPES = frozenset(
     }
 )
 
+# M1 additionally emits detection/quarantine events (M1_PLAN §4).
+M1_EVENT_TYPES = M0_EVENT_TYPES | frozenset(
+    {
+        EventType.ANOMALY_DETECTED,
+        EventType.AGENT_QUARANTINED,
+    }
+)
+
 
 class EventDraft(BaseModel):
     """Engine output: no identity, no clock. This is what keeps step() pure."""
