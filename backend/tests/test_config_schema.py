@@ -1,8 +1,8 @@
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.experiment import ExperimentConfig, NodeView
 from app.engine.state import SecurityState
+from app.schemas.experiment import ExperimentConfig, NodeView
 
 
 def test_experiment_config_new_fields_have_m0_preserving_defaults():
