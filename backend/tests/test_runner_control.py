@@ -140,3 +140,38 @@ def test_concurrent_stop_calls_emit_exactly_one_stopped_event():
         assert runner._task is None
 
     asyncio.run(run())
+
+
+def test_every_concurrent_stop_waits_for_task_settlement():
+    async def run() -> None:
+        runner = _make_runner()
+        cancellation_started = asyncio.Event()
+        allow_settlement = asyncio.Event()
+
+        async def slow_to_settle_after_cancellation() -> None:
+            try:
+                await asyncio.Future()
+            except asyncio.CancelledError:
+                cancellation_started.set()
+                await allow_settlement.wait()
+                raise
+
+        task = asyncio.create_task(slow_to_settle_after_cancellation())
+        runner._task = task
+        await asyncio.sleep(0)
+
+        first_stop = asyncio.create_task(runner.stop())
+        await cancellation_started.wait()
+        second_stop = asyncio.create_task(runner.stop())
+        await asyncio.sleep(0)
+
+        assert not second_stop.done()
+        assert not task.done()
+
+        allow_settlement.set()
+        await asyncio.gather(first_stop, second_stop)
+
+        assert task.done()
+        assert runner._task is None
+
+    asyncio.run(run())

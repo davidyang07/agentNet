@@ -88,17 +88,27 @@ class ExperimentRunner:
         self._task = None
 
     async def stop(self) -> None:
-        if self.status in ("finished", "stopped"):
+        if self.status == "finished":
+            return
+        if self.status == "stopped":
+            task = self._task
+            if task is not None:
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
             return
         self._running = False
         self.status = "stopped"
-        task, self._task = self._task, None
+        task = self._task
         if task is not None:
             task.cancel()
             try:
                 await task
             except asyncio.CancelledError:
                 pass
+            if self._task is task:
+                self._task = None
         events = self._emitter.emit(
             [EventDraft(sim_tick=self.state.tick, event_type=EventType.EXPERIMENT_STOPPED)]
         )
