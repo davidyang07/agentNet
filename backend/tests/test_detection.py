@@ -1,5 +1,9 @@
+import asyncio
+
 from app.engine.simulate import run_full
 from app.engine.state import AgentNode, SecurityState, WorldState
+from app.orchestrator.runner import ExperimentRunner
+from app.schemas.events import EventType
 from app.schemas.experiment import ExperimentConfig
 from app.security.detection import step
 
@@ -102,3 +106,48 @@ def test_quarantined_node_never_source_or_target_after_quarantine():
                     f"{node} acted as source/target at draft index {i} "
                     f"after being quarantined at draft index {quarantined_at_index[node]}"
                 )
+
+
+def test_live_runner_uses_same_detection_pipeline_as_run_full():
+    config = ExperimentConfig(
+        seed=7,
+        node_count=25,
+        max_ticks=1,
+        defense_enabled=True,
+        detector_sensitivity=1.0,
+    )
+    expected = [
+        (
+            draft.sim_tick,
+            draft.event_type,
+            draft.agent_id,
+            draft.source_agent_id,
+            draft.target_agent_id,
+            draft.metadata,
+        )
+        for draft in run_full(config)
+    ]
+
+    async def run_live() -> list[tuple]:
+        runner = ExperimentRunner(config)
+        runner.tick_interval = 0
+        await runner.publish_initial()
+        await runner._run_loop()
+        events = runner.bus.since(-1)
+        assert events is not None
+        return [
+            (
+                event.sim_tick,
+                event.event_type,
+                event.agent_id,
+                event.source_agent_id,
+                event.target_agent_id,
+                event.metadata,
+            )
+            for event in events
+        ]
+
+    actual = asyncio.run(run_live())
+
+    assert actual == expected
+    assert any(event_type == EventType.AGENT_QUARANTINED for _, event_type, *_ in actual)

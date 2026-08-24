@@ -2,7 +2,8 @@ import asyncio
 from typing import Literal
 from uuid import UUID, uuid4
 
-from app.engine.propagation import is_finished, step
+from app.engine.propagation import is_finished
+from app.engine.tick import advance
 from app.engine.topology import build_world
 from app.events.bus import EventBus
 from app.events.emitter import EventEmitter
@@ -44,7 +45,7 @@ class ExperimentRunner:
 
     async def _run_loop(self) -> None:
         while self._running and not is_finished(self.state, self.config):
-            self.state, drafts = step(self.state, self.config)
+            self.state, drafts = advance(self.state, self.config)
             events = self._emitter.emit(drafts)
             await self.bus.publish(events)
             await asyncio.sleep(self.tick_interval)
