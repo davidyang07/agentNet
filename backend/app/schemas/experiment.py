@@ -34,6 +34,10 @@ class EdgeView(BaseModel):
 
 class ExperimentSummary(BaseModel):
     experiment_id: UUID
-    status: Literal["running", "finished", "stopped"]
+    status: Literal["running", "paused", "finished", "stopped"]
     sim_tick: int
     config: ExperimentConfig
+
+
+class SpeedRequest(BaseModel):
+    multiplier: float = Field(..., ge=0.25, le=8.0)

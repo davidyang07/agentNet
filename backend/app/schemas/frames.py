@@ -12,7 +12,7 @@ class SnapshotFrame(BaseModel):
     experiment_id: UUID
     last_seq: int
     sim_tick: int
-    status: Literal["running", "finished", "stopped"]
+    status: Literal["running", "paused", "finished", "stopped"]
     nodes: list[NodeView]
     edges: list[EdgeView]
 

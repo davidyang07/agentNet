@@ -15,5 +15,8 @@ class ExperimentRegistry:
     def get(self, experiment_id: UUID) -> ExperimentRunner | None:
         return self._runners.get(experiment_id)
 
+    def remove(self, experiment_id: UUID) -> None:
+        self._runners.pop(experiment_id, None)
+
 
 registry = ExperimentRegistry()

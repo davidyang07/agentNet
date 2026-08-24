@@ -2,7 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.engine.state import SecurityState
-from app.schemas.experiment import ExperimentConfig, NodeView
+from app.schemas.experiment import ExperimentConfig, NodeView, SpeedRequest
 
 
 def test_experiment_config_new_fields_have_m0_preserving_defaults():
@@ -54,3 +54,19 @@ def test_node_view_new_fields_accept_explicit_values():
     )
     assert node.compromised_by == "agent-000"
     assert node.tick_compromised == 3
+
+
+def test_speed_request_accepts_in_bounds_multiplier():
+    req = SpeedRequest(multiplier=2.0)
+    assert req.multiplier == 2.0
+
+
+@pytest.mark.parametrize("value", [0.1, 8.1])
+def test_speed_request_rejects_out_of_bounds_multiplier(value):
+    with pytest.raises(ValidationError):
+        SpeedRequest(multiplier=value)
+
+
+def test_speed_request_requires_multiplier():
+    with pytest.raises(ValidationError):
+        SpeedRequest()

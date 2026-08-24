@@ -55,6 +55,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/experiments/{experiment_id}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pause Experiment */
+        post: operations["pause_experiment_api_experiments__experiment_id__pause_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/experiments/{experiment_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume Experiment */
+        post: operations["resume_experiment_api_experiments__experiment_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/experiments/{experiment_id}/speed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set Experiment Speed */
+        post: operations["set_experiment_speed_api_experiments__experiment_id__speed_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/schema/events": {
         parameters: {
             query?: never;
@@ -197,6 +248,22 @@ export interface components {
              * @default 200
              */
             max_ticks: number;
+            /**
+             * Detector Sensitivity
+             * @default 0.2
+             */
+            detector_sensitivity: number;
+            /**
+             * Defense Enabled
+             * @default true
+             */
+            defense_enabled: boolean;
+            /**
+             * Initial Compromised
+             * @default highest_degree
+             * @enum {string}
+             */
+            initial_compromised: "highest_degree" | "random_node";
         };
         /** ExperimentSummary */
         ExperimentSummary: {
@@ -209,7 +276,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "running" | "finished" | "stopped";
+            status: "running" | "paused" | "finished" | "stopped";
             /** Sim Tick */
             sim_tick: number;
             config: components["schemas"]["ExperimentConfig"];
@@ -227,6 +294,10 @@ export interface components {
             /** Software Type */
             software_type: string;
             security_state: components["schemas"]["SecurityState"];
+            /** Compromised By */
+            compromised_by?: string | null;
+            /** Tick Compromised */
+            tick_compromised?: number | null;
         };
         /**
          * SecurityState
@@ -253,11 +324,16 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "running" | "finished" | "stopped";
+            status: "running" | "paused" | "finished" | "stopped";
             /** Nodes */
             nodes: components["schemas"]["NodeView"][];
             /** Edges */
             edges: components["schemas"]["EdgeView"][];
+        };
+        /** SpeedRequest */
+        SpeedRequest: {
+            /** Multiplier */
+            multiplier: number;
         };
         /** ValidationError */
         ValidationError: {
@@ -355,6 +431,103 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExperimentSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pause_experiment_api_experiments__experiment_id__pause_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                experiment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExperimentSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_experiment_api_experiments__experiment_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                experiment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExperimentSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_experiment_speed_api_experiments__experiment_id__speed_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                experiment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpeedRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

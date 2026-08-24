@@ -23,6 +23,9 @@ const CANONICAL_CONFIG: ExperimentConfig = {
   p_same: 0.15,
   p_cross: 0.03,
   max_ticks: 200,
+  detector_sensitivity: 0.2,
+  defense_enabled: true,
+  initial_compromised: "highest_degree",
 };
 
 // Keyed by experimentId in the parent so a Reset (a brand new experimentId)

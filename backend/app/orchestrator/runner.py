@@ -11,13 +11,17 @@ from app.schemas.events import EventDraft, EventType
 from app.schemas.experiment import EdgeView, ExperimentConfig, ExperimentSummary, NodeView
 from app.schemas.frames import SnapshotFrame
 
-Status = Literal["running", "finished", "stopped"]
+Status = Literal["running", "paused", "finished", "stopped"]
+
+
+class InvalidTransitionError(Exception):
+    """Raised when a control operation is invalid for the runner's current status."""
 
 
 class ExperimentRunner:
     """The only place wall-clock time exists."""
 
-    tick_interval = 0.25
+    tick_interval_default = 0.25
 
     def __init__(self, config: ExperimentConfig) -> None:
         self.experiment_id: UUID = uuid4()
@@ -28,6 +32,10 @@ class ExperimentRunner:
         self.state, topology_drafts = build_world(config)
         self._running = True
         self._task: asyncio.Task[None] | None = None
+        self.tick_interval: float = self.tick_interval_default
+        self._speed: float = 1.0
+        self._pause_event = asyncio.Event()
+        self._pause_event.set()
         self._initial_drafts: list[EventDraft] = [
             EventDraft(sim_tick=0, event_type=EventType.EXPERIMENT_STARTED),
             *topology_drafts,
@@ -43,22 +51,54 @@ class ExperimentRunner:
     def start(self) -> None:
         self._task = asyncio.create_task(self._run_loop())
 
+    def pause(self) -> None:
+        if self.status == "paused":
+            return
+        if self.status != "running":
+            raise InvalidTransitionError(f"cannot pause an experiment with status {self.status!r}")
+        self._pause_event.clear()
+        self.status = "paused"
+
+    def resume(self) -> None:
+        if self.status == "running":
+            return
+        if self.status != "paused":
+            raise InvalidTransitionError(f"cannot resume an experiment with status {self.status!r}")
+        self.status = "running"
+        self._pause_event.set()
+
+    def set_speed(self, multiplier: float) -> None:
+        if self.status in ("finished", "stopped"):
+            raise InvalidTransitionError(
+                f"cannot change speed of an experiment with status {self.status!r}"
+            )
+        self._speed = max(0.25, min(8.0, multiplier))
+
     async def _run_loop(self) -> None:
         while self._running and not is_finished(self.state, self.config):
+            await self._pause_event.wait()
+            if not self._running:
+                break
             self.state, drafts = advance(self.state, self.config)
             events = self._emitter.emit(drafts)
             await self.bus.publish(events)
-            await asyncio.sleep(self.tick_interval)
+            await asyncio.sleep(self.tick_interval / self._speed)
         if self._running:
             self.status = "finished"
+        self._task = None
 
     async def stop(self) -> None:
-        if not self._running:
+        if self.status in ("finished", "stopped"):
             return
         self._running = False
-        if self._task is not None:
-            self._task.cancel()
         self.status = "stopped"
+        task, self._task = self._task, None
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
         events = self._emitter.emit(
             [EventDraft(sim_tick=self.state.tick, event_type=EventType.EXPERIMENT_STOPPED)]
         )
