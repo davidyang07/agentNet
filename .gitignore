@@ -25,5 +25,12 @@ build/
 # Logs
 *.log
 
+# Determinism verification artifacts
+.artifacts/
+
 # Claude Code local settings
 .claude/settings.local.json
+CLAUDE.local.md
+
+# Planning docs (not authoritative — SPEC.md/BRIEF.md are)
+docs/*_PLAN.md
