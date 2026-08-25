@@ -18,8 +18,8 @@ export async function createExperiment(config: ExperimentConfig): Promise<Experi
   return res.json();
 }
 
-export async function getExperiment(experimentId: string): Promise<ExperimentSummary> {
-  const res = await fetch(`${BACKEND_URL}/api/experiments/${experimentId}`);
+export async function getExperiment(experimentId: string, signal?: AbortSignal): Promise<ExperimentSummary> {
+  const res = await fetch(`${BACKEND_URL}/api/experiments/${experimentId}`, { signal });
   if (!res.ok) {
     throw new Error(`failed to get experiment: ${res.status}`);
   }

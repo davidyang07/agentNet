@@ -16,7 +16,7 @@ const EXP_A = "11111111-1111-1111-1111-111111111111";
 const EXP_B = "22222222-2222-2222-2222-222222222222";
 
 function running(overrides: Partial<ControlState> = {}): ControlState {
-  return { experimentId: EXP_A, status: "running", pending: null, speed: 1, error: null, ...overrides };
+  return { ...initialControlState, experimentId: EXP_A, status: "running", ...overrides };
 }
 
 describe("initial state", () => {
@@ -32,25 +32,26 @@ describe("initial state", () => {
 
 describe("start", () => {
   it("start_requested sets pending", () => {
-    const s = controlReducer(initialControlState, { type: "start_requested" });
+    const s = controlReducer(initialControlState, { type: "start_requested", operationId: 1 });
     expect(s.pending).toBe("start");
   });
 
   it("a second start_requested before resolution is a no-op", () => {
-    const s1 = controlReducer(initialControlState, { type: "start_requested" });
-    const s2 = controlReducer(s1, { type: "start_requested" });
+    const s1 = controlReducer(initialControlState, { type: "start_requested", operationId: 1 });
+    const s2 = controlReducer(s1, { type: "start_requested", operationId: 2 });
     expect(s2).toBe(s1);
   });
 
   it("start_requested is rejected once already running", () => {
-    const s = controlReducer(running(), { type: "start_requested" });
+    const s = controlReducer(running(), { type: "start_requested", operationId: 1 });
     expect(s).toEqual(running());
   });
 
   it("start_succeeded sets experimentId/status and clears pending", () => {
-    const pending = controlReducer(initialControlState, { type: "start_requested" });
+    const pending = controlReducer(initialControlState, { type: "start_requested", operationId: 1 });
     const s = controlReducer(pending, {
       type: "start_succeeded",
+      operationId: 1,
       experimentId: EXP_A,
       status: "running",
     });
@@ -60,8 +61,8 @@ describe("start", () => {
   });
 
   it("start_failed clears pending, keeps idle, sets error, remains retryable", () => {
-    const pending = controlReducer(initialControlState, { type: "start_requested" });
-    const s = controlReducer(pending, { type: "start_failed", error: "boom" });
+    const pending = controlReducer(initialControlState, { type: "start_requested", operationId: 1 });
+    const s = controlReducer(pending, { type: "start_failed", operationId: 1, error: "boom" });
     expect(s.status).toBe("idle");
     expect(s.pending).toBeNull();
     expect(s.error).toBe("boom");
@@ -71,38 +72,38 @@ describe("start", () => {
 
 describe("pause/resume", () => {
   it("pause_requested rejected unless running", () => {
-    const idle = controlReducer(initialControlState, { type: "pause_requested" });
+    const idle = controlReducer(initialControlState, { type: "pause_requested", operationId: 1 });
     expect(idle).toBe(initialControlState);
-    const paused = controlReducer(running({ status: "paused" }), { type: "pause_requested" });
+    const paused = controlReducer(running({ status: "paused" }), { type: "pause_requested", operationId: 1 });
     expect(paused).toEqual(running({ status: "paused" }));
   });
 
   it("pause_requested -> pause_succeeded transitions to paused", () => {
-    const p = controlReducer(running(), { type: "pause_requested" });
+    const p = controlReducer(running(), { type: "pause_requested", operationId: 1 });
     expect(p.pending).toBe("pause");
-    const s = controlReducer(p, { type: "pause_succeeded", status: "paused" });
+    const s = controlReducer(p, { type: "pause_succeeded", operationId: 1, status: "paused" });
     expect(s.status).toBe("paused");
     expect(s.pending).toBeNull();
   });
 
   it("pause_failed clears pending, leaves status untouched", () => {
-    const p = controlReducer(running(), { type: "pause_requested" });
-    const s = controlReducer(p, { type: "pause_failed", error: "nope" });
+    const p = controlReducer(running(), { type: "pause_requested", operationId: 1 });
+    const s = controlReducer(p, { type: "pause_failed", operationId: 1, error: "nope" });
     expect(s.status).toBe("running");
     expect(s.pending).toBeNull();
     expect(s.error).toBe("nope");
   });
 
   it("resume_requested rejected unless paused", () => {
-    const s = controlReducer(running(), { type: "resume_requested" });
+    const s = controlReducer(running(), { type: "resume_requested", operationId: 1 });
     expect(s).toEqual(running());
   });
 
   it("resume_requested -> resume_succeeded transitions to running", () => {
     const paused = running({ status: "paused" });
-    const p = controlReducer(paused, { type: "resume_requested" });
+    const p = controlReducer(paused, { type: "resume_requested", operationId: 1 });
     expect(p.pending).toBe("resume");
-    const s = controlReducer(p, { type: "resume_succeeded", status: "running" });
+    const s = controlReducer(p, { type: "resume_succeeded", operationId: 1, status: "running" });
     expect(s.status).toBe("running");
     expect(s.pending).toBeNull();
   });
@@ -118,16 +119,16 @@ describe("speed", () => {
   });
 
   it("speed_succeeded sets speed only on success, never optimistically before", () => {
-    const p = controlReducer(running(), { type: "speed_requested" });
+    const p = controlReducer(running(), { type: "speed_requested", operationId: 1 });
     expect(p.speed).toBe(1);
-    const s = controlReducer(p, { type: "speed_succeeded", speed: 4 });
+    const s = controlReducer(p, { type: "speed_succeeded", operationId: 1, speed: 4 });
     expect(s.speed).toBe(4);
     expect(s.pending).toBeNull();
   });
 
   it("speed_failed leaves the displayed speed unchanged", () => {
-    const p = controlReducer(running(), { type: "speed_requested" });
-    const s = controlReducer(p, { type: "speed_failed", error: "422" });
+    const p = controlReducer(running(), { type: "speed_requested", operationId: 1 });
+    const s = controlReducer(p, { type: "speed_failed", operationId: 1, error: "422" });
     expect(s.speed).toBe(1);
     expect(s.error).toBe("422");
   });
@@ -135,26 +136,27 @@ describe("speed", () => {
 
 describe("reset ordering", () => {
   it("reset_requested rejected with no active experiment", () => {
-    const s = controlReducer(initialControlState, { type: "reset_requested" });
+    const s = controlReducer(initialControlState, { type: "reset_requested", operationId: 1 });
     expect(s).toBe(initialControlState);
   });
 
   it("reset_requested rejected while another action is pending", () => {
-    const pending = controlReducer(running(), { type: "pause_requested" });
-    const s = controlReducer(pending, { type: "reset_requested" });
+    const pending = controlReducer(running(), { type: "pause_requested", operationId: 1 });
+    const s = controlReducer(pending, { type: "reset_requested", operationId: 2 });
     expect(s).toBe(pending);
   });
 
   it("a second reset_requested before resolution is a no-op", () => {
-    const r1 = controlReducer(running(), { type: "reset_requested" });
-    const r2 = controlReducer(r1, { type: "reset_requested" });
+    const r1 = controlReducer(running(), { type: "reset_requested", operationId: 1 });
+    const r2 = controlReducer(r1, { type: "reset_requested", operationId: 2 });
     expect(r2).toBe(r1);
   });
 
   it("reset_create_succeeded atomically swaps experimentId and status", () => {
-    const r = controlReducer(running(), { type: "reset_requested" });
+    const r = controlReducer(running(), { type: "reset_requested", operationId: 1 });
     const s = controlReducer(r, {
       type: "reset_create_succeeded",
+      operationId: 1,
       experimentId: EXP_B,
       status: "running",
     });
@@ -165,9 +167,10 @@ describe("reset ordering", () => {
   });
 
   it("stop-succeeded-but-create-failed marks stopped, keeps old id, stays retryable", () => {
-    const r = controlReducer(running(), { type: "reset_requested" });
+    const r = controlReducer(running(), { type: "reset_requested", operationId: 1 });
     const s = controlReducer(r, {
       type: "reset_stop_succeeded_create_failed",
+      operationId: 1,
       error: "network down",
     });
     expect(s.experimentId).toBe(EXP_A);
@@ -178,8 +181,8 @@ describe("reset ordering", () => {
   });
 
   it("reset_failed (stop itself failed) leaves state fully untouched but pending cleared", () => {
-    const r = controlReducer(running(), { type: "reset_requested" });
-    const s = controlReducer(r, { type: "reset_failed", error: "timeout" });
+    const r = controlReducer(running(), { type: "reset_requested", operationId: 1 });
+    const s = controlReducer(r, { type: "reset_failed", operationId: 1, error: "timeout" });
     expect(s.experimentId).toBe(EXP_A);
     expect(s.status).toBe("running");
     expect(s.pending).toBeNull();
@@ -193,6 +196,7 @@ describe("status_synced (polling / stale-id guard)", () => {
     const s = controlReducer(running(), {
       type: "status_synced",
       experimentId: EXP_A,
+      revision: 0,
       status: "finished",
     });
     expect(s.status).toBe("finished");
@@ -203,9 +207,40 @@ describe("status_synced (polling / stale-id guard)", () => {
     const s = controlReducer(afterReset, {
       type: "status_synced",
       experimentId: EXP_A,
+      revision: 0,
       status: "finished",
     });
     expect(s).toBe(afterReset);
+  });
+
+  it("ignores a same-experiment poll started before a newer Pause operation", () => {
+    const pausePending = controlReducer(running(), {
+      type: "pause_requested",
+      operationId: 7,
+    });
+    const paused = controlReducer(pausePending, {
+      type: "pause_succeeded",
+      operationId: 7,
+      status: "paused",
+    });
+    const stalePoll = controlReducer(paused, {
+      type: "status_synced",
+      experimentId: EXP_A,
+      revision: 0,
+      status: "running",
+    });
+    expect(stalePoll).toBe(paused);
+    expect(stalePoll.status).toBe("paused");
+  });
+
+  it("ignores a result whose operation id is no longer current", () => {
+    const pending = controlReducer(running(), { type: "pause_requested", operationId: 7 });
+    const stale = controlReducer(pending, {
+      type: "pause_succeeded",
+      operationId: 6,
+      status: "paused",
+    });
+    expect(stale).toBe(pending);
   });
 });
 
@@ -219,6 +254,8 @@ describe("can* table, exhaustive over status x pending", () => {
       pending: null,
       speed: 1,
       error: null,
+      operationId: null,
+      revision: 0,
     };
     expect(canStart(s)).toBe(status === "idle");
     expect(canPause(s)).toBe(status === "running");
@@ -234,6 +271,8 @@ describe("can* table, exhaustive over status x pending", () => {
       pending: "start",
       speed: 1,
       error: null,
+      operationId: 1,
+      revision: 0,
     };
     expect(canStart(s)).toBe(false);
     expect(canPause(s)).toBe(false);

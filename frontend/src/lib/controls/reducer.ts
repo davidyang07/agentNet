@@ -16,6 +16,8 @@ export type ControlState = {
   pending: PendingAction;
   speed: number;
   error: string | null;
+  operationId: number | null;
+  revision: number;
 };
 
 export const initialControlState: ControlState = {
@@ -24,6 +26,8 @@ export const initialControlState: ControlState = {
   pending: null,
   speed: 1,
   error: null,
+  operationId: null,
+  revision: 0,
 };
 
 export function canStart(s: ControlState): boolean {
@@ -47,83 +51,100 @@ export function canReset(s: ControlState): boolean {
 }
 
 export type ControlAction =
-  | { type: "start_requested" }
-  | { type: "start_succeeded"; experimentId: string; status: ControlStatus }
-  | { type: "start_failed"; error: string }
-  | { type: "pause_requested" }
-  | { type: "pause_succeeded"; status: ControlStatus }
-  | { type: "pause_failed"; error: string }
-  | { type: "resume_requested" }
-  | { type: "resume_succeeded"; status: ControlStatus }
-  | { type: "resume_failed"; error: string }
-  | { type: "speed_requested" }
-  | { type: "speed_succeeded"; speed: number }
-  | { type: "speed_failed"; error: string }
-  | { type: "reset_requested" }
-  | { type: "reset_create_succeeded"; experimentId: string; status: ControlStatus }
-  | { type: "reset_stop_succeeded_create_failed"; error: string }
-  | { type: "reset_failed"; error: string }
-  | { type: "status_synced"; experimentId: string; status: ControlStatus };
+  | { type: "start_requested"; operationId: number }
+  | { type: "start_succeeded"; operationId: number; experimentId: string; status: ControlStatus }
+  | { type: "start_failed"; operationId: number; error: string }
+  | { type: "pause_requested"; operationId: number }
+  | { type: "pause_succeeded"; operationId: number; status: ControlStatus }
+  | { type: "pause_failed"; operationId: number; error: string }
+  | { type: "resume_requested"; operationId: number }
+  | { type: "resume_succeeded"; operationId: number; status: ControlStatus }
+  | { type: "resume_failed"; operationId: number; error: string }
+  | { type: "speed_requested"; operationId: number }
+  | { type: "speed_succeeded"; operationId: number; speed: number }
+  | { type: "speed_failed"; operationId: number; error: string }
+  | { type: "reset_requested"; operationId: number }
+  | { type: "reset_create_succeeded"; operationId: number; experimentId: string; status: ControlStatus }
+  | { type: "reset_stop_succeeded_create_failed"; operationId: number; error: string }
+  | { type: "reset_failed"; operationId: number; error: string }
+  | { type: "status_synced"; experimentId: string; revision: number; status: ControlStatus };
+
+function isCurrent(state: ControlState, pending: Exclude<PendingAction, null>, operationId: number) {
+  return state.pending === pending && state.operationId === operationId;
+}
 
 export function controlReducer(state: ControlState, action: ControlAction): ControlState {
   switch (action.type) {
     case "start_requested":
       if (!canStart(state)) return state;
-      return { ...state, pending: "start", error: null };
+      return { ...state, pending: "start", operationId: action.operationId, revision: state.revision + 1, error: null };
     case "start_succeeded":
+      if (!isCurrent(state, "start", action.operationId)) return state;
       return {
         ...state,
         experimentId: action.experimentId,
         status: action.status,
         pending: null,
+        operationId: null,
         error: null,
       };
     case "start_failed":
-      return { ...state, pending: null, error: action.error };
+      if (!isCurrent(state, "start", action.operationId)) return state;
+      return { ...state, pending: null, operationId: null, error: action.error };
 
     case "pause_requested":
       if (!canPause(state)) return state;
-      return { ...state, pending: "pause", error: null };
+      return { ...state, pending: "pause", operationId: action.operationId, revision: state.revision + 1, error: null };
     case "pause_succeeded":
-      return { ...state, status: action.status, pending: null, error: null };
+      if (!isCurrent(state, "pause", action.operationId)) return state;
+      return { ...state, status: action.status, pending: null, operationId: null, error: null };
     case "pause_failed":
-      return { ...state, pending: null, error: action.error };
+      if (!isCurrent(state, "pause", action.operationId)) return state;
+      return { ...state, pending: null, operationId: null, error: action.error };
 
     case "resume_requested":
       if (!canResume(state)) return state;
-      return { ...state, pending: "resume", error: null };
+      return { ...state, pending: "resume", operationId: action.operationId, revision: state.revision + 1, error: null };
     case "resume_succeeded":
-      return { ...state, status: action.status, pending: null, error: null };
+      if (!isCurrent(state, "resume", action.operationId)) return state;
+      return { ...state, status: action.status, pending: null, operationId: null, error: null };
     case "resume_failed":
-      return { ...state, pending: null, error: action.error };
+      if (!isCurrent(state, "resume", action.operationId)) return state;
+      return { ...state, pending: null, operationId: null, error: action.error };
 
     case "speed_requested":
       if (!canSetSpeed(state)) return state;
-      return { ...state, pending: "speed", error: null };
+      return { ...state, pending: "speed", operationId: action.operationId, revision: state.revision + 1, error: null };
     case "speed_succeeded":
-      return { ...state, speed: action.speed, pending: null, error: null };
+      if (!isCurrent(state, "speed", action.operationId)) return state;
+      return { ...state, speed: action.speed, pending: null, operationId: null, error: null };
     case "speed_failed":
-      return { ...state, pending: null, error: action.error };
+      if (!isCurrent(state, "speed", action.operationId)) return state;
+      return { ...state, pending: null, operationId: null, error: action.error };
 
     case "reset_requested":
       if (!canReset(state)) return state;
-      return { ...state, pending: "reset", error: null };
+      return { ...state, pending: "reset", operationId: action.operationId, revision: state.revision + 1, error: null };
     case "reset_create_succeeded":
+      if (!isCurrent(state, "reset", action.operationId)) return state;
       return {
         ...state,
         experimentId: action.experimentId,
         status: action.status,
         pending: null,
+        operationId: null,
         speed: 1,
         error: null,
       };
     case "reset_stop_succeeded_create_failed":
-      return { ...state, status: "stopped", pending: null, error: action.error };
+      if (!isCurrent(state, "reset", action.operationId)) return state;
+      return { ...state, status: "stopped", pending: null, operationId: null, error: action.error };
     case "reset_failed":
-      return { ...state, pending: null, error: action.error };
+      if (!isCurrent(state, "reset", action.operationId)) return state;
+      return { ...state, pending: null, operationId: null, error: action.error };
 
     case "status_synced":
-      if (action.experimentId !== state.experimentId) return state;
+      if (action.experimentId !== state.experimentId || action.revision !== state.revision) return state;
       return { ...state, status: action.status };
 
     default:

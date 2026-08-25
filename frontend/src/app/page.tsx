@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useReducer } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 
 import { ControlBar } from "@/components/ControlBar";
 import { EventStream } from "@/components/EventStream";
@@ -14,7 +14,7 @@ import {
   stopExperiment,
   type ExperimentConfig,
 } from "@/lib/api/client";
-import { controlReducer, initialControlState } from "@/lib/controls/reducer";
+import { canPause, canReset, canResume, canSetSpeed, canStart, controlReducer, initialControlState, type ControlAction } from "@/lib/controls/reducer";
 import { useExperimentStream } from "@/lib/stream/useExperimentStream";
 
 // While a run is "running", the WS stream never surfaces a status change on
@@ -104,53 +104,76 @@ function ExperimentView({ experimentId }: { experimentId: string }) {
 
 export default function Home() {
   const [state, dispatch] = useReducer(controlReducer, initialControlState);
+  const stateRef = useRef(state);
+  const nextOperationId = useRef(1);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  const apply = useCallback((action: ControlAction) => {
+    const next = controlReducer(stateRef.current, action);
+    if (next === stateRef.current) return false;
+    stateRef.current = next;
+    dispatch(action);
+    return true;
+  }, []);
 
   const handleStart = useCallback(() => {
-    dispatch({ type: "start_requested" });
+    if (!canStart(stateRef.current)) return;
+    const operationId = nextOperationId.current++;
+    if (!apply({ type: "start_requested", operationId })) return;
     createExperiment(CANONICAL_CONFIG)
       .then((summary) => {
-        dispatch({
+        apply({
           type: "start_succeeded",
+          operationId,
           experimentId: summary.experiment_id,
           status: summary.status,
         });
       })
       .catch((err) => {
-        dispatch({ type: "start_failed", error: err instanceof Error ? err.message : String(err) });
+        apply({ type: "start_failed", operationId, error: err instanceof Error ? err.message : String(err) });
       });
-  }, []);
+  }, [apply]);
 
   const handlePause = useCallback(() => {
-    if (!state.experimentId) return;
-    dispatch({ type: "pause_requested" });
-    pauseExperiment(state.experimentId)
-      .then((summary) => dispatch({ type: "pause_succeeded", status: summary.status }))
+    if (!canPause(stateRef.current) || !stateRef.current.experimentId) return;
+    const id = stateRef.current.experimentId;
+    const operationId = nextOperationId.current++;
+    if (!apply({ type: "pause_requested", operationId })) return;
+    pauseExperiment(id)
+      .then((summary) => apply({ type: "pause_succeeded", operationId, status: summary.status }))
       .catch((err) => {
-        dispatch({ type: "pause_failed", error: err instanceof Error ? err.message : String(err) });
+        apply({ type: "pause_failed", operationId, error: err instanceof Error ? err.message : String(err) });
       });
-  }, [state.experimentId]);
+  }, [apply]);
 
   const handleResume = useCallback(() => {
-    if (!state.experimentId) return;
-    dispatch({ type: "resume_requested" });
-    resumeExperiment(state.experimentId)
-      .then((summary) => dispatch({ type: "resume_succeeded", status: summary.status }))
+    if (!canResume(stateRef.current) || !stateRef.current.experimentId) return;
+    const id = stateRef.current.experimentId;
+    const operationId = nextOperationId.current++;
+    if (!apply({ type: "resume_requested", operationId })) return;
+    resumeExperiment(id)
+      .then((summary) => apply({ type: "resume_succeeded", operationId, status: summary.status }))
       .catch((err) => {
-        dispatch({ type: "resume_failed", error: err instanceof Error ? err.message : String(err) });
+        apply({ type: "resume_failed", operationId, error: err instanceof Error ? err.message : String(err) });
       });
-  }, [state.experimentId]);
+  }, [apply]);
 
   const handleSpeedChange = useCallback(
     (multiplier: number) => {
-      if (!state.experimentId) return;
-      dispatch({ type: "speed_requested" });
-      setSpeed(state.experimentId, multiplier)
-        .then(() => dispatch({ type: "speed_succeeded", speed: multiplier }))
+      if (!canSetSpeed(stateRef.current) || !stateRef.current.experimentId) return;
+      const id = stateRef.current.experimentId;
+      const operationId = nextOperationId.current++;
+      if (!apply({ type: "speed_requested", operationId })) return;
+      setSpeed(id, multiplier)
+        .then(() => apply({ type: "speed_succeeded", operationId, speed: multiplier }))
         .catch((err) => {
-          dispatch({ type: "speed_failed", error: err instanceof Error ? err.message : String(err) });
+          apply({ type: "speed_failed", operationId, error: err instanceof Error ? err.message : String(err) });
         });
     },
-    [state.experimentId],
+    [apply],
   );
 
   // Reset ordering (docs/M1_F5_PLAN.md §5): await stopping the old
@@ -160,9 +183,10 @@ export default function Home() {
   // active in local state, and a create failure after a successful stop is
   // reported as "stopped", not silently left pointing at a dead run.
   const handleReset = useCallback(async () => {
-    if (!state.experimentId) return;
-    const oldId = state.experimentId;
-    dispatch({ type: "reset_requested" });
+    if (!canReset(stateRef.current) || !stateRef.current.experimentId) return;
+    const oldId = stateRef.current.experimentId;
+    const operationId = nextOperationId.current++;
+    if (!apply({ type: "reset_requested", operationId })) return;
 
     try {
       await stopExperiment(oldId);
@@ -172,7 +196,7 @@ export default function Home() {
       // Anything else means the old run's stop status is unknown: abort
       // without touching state, so it's cleanly retryable.
       if (!(err instanceof Error && err.message.includes("404"))) {
-        dispatch({ type: "reset_failed", error: err instanceof Error ? err.message : String(err) });
+        apply({ type: "reset_failed", operationId, error: err instanceof Error ? err.message : String(err) });
         return;
       }
     }
@@ -181,34 +205,48 @@ export default function Home() {
     // must not leave local state claiming the old run is still "running".
     try {
       const summary = await createExperiment(CANONICAL_CONFIG);
-      dispatch({
+      apply({
         type: "reset_create_succeeded",
+        operationId,
         experimentId: summary.experiment_id,
         status: summary.status,
       });
     } catch (err) {
-      dispatch({
+      apply({
         type: "reset_stop_succeeded_create_failed",
+        operationId,
         error: err instanceof Error ? err.message : String(err),
       });
     }
-  }, [state.experimentId]);
+  }, [apply]);
 
   // Closes the REST/WS status gap for natural completion (docs/M1_F5_PLAN.md §4).
   useEffect(() => {
-    if (state.status !== "running" || !state.experimentId) return;
+    if (state.status !== "running" || state.pending !== null || !state.experimentId) return;
     const id = state.experimentId;
-    const interval = setInterval(() => {
-      getExperiment(id)
-        .then((summary) => dispatch({ type: "status_synced", experimentId: id, status: summary.status }))
+    const revision = state.revision;
+    const controller = new AbortController();
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = () => {
+      getExperiment(id, controller.signal)
+        .then((summary) => apply({ type: "status_synced", experimentId: id, revision, status: summary.status }))
         .catch(() => {
           // Transient network hiccup — next tick retries. A genuine 404
           // (evicted out from under us) is left for the user's next
           // control action to surface, rather than guessing here.
+        })
+        .finally(() => {
+          if (!cancelled) timer = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
         });
-    }, STATUS_POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [state.status, state.experimentId]);
+    };
+    timer = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [apply, state.status, state.pending, state.experimentId, state.revision]);
 
   return (
     <main className="flex h-screen flex-col bg-slate-950 text-slate-100">
