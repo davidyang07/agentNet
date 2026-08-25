@@ -9,6 +9,17 @@ export type StreamFrame = SnapshotFrame | EventFrame;
 
 export const CURRENT_SCHEMA_VERSION = 1;
 export const EVENT_LOG_CAP = 200;
+export const INCIDENT_LOG_CAP = 50;
+
+// Event types with per-agent security significance for the incident timeline
+// (BRIEF §8). Lifecycle events (EXPERIMENT_*, AGENT_CREATED) are excluded.
+const INCIDENT_EVENT_TYPES = new Set([
+  "COMPROMISE_ATTEMPTED",
+  "COMPROMISE_SUCCEEDED",
+  "COMPROMISE_FAILED",
+  "ANOMALY_DETECTED",
+  "AGENT_QUARANTINED",
+]);
 
 export type GraphState = {
   experimentId: string | null;
@@ -17,6 +28,17 @@ export type GraphState = {
   nodes: Map<string, NodeView>;
   edges: EdgeView[];
   recentEvents: Event[]; // capped at 200 for the bottom panel
+  metrics: {
+    // Count of qualifying COMPROMISE_SUCCEEDED events at `newCompromisesTick`.
+    // Not derivable from `nodes` alone (needs *when*, not just current state),
+    // unlike the other six MVP metrics — see selectMetrics().
+    newCompromisesThisTick: number;
+    newCompromisesTick: number | null;
+  };
+  // Per-agent security-incident history, capped at INCIDENT_LOG_CAP per agent.
+  // One event may appear under more than one agent (e.g. a COMPROMISE_SUCCEEDED
+  // is an incident for both its source and its target).
+  incidentsByAgent: Map<string, Event[]>;
 };
 
 export const initialGraphState: GraphState = {
@@ -26,7 +48,67 @@ export const initialGraphState: GraphState = {
   nodes: new Map(),
   edges: [],
   recentEvents: [],
+  metrics: { newCompromisesThisTick: 0, newCompromisesTick: null },
+  incidentsByAgent: new Map(),
 };
+
+function recordIncident(
+  incidentsByAgent: Map<string, Event[]>,
+  event: Event,
+): Map<string, Event[]> {
+  if (!INCIDENT_EVENT_TYPES.has(event.event_type)) {
+    return incidentsByAgent;
+  }
+  const agentIds = new Set<string>();
+  if (event.agent_id) agentIds.add(event.agent_id);
+  if (event.source_agent_id) agentIds.add(event.source_agent_id);
+  if (event.target_agent_id) agentIds.add(event.target_agent_id);
+  if (agentIds.size === 0) {
+    return incidentsByAgent;
+  }
+
+  const next = new Map(incidentsByAgent);
+  for (const agentId of agentIds) {
+    const existing = next.get(agentId) ?? [];
+    next.set(agentId, [...existing, event].slice(-INCIDENT_LOG_CAP));
+  }
+  return next;
+}
+
+/**
+ * Metrics not stored in GraphState because they're pure functions of `nodes`
+ * (M1's security-state machine only ever moves HEALTHY -> COMPROMISED ->
+ * QUARANTINED, and quarantine is terminal — no recovery path exists — so a
+ * live tally of current node state is always exactly "ever compromised,"
+ * and is automatically correct across a fresh-snapshot reconnect).
+ */
+export function selectMetrics(state: GraphState): {
+  total: number;
+  healthy: number;
+  compromised: number;
+  quarantined: number;
+  newCompromises: number;
+  totalExposure: number;
+  outbreakDuration: number;
+} {
+  let healthy = 0;
+  let compromised = 0;
+  let quarantined = 0;
+  for (const node of state.nodes.values()) {
+    if (node.security_state === "compromised") compromised += 1;
+    else if (node.security_state === "quarantined") quarantined += 1;
+    else if (node.security_state === "healthy") healthy += 1;
+  }
+  return {
+    total: state.nodes.size,
+    healthy,
+    compromised,
+    quarantined,
+    newCompromises: state.metrics.newCompromisesThisTick,
+    totalExposure: compromised + quarantined,
+    outbreakDuration: state.tick,
+  };
+}
 
 /**
  * Pure — no React/DOM dependency, so Phase 1.5 replay can drive it from a
@@ -40,13 +122,21 @@ export function reduce(state: GraphState, frame: StreamFrame): GraphState {
     for (const node of frame.nodes) {
       nodes.set(node.id, node);
     }
+    // A snapshot for the same experiment (reconnect) preserves accumulated
+    // history; a snapshot for a different (or first-ever) experiment resets
+    // it, so no prior experiment's state can leak into a replacement run.
+    const sameExperiment = frame.experiment_id === state.experimentId;
     return {
       experimentId: frame.experiment_id,
       lastSeq: frame.last_seq,
       tick: frame.sim_tick,
       nodes,
       edges: frame.edges,
-      recentEvents: state.recentEvents,
+      recentEvents: sameExperiment ? state.recentEvents : [],
+      metrics: sameExperiment
+        ? state.metrics
+        : { newCompromisesThisTick: 0, newCompromisesTick: null },
+      incidentsByAgent: sameExperiment ? state.incidentsByAgent : new Map(),
     };
   }
 
@@ -63,10 +153,28 @@ export function reduce(state: GraphState, frame: StreamFrame): GraphState {
   if (event.event_type === "COMPROMISE_SUCCEEDED" && event.target_agent_id) {
     const existing = state.nodes.get(event.target_agent_id);
     if (existing) {
-      nodes = new Map(state.nodes);
+      nodes = new Map(nodes);
       nodes.set(event.target_agent_id, { ...existing, security_state: "compromised" });
     }
   }
+
+  if (event.event_type === "AGENT_QUARANTINED" && event.agent_id) {
+    const existing = state.nodes.get(event.agent_id);
+    if (existing) {
+      nodes = new Map(nodes);
+      nodes.set(event.agent_id, { ...existing, security_state: "quarantined" });
+    }
+  }
+
+  let metrics = state.metrics;
+  if (event.sim_tick !== metrics.newCompromisesTick) {
+    metrics = { newCompromisesThisTick: 0, newCompromisesTick: event.sim_tick };
+  }
+  if (event.event_type === "COMPROMISE_SUCCEEDED" && event.metadata?.["already_compromised"] !== true) {
+    metrics = { ...metrics, newCompromisesThisTick: metrics.newCompromisesThisTick + 1 };
+  }
+
+  const incidentsByAgent = recordIncident(state.incidentsByAgent, event);
 
   return {
     ...state,
@@ -74,5 +182,7 @@ export function reduce(state: GraphState, frame: StreamFrame): GraphState {
     tick: event.sim_tick,
     nodes,
     recentEvents,
+    metrics,
+    incidentsByAgent,
   };
 }
