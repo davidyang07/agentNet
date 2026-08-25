@@ -29,11 +29,10 @@ export type GraphState = {
   edges: EdgeView[];
   recentEvents: Event[]; // capped at 200 for the bottom panel
   metrics: {
-    // Count of qualifying COMPROMISE_SUCCEEDED events at `newCompromisesTick`.
-    // Not derivable from `nodes` alone (needs *when*, not just current state),
-    // unlike the other six MVP metrics — see selectMetrics().
-    newCompromisesThisTick: number;
-    newCompromisesTick: number | null;
+    // Cumulative count of qualifying COMPROMISE_SUCCEEDED events observed in
+    // this live session. Kept outside recentEvents so its 200-event cap cannot
+    // silently erase the metric (M1_PLAN §6).
+    newCompromises: number;
   };
   // Per-agent security-incident history, capped at INCIDENT_LOG_CAP per agent.
   // One event may appear under more than one agent (e.g. a COMPROMISE_SUCCEEDED
@@ -48,7 +47,7 @@ export const initialGraphState: GraphState = {
   nodes: new Map(),
   edges: [],
   recentEvents: [],
-  metrics: { newCompromisesThisTick: 0, newCompromisesTick: null },
+  metrics: { newCompromises: 0 },
   incidentsByAgent: new Map(),
 };
 
@@ -104,7 +103,7 @@ export function selectMetrics(state: GraphState): {
     healthy,
     compromised,
     quarantined,
-    newCompromises: state.metrics.newCompromisesThisTick,
+    newCompromises: state.metrics.newCompromises,
     totalExposure: compromised + quarantined,
     outbreakDuration: state.tick,
   };
@@ -133,9 +132,7 @@ export function reduce(state: GraphState, frame: StreamFrame): GraphState {
       nodes,
       edges: frame.edges,
       recentEvents: sameExperiment ? state.recentEvents : [],
-      metrics: sameExperiment
-        ? state.metrics
-        : { newCompromisesThisTick: 0, newCompromisesTick: null },
+      metrics: sameExperiment ? state.metrics : { newCompromises: 0 },
       incidentsByAgent: sameExperiment ? state.incidentsByAgent : new Map(),
     };
   }
@@ -167,11 +164,8 @@ export function reduce(state: GraphState, frame: StreamFrame): GraphState {
   }
 
   let metrics = state.metrics;
-  if (event.sim_tick !== metrics.newCompromisesTick) {
-    metrics = { newCompromisesThisTick: 0, newCompromisesTick: event.sim_tick };
-  }
   if (event.event_type === "COMPROMISE_SUCCEEDED" && event.metadata?.["already_compromised"] !== true) {
-    metrics = { ...metrics, newCompromisesThisTick: metrics.newCompromisesThisTick + 1 };
+    metrics = { newCompromises: metrics.newCompromises + 1 };
   }
 
   const incidentsByAgent = recordIncident(state.incidentsByAgent, event);

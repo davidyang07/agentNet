@@ -259,7 +259,7 @@ describe("multiple ordered events", () => {
       compromised: 0,
       quarantined: 1,
       totalExposure: 1,
-      newCompromises: 0,
+      newCompromises: 1,
       outbreakDuration: 2,
     });
     expect(state.incidentsByAgent.get("agent-001")?.map((e) => e.event_type)).toEqual([
@@ -276,6 +276,35 @@ describe("multiple ordered events", () => {
 });
 
 describe("cumulative-history safety", () => {
+  it("does not erase new compromises when later ticks contain other events", () => {
+    let state = reduce(initialGraphState, snapshot());
+    state = reduce(
+      state,
+      evFrame(
+        event({
+          event_type: "COMPROMISE_SUCCEEDED",
+          sim_tick: 1,
+          seq: 1,
+          source_agent_id: "agent-000",
+          target_agent_id: "agent-001",
+        }),
+      ),
+    );
+    state = reduce(
+      state,
+      evFrame(
+        event({
+          event_type: "ANOMALY_DETECTED",
+          sim_tick: 2,
+          seq: 2,
+          agent_id: "agent-001",
+        }),
+      ),
+    );
+
+    expect(selectMetrics(state).newCompromises).toBe(1);
+  });
+
   it("keeps recentEvents capped at 200 while derived cumulative metrics stay correct", () => {
     let state = reduce(initialGraphState, snapshot());
     let seq = 1;
