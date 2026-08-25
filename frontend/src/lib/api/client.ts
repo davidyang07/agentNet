@@ -18,6 +18,54 @@ export async function createExperiment(config: ExperimentConfig): Promise<Experi
   return res.json();
 }
 
+export async function getExperiment(experimentId: string): Promise<ExperimentSummary> {
+  const res = await fetch(`${BACKEND_URL}/api/experiments/${experimentId}`);
+  if (!res.ok) {
+    throw new Error(`failed to get experiment: ${res.status}`);
+  }
+  return res.json();
+}
+
+async function postControl(
+  experimentId: string,
+  action: "stop" | "pause" | "resume",
+): Promise<ExperimentSummary> {
+  const res = await fetch(`${BACKEND_URL}/api/experiments/${experimentId}/${action}`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    throw new Error(`failed to ${action} experiment: ${res.status}`);
+  }
+  return res.json();
+}
+
+export function stopExperiment(experimentId: string): Promise<ExperimentSummary> {
+  return postControl(experimentId, "stop");
+}
+
+export function pauseExperiment(experimentId: string): Promise<ExperimentSummary> {
+  return postControl(experimentId, "pause");
+}
+
+export function resumeExperiment(experimentId: string): Promise<ExperimentSummary> {
+  return postControl(experimentId, "resume");
+}
+
+export async function setSpeed(
+  experimentId: string,
+  multiplier: number,
+): Promise<ExperimentSummary> {
+  const res = await fetch(`${BACKEND_URL}/api/experiments/${experimentId}/speed`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ multiplier }),
+  });
+  if (!res.ok) {
+    throw new Error(`failed to set speed: ${res.status}`);
+  }
+  return res.json();
+}
+
 export function backendWsUrl(experimentId: string, sinceSeq?: number): string {
   const url = new URL(`${BACKEND_WS_URL}/api/experiments/${experimentId}/stream`);
   if (sinceSeq !== undefined) {

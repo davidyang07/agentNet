@@ -1,0 +1,109 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import {
+  createExperiment,
+  getExperiment,
+  pauseExperiment,
+  resumeExperiment,
+  setSpeed,
+  stopExperiment,
+  type ExperimentConfig,
+} from "./client";
+
+const CONFIG: ExperimentConfig = {
+  seed: 42,
+  node_count: 60,
+  edge_density: 2,
+  software_type_count: 3,
+  p_same: 0.15,
+  p_cross: 0.03,
+  max_ticks: 200,
+  detector_sensitivity: 0.2,
+  defense_enabled: true,
+  initial_compromised: "highest_degree",
+};
+
+function okResponse(body: unknown) {
+  return { ok: true, status: 200, json: async () => body } as Response;
+}
+
+function errResponse(status: number) {
+  return { ok: false, status, json: async () => ({}) } as Response;
+}
+
+describe("api client", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("createExperiment POSTs the config to /api/experiments", async () => {
+    fetchMock.mockResolvedValueOnce(okResponse({ experiment_id: "a", status: "running" }));
+    const summary = await createExperiment(CONFIG);
+    expect(summary.experiment_id).toBe("a");
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toMatch(/\/api\/experiments$/);
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(init?.body as string)).toEqual(CONFIG);
+  });
+
+  it("createExperiment throws on non-ok response", async () => {
+    fetchMock.mockResolvedValueOnce(errResponse(422));
+    await expect(createExperiment(CONFIG)).rejects.toThrow("422");
+  });
+
+  it("getExperiment GETs /api/experiments/{id}", async () => {
+    fetchMock.mockResolvedValueOnce(okResponse({ experiment_id: "a", status: "finished" }));
+    const summary = await getExperiment("a");
+    expect(summary.status).toBe("finished");
+    const [url] = fetchMock.mock.calls[0];
+    expect(String(url)).toMatch(/\/api\/experiments\/a$/);
+  });
+
+  it("getExperiment throws on 404", async () => {
+    fetchMock.mockResolvedValueOnce(errResponse(404));
+    await expect(getExperiment("missing")).rejects.toThrow("404");
+  });
+
+  it.each([
+    ["stopExperiment", stopExperiment, "stop"],
+    ["pauseExperiment", pauseExperiment, "pause"],
+    ["resumeExperiment", resumeExperiment, "resume"],
+  ] as const)("%s POSTs /api/experiments/{id}/%s", async (_name, fn, action) => {
+    fetchMock.mockResolvedValueOnce(okResponse({ experiment_id: "a", status: "running" }));
+    await fn("a");
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toMatch(new RegExp(`/api/experiments/a/${action}$`));
+    expect(init?.method).toBe("POST");
+  });
+
+  it("setSpeed POSTs the multiplier as JSON", async () => {
+    fetchMock.mockResolvedValueOnce(okResponse({ experiment_id: "a", status: "running" }));
+    await setSpeed("a", 4);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toMatch(/\/api\/experiments\/a\/speed$/);
+    expect(JSON.parse(init?.body as string)).toEqual({ multiplier: 4 });
+  });
+
+  it("setSpeed throws on 422 (out-of-range multiplier)", async () => {
+    fetchMock.mockResolvedValueOnce(errResponse(422));
+    await expect(setSpeed("a", 100)).rejects.toThrow("422");
+  });
+
+  it("Start and Reset would POST the identical canonical config object", async () => {
+    fetchMock.mockResolvedValueOnce(okResponse({ experiment_id: "a", status: "running" }));
+    await createExperiment(CONFIG);
+    fetchMock.mockResolvedValueOnce(okResponse({ experiment_id: "b", status: "running" }));
+    await createExperiment(CONFIG);
+
+    const firstBody = JSON.parse(fetchMock.mock.calls[0][1]?.body as string);
+    const secondBody = JSON.parse(fetchMock.mock.calls[1][1]?.body as string);
+    expect(firstBody).toEqual(secondBody);
+  });
+});
