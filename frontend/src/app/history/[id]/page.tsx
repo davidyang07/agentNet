@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { use, useReducer, useState } from "react";
+import { use, useEffect, useReducer, useState } from "react";
 
 import { AgentDetailDrawer } from "@/components/AgentDetailDrawer";
 import { EventStream } from "@/components/EventStream";
@@ -31,6 +31,16 @@ function ReplayContent({ experimentId }: { experimentId: string }) {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const selectedNode = selectedAgentId ? (state.nodes.get(selectedAgentId) ?? null) : null;
   const incidents = selectedAgentId ? (state.incidentsByAgent.get(selectedAgentId) ?? []) : [];
+
+  // Reacting to playback actually finishing (an external condition), not
+  // setting state unconditionally at mount -- keeps the control's `playing`
+  // flag, and hence the Play/Pause button's label, in sync once the last
+  // event has played.
+  useEffect(() => {
+    if (control.playing && totalEvents > 0 && playedCount >= totalEvents) {
+      dispatch({ type: "pause" });
+    }
+  }, [control.playing, playedCount, totalEvents]);
 
   if (loading) {
     return <p className="p-4 text-sm text-slate-400">Loading replay…</p>;

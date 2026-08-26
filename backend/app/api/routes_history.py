@@ -193,7 +193,7 @@ async def get_experiment_incidents(
     await _require_experiment_exists(pool, experiment_id)
     rows = await pool.fetch(
         "SELECT * FROM experiment_events WHERE experiment_id = $1 AND seq > $2 "
-        "AND event_type = ANY($3) ORDER BY seq LIMIT $4",
+        "AND event_type = ANY($3::text[]) ORDER BY seq LIMIT $4",
         experiment_id,
         since_seq,
         [t.value for t in INCIDENT_EVENT_TYPES],
