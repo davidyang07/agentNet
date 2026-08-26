@@ -24,14 +24,15 @@ function okResponse(body: unknown) {
   return { ok: true, status: 200, json: async () => body } as Response;
 }
 
-function summary(status: "running" | "paused" | "finished" | "stopped") {
-  return { experiment_id: EXPERIMENT_ID, status, sim_tick: 0, config: CONFIG };
+function summary(status: "running" | "paused" | "finished" | "stopped", lastSeq = -1) {
+  return { experiment_id: EXPERIMENT_ID, status, sim_tick: 0, last_seq: lastSeq, config: CONFIG };
 }
 
 class FakeWebSocket {
   static instances: FakeWebSocket[] = [];
   url: string;
   onmessage: ((ev: { data: string }) => void) | null = null;
+  onclose: (() => void) | null = null;
   closed = false;
 
   constructor(url: string) {
@@ -122,7 +123,9 @@ describe("runExperimentToCompletion", () => {
       }
       if (method === "GET" && String(url).endsWith(`/api/experiments/${EXPERIMENT_ID}`)) {
         getExperimentCalls += 1;
-        return okResponse(getExperimentCalls === 1 ? summary("running") : summary("finished"));
+        return okResponse(
+          getExperimentCalls === 1 ? summary("running") : summary("finished", 1),
+        );
       }
       if (method === "POST" && String(url).endsWith(`/api/experiments/${EXPERIMENT_ID}/stop`)) {
         return okResponse(summary("stopped"));
@@ -165,6 +168,85 @@ describe("runExperimentToCompletion", () => {
     const stopCalls = callsMatching("POST", `/api/experiments/${EXPERIMENT_ID}/stop`);
     expect(stopCalls).toHaveLength(1);
     expect(ws.closed).toBe(true);
+  });
+
+  it("waits for locally-observed events to catch up to the terminal last_seq before finalizing metrics", async () => {
+    // Regression: status polling can report "finished" before this WS
+    // connection has actually received/applied the final tick's events
+    // (they're independent connections) — sampling metrics right when
+    // status flips would silently under-report a comparison arm's result.
+    let getExperimentCalls = 0;
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (method === "POST" && String(url).endsWith("/api/experiments")) {
+        return okResponse(summary("running"));
+      }
+      if (method === "GET" && String(url).endsWith(`/api/experiments/${EXPERIMENT_ID}`)) {
+        getExperimentCalls += 1;
+        // Backend reports "finished" with last_seq=1 (the otherEventFrame)
+        // even though this WS hasn't delivered that far yet.
+        return okResponse(getExperimentCalls === 1 ? summary("running") : summary("finished", 1));
+      }
+      if (method === "POST" && String(url).endsWith(`/api/experiments/${EXPERIMENT_ID}/stop`)) {
+        return okResponse(summary("stopped"));
+      }
+      throw new Error(`unexpected fetch call: ${method} ${url}`);
+    });
+
+    const resultPromise = runExperimentToCompletion(CONFIG);
+
+    await vi.advanceTimersByTimeAsync(0);
+    const ws = FakeWebSocket.instances[0];
+
+    // Only the snapshot and the compromise event (seq 0) have arrived when
+    // status polling reports "finished" — the final event (seq 1) is still
+    // in flight.
+    ws.push(snapshotFrame);
+    ws.push(compromiseFrame);
+
+    await vi.advanceTimersByTimeAsync(1000); // first poll: running
+    await vi.advanceTimersByTimeAsync(1000); // second poll: finished, last_seq=1
+
+    // Give the catch-up loop a few ticks to run — it must keep waiting
+    // since lastSeq (0) hasn't reached last_seq (1) yet.
+    await vi.advanceTimersByTimeAsync(60);
+
+    // Now the final event actually arrives.
+    ws.push(otherEventFrame);
+    await vi.advanceTimersByTimeAsync(20);
+
+    const result = await resultPromise;
+
+    expect(result.metrics.newCompromises).toBe(1);
+    expect(result.metrics.compromised).toBe(1);
+  });
+
+  it("gives up waiting and reports observed metrics if the socket closes before catching up", async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (method === "POST" && String(url).endsWith("/api/experiments")) {
+        return okResponse(summary("running"));
+      }
+      if (method === "GET" && String(url).endsWith(`/api/experiments/${EXPERIMENT_ID}`)) {
+        return okResponse(summary("finished", 5));
+      }
+      if (method === "POST" && String(url).endsWith(`/api/experiments/${EXPERIMENT_ID}/stop`)) {
+        return okResponse(summary("stopped"));
+      }
+      throw new Error(`unexpected fetch call: ${method} ${url}`);
+    });
+
+    const resultPromise = runExperimentToCompletion(CONFIG);
+    await vi.advanceTimersByTimeAsync(0);
+    const ws = FakeWebSocket.instances[0];
+    ws.push(snapshotFrame);
+    ws.push(compromiseFrame);
+    ws.onclose?.();
+
+    await vi.advanceTimersByTimeAsync(1000);
+
+    const result = await resultPromise;
+    expect(result.metrics.newCompromises).toBe(1);
   });
 
   it("rejects when the AbortSignal fires, and still best-effort stops the experiment and closes the WS", async () => {
