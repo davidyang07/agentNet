@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
 import { AgentDetailDrawer } from "@/components/AgentDetailDrawer";
@@ -264,7 +265,12 @@ export default function Home() {
     <main className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
       <header className="flex shrink-0 flex-col gap-3 border-b border-slate-800 px-4 py-3">
         <div className="flex items-center justify-between">
-          <h1 className="text-lg font-semibold">AgentNet</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-lg font-semibold">AgentNet</h1>
+            <Link href="/history" className="text-sm text-slate-400 hover:text-slate-200">
+              History
+            </Link>
+          </div>
           <ControlBar
             state={state}
             onPause={handlePause}

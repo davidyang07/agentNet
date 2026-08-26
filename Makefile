@@ -16,6 +16,10 @@ test:
 lint:
 	cd backend && .venv/bin/ruff check .
 	cd frontend && npm run lint
+	# Next 16 generates PageProps/LayoutProps/RouteContext helpers on demand
+	# (next dev/build/typegen) rather than shipping them as static types --
+	# `tsc --noEmit` alone errors on any route using them without this.
+	cd frontend && npx next typegen
 	cd frontend && npx tsc --noEmit
 
 # Requires a backend already running at localhost:8000 (e.g. `make dev`, or

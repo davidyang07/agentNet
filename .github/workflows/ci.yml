@@ -55,6 +55,19 @@ jobs:
       - name: Lint
         working-directory: frontend
         run: npm run lint
+      - name: Test
+        working-directory: frontend
+        run: npm test
+      # Next 16 generates PageProps/LayoutProps/RouteContext helpers on
+      # demand (next dev/build/typegen) rather than shipping them as static
+      # types -- `tsc --noEmit` alone errors on any route using them
+      # without this.
+      - name: Typegen
+        working-directory: frontend
+        run: npx next typegen
       - name: Typecheck
         working-directory: frontend
         run: npx tsc --noEmit
+      - name: Build
+        working-directory: frontend
+        run: npm run build
