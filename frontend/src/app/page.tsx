@@ -126,10 +126,7 @@ export default function Home() {
     return true;
   }, []);
 
-  // Defaults to CANONICAL_CONFIG so ControlBar's own Start button (which
-  // still calls onStart with no arguments) keeps working unchanged;
-  // ConfigForm's Start button passes its edited draft explicitly.
-  const handleStart = useCallback((config: ExperimentConfig = CANONICAL_CONFIG) => {
+  const handleStart = useCallback((config: ExperimentConfig) => {
     if (!canStart(stateRef.current)) return;
     const operationId = nextOperationId.current++;
     if (!apply({ type: "start_requested", operationId })) return;
@@ -267,7 +264,6 @@ export default function Home() {
           <h1 className="text-lg font-semibold">AgentNet</h1>
           <ControlBar
             state={state}
-            onStart={handleStart}
             onPause={handlePause}
             onResume={handleResume}
             onReset={handleReset}

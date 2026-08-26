@@ -3,7 +3,6 @@ import {
   canReset,
   canResume,
   canSetSpeed,
-  canStart,
   type ControlState,
 } from "@/lib/controls/reducer";
 
@@ -14,14 +13,12 @@ const BUTTON_CLASS =
 
 export function ControlBar({
   state,
-  onStart,
   onPause,
   onResume,
   onReset,
   onSpeedChange,
 }: {
   state: ControlState;
-  onStart: () => void;
   onPause: () => void;
   onResume: () => void;
   onReset: () => void;
@@ -34,10 +31,6 @@ export function ControlBar({
       <span className="mr-1 rounded border border-slate-700 px-2 py-0.5 font-mono text-xs uppercase text-slate-400">
         {state.status}
       </span>
-
-      <button className={BUTTON_CLASS} onClick={onStart} disabled={!canStart(state)}>
-        Start
-      </button>
 
       {paused ? (
         <button className={BUTTON_CLASS} onClick={onResume} disabled={!canResume(state)}>
