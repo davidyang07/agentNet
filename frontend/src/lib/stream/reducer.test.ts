@@ -135,6 +135,47 @@ describe("compromise", () => {
     expect(selectMetrics(state).newCompromises).toBe(1);
     expect(selectMetrics(state).totalExposure).toBe(1);
   });
+
+  it("sets compromised_by and tick_compromised on the target node", () => {
+    let state = reduce(initialGraphState, snapshot());
+    state = reduce(
+      state,
+      evFrame(
+        event({
+          event_type: "COMPROMISE_SUCCEEDED",
+          sim_tick: 5,
+          seq: 1,
+          source_agent_id: "agent-000",
+          target_agent_id: "agent-001",
+        }),
+      ),
+    );
+
+    const targetNode = state.nodes.get("agent-001");
+    expect(targetNode?.compromised_by).toBe("agent-000");
+    expect(targetNode?.tick_compromised).toBe(5);
+  });
+
+  it("does not affect an unrelated node when a compromise event is applied", () => {
+    let state = reduce(initialGraphState, snapshot());
+    state = reduce(
+      state,
+      evFrame(
+        event({
+          event_type: "COMPROMISE_SUCCEEDED",
+          sim_tick: 3,
+          seq: 1,
+          source_agent_id: "agent-000",
+          target_agent_id: "agent-001",
+        }),
+      ),
+    );
+
+    const unrelatedNode = state.nodes.get("agent-000");
+    expect(unrelatedNode?.security_state).toBe("healthy");
+    expect(unrelatedNode?.compromised_by).toBeUndefined();
+    expect(unrelatedNode?.tick_compromised).toBeUndefined();
+  });
 });
 
 describe("detection", () => {
