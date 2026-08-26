@@ -13,12 +13,13 @@ test automated containment.
 > empirical data. Numbers on screen (metrics, comparison results) describe *this simulation's*
 > behavior under the configured parameters, never a measured real-world finding.
 
-Product context lives in `docs/BRIEF.md`; the binding technical spec is `docs/SPEC.md`; the
-current milestone's implementation plan is `docs/M1_PLAN.md`.
+Product context lives in `docs/BRIEF.md`; the binding technical spec is `docs/SPEC.md`.
 
 **Current status:** Milestone 0 (the vertical slice: engine → events → API → WebSocket → live
-graph) and Milestone 1 (quarantine defense, metrics, agent detail, Start/Pause/Reset/Speed
-controls, config form, defense on/off comparison) are both implemented.
+graph), Milestone 1 (quarantine defense, metrics, agent detail, Start/Pause/Reset/Speed controls,
+config form, defense on/off comparison), and Phase 1.5 (Postgres persistence, saved history,
+client-side replay, incident timeline, durable comparison of two historical runs) are all
+implemented.
 
 ## Architecture at a glance
 
@@ -29,9 +30,12 @@ controls, config form, defense on/off comparison) are both implemented.
 - **`frontend/`** — Next.js + TypeScript. A Sigma.js/Graphology network graph as the hero visual,
   driven entirely by a pure reducer (`src/lib/stream/reducer.ts`) that replays the event stream —
   the frontend never simulates anything itself.
-- **`docker-compose.yml`** — Postgres runs in Compose from day one (with a healthcheck) but is
-  **not yet used by the application** — the simulation is fully in-memory through Milestone 1.
-  Persistence lands in a later phase (see `docs/BRIEF.md` §11).
+- **`docker-compose.yml`** — Postgres runs in Compose with a healthcheck and a named volume
+  (`pg_data`), so experiment history survives `docker compose down && up`. A `PostgresWriter`
+  subscribes to the same live event stream the WebSocket transport does and persists it to two
+  tables (`experiments`, `experiment_events`); the live simulation itself stays fully in-memory
+  and is architecturally decoupled from Postgres — a DB outage never affects a running experiment,
+  only whether it gets a durable historical record.
 
 ## Getting started
 
@@ -88,17 +92,43 @@ Open `http://localhost:3000`.
    — once with defense on, once off, both from the same seed — and shows the resulting metrics
    side by side. This is two ordinary independent experiments, not a special dual-run mode.
 
+## History, replay, and durable comparison (Phase 1.5)
+
+Every experiment run (live or otherwise) is persisted as it happens, event by event, to Postgres
+— nothing about the live simulation changes to make this possible.
+
+1. Click **History** (top-left of the live view) to open `/history`: a paginated, filterable list
+   of every persisted experiment, with an **Integrity** column showing whether that run's event
+   log is provably complete. A run that crashed mid-simulation, or hit a transient DB write
+   failure, is marked **incomplete** — visibly, not silently presented as trustworthy — even if it
+   otherwise finished or was stopped cleanly.
+2. Click **Replay** on any row to open `/history/[id]`: the exact same graph/metrics/event-stream/
+   agent-detail components the live view uses, but driven entirely client-side from the persisted
+   event log (one fetch, then play/pause/speed/scrub with zero further network calls). An
+   incomplete run shows a banner and simply stops where the recorded log ends.
+3. Select two rows' checkboxes on the history list and click **Compare selected** to open
+   `/history/compare`: both runs' full event logs are folded through the same reducer/metrics
+   logic used everywhere else in the app, side by side, with each arm's seed/config/defense/
+   integrity shown above its metrics (arbitrary historical pairs are allowed — the UI lets you
+   judge whether a given pair is a methodologically fair comparison, rather than assuming it).
+
 ## Verification
 
 ```bash
-cd backend && .venv/bin/pytest        # or: make test
+docker compose up postgres -d          # or any local Postgres reachable via POSTGRES_* env vars
+make migrate                           # apply migrations standalone (also runs on app startup)
+make test                              # ensures + uses a dedicated agentnet_test database
 cd backend && .venv/bin/python scripts/verify_determinism.py   # or: make verify-determinism
-cd frontend && npm test               # reducer/controls/comparison unit tests (Vitest)
+cd frontend && npm test               # reducer/controls/comparison/replay unit tests (Vitest)
 cd frontend && npm run build          # production build + typecheck
-make lint                             # ruff + eslint + tsc, backend and frontend
+make lint                             # ruff + eslint + next typegen + tsc, backend and frontend
 make types                            # regenerate frontend/src/lib/api/schema.d.ts from a
                                        # running backend's OpenAPI schema; CI fails on drift
 ```
+
+Backend persistence-integration tests (migrations, `PostgresWriter`, history endpoints, replay
+equivalence) require a reachable Postgres and are skipped automatically otherwise — `make test`
+provisions `agentnet_test` for you if a Postgres instance is already running.
 
 `make verify-determinism` runs the same seeded configuration twice, headless, and diffs the
 resulting event projections — this is the automated proof behind "Reset reruns deterministically."
