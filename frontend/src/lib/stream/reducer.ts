@@ -13,7 +13,10 @@ export const INCIDENT_LOG_CAP = 50;
 
 // Event types with per-agent security significance for the incident timeline
 // (BRIEF §8). Lifecycle events (EXPERIMENT_*, AGENT_CREATED) are excluded.
-const INCIDENT_EVENT_TYPES = new Set([
+// Exported so backend/app/schemas/events.py's INCIDENT_EVENT_TYPES mirror
+// (and its cross-language parity test) has something concrete to check
+// against on this side too.
+export const INCIDENT_EVENT_TYPES = new Set([
   "COMPROMISE_ATTEMPTED",
   "COMPROMISE_SUCCEEDED",
   "COMPROMISE_FAILED",
