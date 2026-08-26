@@ -1,17 +1,41 @@
+import logging
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from app.orchestrator.registry import registry
 from app.orchestrator.runner import ExperimentRunner, InvalidTransitionError
+from app.persistence.registry import writer_registry
+from app.persistence.writer import PostgresWriter
 from app.schemas.experiment import ExperimentConfig, ExperimentSummary, SpeedRequest
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/experiments", tags=["experiments"])
 
 
 @router.post("", response_model=ExperimentSummary, status_code=201)
-async def create_experiment(config: ExperimentConfig) -> ExperimentSummary:
+async def create_experiment(config: ExperimentConfig, request: Request) -> ExperimentSummary:
     runner = ExperimentRunner(config)
+
+    # Persistence is additive and best-effort: a Postgres outage (no pool, or
+    # a failed writer start) must never block or fail experiment creation --
+    # the live run simply proceeds without a durable record for this
+    # experiment (docs/PHASE_1_5_PLAN.md §11 "DB down at creation").
+    pool = getattr(request.app.state, "pg_pool", None)
+    if pool is not None:
+        writer = PostgresWriter(pool, runner.experiment_id, runner.bus, runner)
+        try:
+            await writer.start()
+        except Exception:
+            logger.exception(
+                "PostgresWriter failed to start for experiment %s; "
+                "continuing without persistence for this run",
+                runner.experiment_id,
+            )
+        else:
+            writer_registry.add(runner.experiment_id, writer)
+
     await runner.publish_initial()
     registry.add(runner)
     runner.start()

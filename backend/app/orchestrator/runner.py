@@ -36,6 +36,13 @@ class ExperimentRunner:
         self._speed: float = 1.0
         self._pause_event = asyncio.Event()
         self._pause_event.set()
+        # Set only *after* the terminal event has actually been published --
+        # in _run_loop's natural-finish path, and at the very end of stop(),
+        # after `await self.bus.publish(...)` completes -- never before. A
+        # persistence writer races this against its queue to know when it's
+        # safe to drain the last of the queue and finalize without risking
+        # finalizing one event early (docs/PHASE_1_5_PLAN.md §6).
+        self._terminal_event = asyncio.Event()
         self._initial_drafts: list[EventDraft] = [
             EventDraft(sim_tick=0, event_type=EventType.EXPERIMENT_STARTED),
             *topology_drafts,
@@ -85,6 +92,7 @@ class ExperimentRunner:
             await asyncio.sleep(self.tick_interval / self._speed)
         if self._running:
             self.status = "finished"
+            self._terminal_event.set()
         self._task = None
 
     async def stop(self) -> None:
@@ -113,6 +121,7 @@ class ExperimentRunner:
             [EventDraft(sim_tick=self.state.tick, event_type=EventType.EXPERIMENT_STOPPED)]
         )
         await self.bus.publish(events)
+        self._terminal_event.set()
 
     def summary(self) -> ExperimentSummary:
         return ExperimentSummary(

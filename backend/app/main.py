@@ -9,6 +9,7 @@ from app.api import routes_experiments, routes_schema, ws
 from app.config import get_settings
 from app.db import check_postgres_reachable, create_pool
 from app.persistence.migrate import run_migrations
+from app.persistence.registry import writer_registry
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     yield
 
+    # Cancel any outstanding writer drain-loop tasks before closing the pool
+    # they depend on -- otherwise a still-running experiment at shutdown
+    # leaks a task holding a reference to a now-closed pool.
+    await writer_registry.shutdown_all()
     if app.state.pg_pool is not None:
         await app.state.pg_pool.close()
 
