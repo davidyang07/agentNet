@@ -62,6 +62,10 @@ export function NetworkGraph({
     sigmaRef.current = new Sigma(graph, containerRef.current);
     sigmaRef.current.on("clickNode", ({ node }) => onNodeClick?.(node));
     builtForRef.current = state.experimentId;
+    // onNodeClick is intentionally omitted below: including it would rebuild the graph
+    // and rerun layout on every parent render. sigmaRef.current?.kill() (before rebuild,
+    // and on unmount) always unbinds the listener before any new one is attached.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.experimentId, state.nodes, state.edges]);
 
   // Recolor nodes as their security_state changes — never rebuilds the

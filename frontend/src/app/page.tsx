@@ -92,6 +92,7 @@ function ExperimentView({
         </section>
       </div>
 
+      {/* Temporary: Task 7 replaces this with <AgentDetailDrawer /> */}
       {selectedAgentId && <p>Selected: {selectedAgentId}</p>}
 
       <footer className="h-56 shrink-0 border-t border-slate-800">
