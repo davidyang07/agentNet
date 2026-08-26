@@ -6,6 +6,7 @@ import { useCallback, useEffect, useReducer, useRef } from "react";
 import { ConfigForm } from "@/components/ConfigForm";
 import { ControlBar } from "@/components/ControlBar";
 import { EventStream } from "@/components/EventStream";
+import { MetricsPanel } from "@/components/MetricsPanel";
 import {
   createExperiment,
   getExperiment,
@@ -82,6 +83,8 @@ function ExperimentView({
             </div>
           </dl>
         </aside>
+
+        <MetricsPanel state={state} />
 
         <section className="flex-1 overflow-hidden">
           <NetworkGraph state={state} />
