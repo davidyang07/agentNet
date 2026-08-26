@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
 import { ConfigForm } from "@/components/ConfigForm";
 import { ControlBar } from "@/components/ControlBar";
@@ -44,6 +44,7 @@ function ExperimentView({
   activeConfig: ExperimentConfig;
 }) {
   const { state, schemaError } = useExperimentStream(experimentId);
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
   return (
     <>
@@ -87,9 +88,11 @@ function ExperimentView({
         <MetricsPanel state={state} />
 
         <section className="flex-1 overflow-hidden">
-          <NetworkGraph state={state} />
+          <NetworkGraph state={state} onNodeClick={setSelectedAgentId} />
         </section>
       </div>
+
+      {selectedAgentId && <p>Selected: {selectedAgentId}</p>}
 
       <footer className="h-56 shrink-0 border-t border-slate-800">
         <EventStream events={state.recentEvents} />

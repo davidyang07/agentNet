@@ -18,7 +18,13 @@ const COLORS: Record<string, string> = {
 
 const FORCE_ATLAS2_ITERATIONS = 100;
 
-export function NetworkGraph({ state }: { state: GraphState }) {
+export function NetworkGraph({
+  state,
+  onNodeClick,
+}: {
+  state: GraphState;
+  onNodeClick?: (agentId: string) => void;
+}) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const graphRef = useRef<Graph | null>(null);
   const sigmaRef = useRef<Sigma | null>(null);
@@ -54,6 +60,7 @@ export function NetworkGraph({ state }: { state: GraphState }) {
 
     graphRef.current = graph;
     sigmaRef.current = new Sigma(graph, containerRef.current);
+    sigmaRef.current.on("clickNode", ({ node }) => onNodeClick?.(node));
     builtForRef.current = state.experimentId;
   }, [state.experimentId, state.nodes, state.edges]);
 
