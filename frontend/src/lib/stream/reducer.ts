@@ -125,6 +125,19 @@ export function reduce(state: GraphState, frame: StreamFrame): GraphState {
     // history; a snapshot for a different (or first-ever) experiment resets
     // it, so no prior experiment's state can leak into a replacement run.
     const sameExperiment = frame.experiment_id === state.experimentId;
+    // A brand-new experiment's very first snapshot can already show nodes as
+    // compromised/quarantined — the seeded patient-zero compromise always
+    // happens server-side before any client can possibly connect (it's
+    // published inside the create-experiment request, before the response
+    // is even returned), and a slow-to-connect client can miss further
+    // ticks the same way. Seed the counter from that snapshot's own tally
+    // rather than starting at 0, so newCompromises never silently
+    // undercounts compromises that happened before this connection existed.
+    const initialExposure = sameExperiment
+      ? 0
+      : frame.nodes.filter(
+          (n) => n.security_state === "compromised" || n.security_state === "quarantined",
+        ).length;
     return {
       experimentId: frame.experiment_id,
       lastSeq: frame.last_seq,
@@ -132,7 +145,7 @@ export function reduce(state: GraphState, frame: StreamFrame): GraphState {
       nodes,
       edges: frame.edges,
       recentEvents: sameExperiment ? state.recentEvents : [],
-      metrics: sameExperiment ? state.metrics : { newCompromises: 0 },
+      metrics: sameExperiment ? state.metrics : { newCompromises: initialExposure },
       incidentsByAgent: sameExperiment ? state.incidentsByAgent : new Map(),
     };
   }

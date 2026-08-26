@@ -77,9 +77,47 @@ describe("snapshot", () => {
       compromised: 1,
       quarantined: 1,
       totalExposure: 2,
-      newCompromises: 0,
+      // Regression: a fresh experiment's very first snapshot can already
+      // show compromised/quarantined nodes (the seeded patient-zero
+      // compromise always happens before any client can connect). This
+      // must be reflected in newCompromises immediately, not only once a
+      // live event happens to arrive after connection — see the dedicated
+      // "patient zero" test below for the exact scenario this guards.
+      newCompromises: 2,
       outbreakDuration: 0,
     });
+  });
+
+  it("counts the seeded patient-zero compromise in newCompromises on first connect, with no live event required", () => {
+    const state = reduce(
+      initialGraphState,
+      snapshot({ nodes: [node("agent-000", "compromised"), node("agent-001", "healthy")] }),
+    );
+
+    expect(selectMetrics(state).newCompromises).toBe(1);
+    expect(selectMetrics(state).totalExposure).toBe(1);
+  });
+
+  it("does not double-count the snapshot baseline once live events continue the run", () => {
+    let state = reduce(
+      initialGraphState,
+      snapshot({ nodes: [node("agent-000", "compromised"), node("agent-001", "healthy")] }),
+    );
+    state = reduce(
+      state,
+      evFrame(
+        event({
+          event_type: "COMPROMISE_SUCCEEDED",
+          sim_tick: 1,
+          seq: 0,
+          source_agent_id: "agent-000",
+          target_agent_id: "agent-001",
+        }),
+      ),
+    );
+
+    expect(selectMetrics(state).newCompromises).toBe(2);
+    expect(selectMetrics(state).totalExposure).toBe(2);
   });
 });
 
