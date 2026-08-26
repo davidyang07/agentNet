@@ -7,6 +7,8 @@
 // No React/DOM dependency, so it's unit-testable directly, same discipline
 // as lib/stream/reducer.ts.
 
+import type { ExperimentConfig } from "@/lib/api/client";
+
 export type ControlStatus = "idle" | "running" | "paused" | "finished" | "stopped";
 export type PendingAction = "start" | "pause" | "resume" | "speed" | "reset" | null;
 
@@ -18,6 +20,7 @@ export type ControlState = {
   error: string | null;
   operationId: number | null;
   revision: number;
+  activeConfig: ExperimentConfig | null;
 };
 
 export const initialControlState: ControlState = {
@@ -28,6 +31,7 @@ export const initialControlState: ControlState = {
   error: null,
   operationId: null,
   revision: 0,
+  activeConfig: null,
 };
 
 export function canStart(s: ControlState): boolean {
@@ -52,7 +56,7 @@ export function canReset(s: ControlState): boolean {
 
 export type ControlAction =
   | { type: "start_requested"; operationId: number }
-  | { type: "start_succeeded"; operationId: number; experimentId: string; status: ControlStatus }
+  | { type: "start_succeeded"; operationId: number; experimentId: string; status: ControlStatus; config: ExperimentConfig }
   | { type: "start_failed"; operationId: number; error: string }
   | { type: "pause_requested"; operationId: number }
   | { type: "pause_succeeded"; operationId: number; status: ControlStatus }
@@ -64,7 +68,7 @@ export type ControlAction =
   | { type: "speed_succeeded"; operationId: number; speed: number }
   | { type: "speed_failed"; operationId: number; error: string }
   | { type: "reset_requested"; operationId: number }
-  | { type: "reset_create_succeeded"; operationId: number; experimentId: string; status: ControlStatus }
+  | { type: "reset_create_succeeded"; operationId: number; experimentId: string; status: ControlStatus; config: ExperimentConfig }
   | { type: "reset_stop_succeeded_create_failed"; operationId: number; error: string }
   | { type: "reset_failed"; operationId: number; error: string }
   | { type: "status_synced"; experimentId: string; revision: number; status: ControlStatus };
@@ -87,6 +91,7 @@ export function controlReducer(state: ControlState, action: ControlAction): Cont
         pending: null,
         operationId: null,
         error: null,
+        activeConfig: action.config,
       };
     case "start_failed":
       if (!isCurrent(state, "start", action.operationId)) return state;
@@ -135,6 +140,7 @@ export function controlReducer(state: ControlState, action: ControlAction): Cont
         operationId: null,
         speed: 1,
         error: null,
+        activeConfig: action.config,
       };
     case "reset_stop_succeeded_create_failed":
       if (!isCurrent(state, "reset", action.operationId)) return state;

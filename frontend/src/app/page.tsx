@@ -130,6 +130,7 @@ export default function Home() {
           operationId,
           experimentId: summary.experiment_id,
           status: summary.status,
+          config: summary.config,
         });
       })
       .catch((err) => {
@@ -210,6 +211,7 @@ export default function Home() {
         operationId,
         experimentId: summary.experiment_id,
         status: summary.status,
+        config: summary.config,
       });
     } catch (err) {
       apply({

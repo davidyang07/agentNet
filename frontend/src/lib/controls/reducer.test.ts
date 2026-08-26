@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { ExperimentConfig } from "@/lib/api/client";
 import {
   canPause,
   canReset,
@@ -15,8 +16,40 @@ import {
 const EXP_A = "11111111-1111-1111-1111-111111111111";
 const EXP_B = "22222222-2222-2222-2222-222222222222";
 
+const FIXTURE_CONFIG_A: ExperimentConfig = {
+  seed: 42,
+  node_count: 60,
+  edge_density: 2,
+  software_type_count: 3,
+  p_same: 0.15,
+  p_cross: 0.03,
+  max_ticks: 200,
+  detector_sensitivity: 0.2,
+  defense_enabled: true,
+  initial_compromised: "highest_degree",
+};
+
+const FIXTURE_CONFIG_B: ExperimentConfig = {
+  seed: 123,
+  node_count: 80,
+  edge_density: 3,
+  software_type_count: 4,
+  p_same: 0.2,
+  p_cross: 0.05,
+  max_ticks: 300,
+  detector_sensitivity: 0.3,
+  defense_enabled: false,
+  initial_compromised: "random_node",
+};
+
 function running(overrides: Partial<ControlState> = {}): ControlState {
-  return { ...initialControlState, experimentId: EXP_A, status: "running", ...overrides };
+  return {
+    ...initialControlState,
+    experimentId: EXP_A,
+    status: "running",
+    activeConfig: null,
+    ...overrides,
+  };
 }
 
 describe("initial state", () => {
@@ -27,6 +60,10 @@ describe("initial state", () => {
     expect(canResume(initialControlState)).toBe(false);
     expect(canSetSpeed(initialControlState)).toBe(false);
     expect(canReset(initialControlState)).toBe(false);
+  });
+
+  it("activeConfig starts as null", () => {
+    expect(initialControlState.activeConfig).toBeNull();
   });
 });
 
@@ -54,10 +91,23 @@ describe("start", () => {
       operationId: 1,
       experimentId: EXP_A,
       status: "running",
+      config: FIXTURE_CONFIG_A,
     });
     expect(s.experimentId).toBe(EXP_A);
     expect(s.status).toBe("running");
     expect(s.pending).toBeNull();
+  });
+
+  it("start_succeeded sets activeConfig from the dispatched config", () => {
+    const pending = controlReducer(initialControlState, { type: "start_requested", operationId: 1 });
+    const s = controlReducer(pending, {
+      type: "start_succeeded",
+      operationId: 1,
+      experimentId: EXP_A,
+      status: "running",
+      config: FIXTURE_CONFIG_A,
+    });
+    expect(s.activeConfig).toBe(FIXTURE_CONFIG_A);
   });
 
   it("start_failed clears pending, keeps idle, sets error, remains retryable", () => {
@@ -159,11 +209,26 @@ describe("reset ordering", () => {
       operationId: 1,
       experimentId: EXP_B,
       status: "running",
+      config: FIXTURE_CONFIG_B,
     });
     expect(s.experimentId).toBe(EXP_B);
     expect(s.status).toBe("running");
     expect(s.pending).toBeNull();
     expect(s.speed).toBe(1);
+  });
+
+  it("reset_create_succeeded updates activeConfig to the new run's config", () => {
+    const prevState = { ...running(), activeConfig: FIXTURE_CONFIG_A };
+    const r = controlReducer(prevState, { type: "reset_requested", operationId: 1 });
+    const s = controlReducer(r, {
+      type: "reset_create_succeeded",
+      operationId: 1,
+      experimentId: EXP_B,
+      status: "running",
+      config: FIXTURE_CONFIG_B,
+    });
+    expect(s.activeConfig).toBe(FIXTURE_CONFIG_B);
+    expect(s.activeConfig).not.toBe(FIXTURE_CONFIG_A);
   });
 
   it("stop-succeeded-but-create-failed marks stopped, keeps old id, stays retryable", () => {
@@ -188,6 +253,40 @@ describe("reset ordering", () => {
     expect(s.pending).toBeNull();
     expect(s.error).toBe("timeout");
     expect(canReset(s)).toBe(true);
+  });
+});
+
+describe("activeConfig preservation", () => {
+  it("activeConfig is retained across pause_succeeded", () => {
+    const withConfig = { ...running(), activeConfig: FIXTURE_CONFIG_A };
+    const p = controlReducer(withConfig, { type: "pause_requested", operationId: 1 });
+    const s = controlReducer(p, { type: "pause_succeeded", operationId: 1, status: "paused" });
+    expect(s.activeConfig).toBe(FIXTURE_CONFIG_A);
+  });
+
+  it("activeConfig is retained across resume_succeeded", () => {
+    const withConfig = { ...running({ status: "paused" }), activeConfig: FIXTURE_CONFIG_A };
+    const p = controlReducer(withConfig, { type: "resume_requested", operationId: 1 });
+    const s = controlReducer(p, { type: "resume_succeeded", operationId: 1, status: "running" });
+    expect(s.activeConfig).toBe(FIXTURE_CONFIG_A);
+  });
+
+  it("activeConfig is retained across speed_succeeded", () => {
+    const withConfig = { ...running(), activeConfig: FIXTURE_CONFIG_A };
+    const p = controlReducer(withConfig, { type: "speed_requested", operationId: 1 });
+    const s = controlReducer(p, { type: "speed_succeeded", operationId: 1, speed: 4 });
+    expect(s.activeConfig).toBe(FIXTURE_CONFIG_A);
+  });
+
+  it("activeConfig is retained across status_synced", () => {
+    const withConfig = { ...running(), activeConfig: FIXTURE_CONFIG_A };
+    const s = controlReducer(withConfig, {
+      type: "status_synced",
+      experimentId: EXP_A,
+      revision: 0,
+      status: "finished",
+    });
+    expect(s.activeConfig).toBe(FIXTURE_CONFIG_A);
   });
 });
 
@@ -256,6 +355,7 @@ describe("can* table, exhaustive over status x pending", () => {
       error: null,
       operationId: null,
       revision: 0,
+      activeConfig: null,
     };
     expect(canStart(s)).toBe(status === "idle");
     expect(canPause(s)).toBe(status === "running");
@@ -273,6 +373,7 @@ describe("can* table, exhaustive over status x pending", () => {
       error: null,
       operationId: 1,
       revision: 0,
+      activeConfig: null,
     };
     expect(canStart(s)).toBe(false);
     expect(canPause(s)).toBe(false);
