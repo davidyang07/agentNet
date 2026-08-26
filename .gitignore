@@ -34,3 +34,5 @@ CLAUDE.local.md
 
 # Planning docs (not authoritative — SPEC.md/BRIEF.md are)
 docs/*_PLAN.md
+
+.worktrees/
