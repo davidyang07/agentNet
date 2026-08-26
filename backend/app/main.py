@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import routes_experiments, routes_schema, ws
+from app.api import routes_experiments, routes_history, routes_schema, ws
 from app.config import get_settings
 from app.db import check_postgres_reachable, create_pool
 from app.persistence.migrate import run_migrations
@@ -52,6 +52,7 @@ app.add_middleware(
 )
 
 app.include_router(routes_experiments.router)
+app.include_router(routes_history.router)
 app.include_router(routes_schema.router)
 app.include_router(ws.router)
 

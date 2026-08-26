@@ -57,6 +57,21 @@ M1_EVENT_TYPES = M0_EVENT_TYPES | frozenset(
     }
 )
 
+# Event types with per-agent security significance for the incident timeline
+# -- mirrors frontend/src/lib/stream/reducer.ts's INCIDENT_EVENT_TYPES
+# exactly. There is no codegen coverage for enum *values* across languages
+# (only shapes), so backend/tests/test_incident_event_types_parity.py and a
+# frontend counterpart assert these two literal sets never drift apart.
+INCIDENT_EVENT_TYPES = frozenset(
+    {
+        EventType.COMPROMISE_ATTEMPTED,
+        EventType.COMPROMISE_SUCCEEDED,
+        EventType.COMPROMISE_FAILED,
+        EventType.ANOMALY_DETECTED,
+        EventType.AGENT_QUARANTINED,
+    }
+)
+
 
 class EventDraft(BaseModel):
     """Engine output: no identity, no clock. This is what keeps step() pure."""
