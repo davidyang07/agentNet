@@ -1,11 +1,43 @@
+import logging
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import routes_experiments, routes_schema, ws
 from app.config import get_settings
-from app.db import check_postgres_reachable
+from app.db import check_postgres_reachable, create_pool
+from app.persistence.migrate import run_migrations
 
-app = FastAPI()
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
+    # Persistence is additive and must never block the app from serving live
+    # (in-memory) experiments: a Postgres outage at startup degrades to
+    # app.state.pg_pool = None rather than failing app startup (see
+    # docs/PHASE_1_5_PLAN.md §11 "DB down at creation"). Routes that need the
+    # pool check for None and skip persistence, not crash.
+    pool = None
+    try:
+        pool = await create_pool(get_settings())
+        await run_migrations(pool)
+    except Exception:
+        logger.exception("Postgres unavailable at startup; persistence disabled for this run")
+        if pool is not None:
+            await pool.close()
+            pool = None
+    app.state.pg_pool = pool
+
+    yield
+
+    if app.state.pg_pool is not None:
+        await app.state.pg_pool.close()
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

@@ -5,6 +5,10 @@ services:
       POSTGRES_USER: agentnet
       POSTGRES_PASSWORD: agentnet_dev
       POSTGRES_DB: agentnet
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U agentnet"]
       interval: 5s
@@ -43,3 +47,6 @@ services:
       - /app/.next
     depends_on:
       - backend
+
+volumes:
+  pg_data:
