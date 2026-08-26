@@ -50,11 +50,12 @@ def test_persisted_events_match_fresh_run_projected_onto_determinism_fields():
         try:
             writer = PostgresWriter(pool, runner.experiment_id, runner.bus, runner)
             await writer.start()
+            writer_registry.add(runner.experiment_id, writer)
             await runner.publish_initial()
             await runner._run_loop()
 
             deadline = asyncio.get_event_loop().time() + 10.0
-            while writer_registry.get(runner.experiment_id) is not None:
+            while not writer._task.done():
                 if asyncio.get_event_loop().time() > deadline:
                     raise AssertionError("writer did not finalize within the timeout")
                 await asyncio.sleep(0.01)

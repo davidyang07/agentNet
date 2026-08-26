@@ -136,7 +136,15 @@ class PostgresWriter:
             if batch:
                 await self._write_batch(batch)
 
-            if term_task in done:
+            # Terminal-signal-wins is necessary but not sufficient to
+            # finalize: a queue holding more than DRAIN_BATCH_CAP events at
+            # the moment terminal fires needs more than one drain pass. Only
+            # finalize once the queue is verifiably empty -- otherwise loop
+            # back for another bounded drain (the terminal event stays set,
+            # so every subsequent iteration's term_task resolves instantly;
+            # no more events can ever be added past this point, by
+            # construction of where the runner sets it).
+            if term_task in done and self._queue.empty():
                 await self._finalize()
                 return
 

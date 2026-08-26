@@ -23,15 +23,28 @@ FINALIZE_TIMEOUT_S = 5.0
 
 
 def _make_runner(**overrides) -> ExperimentRunner:
-    config = ExperimentConfig(seed=42, node_count=25, max_ticks=5, **overrides)
-    runner = ExperimentRunner(config)
+    defaults = {"seed": 42, "node_count": 25, "max_ticks": 5}
+    defaults.update(overrides)
+    runner = ExperimentRunner(ExperimentConfig(**defaults))
     runner.tick_interval = 0
     return runner
 
 
-async def _wait_for_finalize(experiment_id) -> None:
+async def _start_writer(pool, runner: ExperimentRunner) -> PostgresWriter:
+    """Mirrors the exact production call site in routes_experiments.py --
+    writer_registry.add() happens at the call site, not inside
+    PostgresWriter itself, so a test driving a writer directly must
+    replicate that registration to exercise the real integration."""
+    writer = PostgresWriter(pool, runner.experiment_id, runner.bus, runner)
+    await writer.start()
+    writer_registry.add(runner.experiment_id, writer)
+    return writer
+
+
+async def _wait_for_finalize(writer: PostgresWriter) -> None:
+    assert writer._task is not None
     deadline = asyncio.get_event_loop().time() + FINALIZE_TIMEOUT_S
-    while writer_registry.get(experiment_id) is not None:
+    while not writer._task.done():
         if asyncio.get_event_loop().time() > deadline:
             raise AssertionError("writer did not finalize within the timeout")
         await asyncio.sleep(0.01)
@@ -46,12 +59,11 @@ def test_events_persist_in_seq_order_and_finalize_on_natural_completion():
         pool = await create_pool(TEST_SETTINGS)
         runner = _make_runner()
         try:
-            writer = PostgresWriter(pool, runner.experiment_id, runner.bus, runner)
-            await writer.start()
+            writer = await _start_writer(pool, runner)
             await runner.publish_initial()
             await runner._run_loop()
 
-            await _wait_for_finalize(runner.experiment_id)
+            await _wait_for_finalize(writer)
 
             rows = await pool.fetch(
                 "SELECT seq FROM experiment_events WHERE experiment_id = $1 ORDER BY seq",
@@ -70,8 +82,10 @@ def test_events_persist_in_seq_order_and_finalize_on_natural_completion():
             assert exp_row["final_last_seq"] == runner._emitter.last_seq
             assert exp_row["is_complete"] is True
 
-            # Writer cleanup: no dangling bus subscription after finalize.
+            # Writer cleanup: no dangling bus subscription, and the writer
+            # registry no longer references this experiment.
             assert len(runner.bus._subscribers) == 0
+            assert writer_registry.get(runner.experiment_id) is None
         finally:
             await _cleanup(pool, runner.experiment_id)
             await pool.close()
@@ -84,14 +98,13 @@ def test_finalize_on_manual_stop_persists_the_stopped_event_and_status():
         pool = await create_pool(TEST_SETTINGS)
         runner = _make_runner(max_ticks=1000)
         try:
-            writer = PostgresWriter(pool, runner.experiment_id, runner.bus, runner)
-            await writer.start()
+            writer = await _start_writer(pool, runner)
             await runner.publish_initial()
             runner.start()
             await asyncio.sleep(0)
 
             await runner.stop()
-            await _wait_for_finalize(runner.experiment_id)
+            await _wait_for_finalize(writer)
 
             exp_row = await pool.fetchrow(
                 "SELECT final_status, final_last_seq, is_complete "
@@ -109,6 +122,7 @@ def test_finalize_on_manual_stop_persists_the_stopped_event_and_status():
                 "EXPERIMENT_STOPPED",
             )
             assert stopped_count == 1
+            assert writer_registry.get(runner.experiment_id) is None
         finally:
             await _cleanup(pool, runner.experiment_id)
             await pool.close()
@@ -147,19 +161,21 @@ def test_duplicate_batch_write_is_idempotent():
 def test_no_event_loss_under_a_burst_larger_than_the_drain_batch_cap():
     async def run() -> None:
         pool = await create_pool(TEST_SETTINGS)
-        # The canonical 60-node demo produces well over DRAIN_BATCH_CAP (500)
-        # events -- this proves multi-batch draining under a fast burst
-        # (tick_interval=0, no yielding between ticks beyond asyncio.sleep(0))
-        # loses nothing, exercising the EventBus's unbounded per-subscriber
-        # queue rather than a bespoke buffering path.
-        runner = _make_runner(node_count=60, max_ticks=200)
+        # defense_enabled=False plus high propagation probabilities produces
+        # well over DRAIN_BATCH_CAP (500) events for a 100-node run -- this
+        # proves multi-batch draining under a fast burst (tick_interval=0,
+        # no yielding between ticks beyond asyncio.sleep(0)) loses nothing,
+        # exercising the EventBus's unbounded per-subscriber queue rather
+        # than a bespoke buffering path.
+        runner = _make_runner(
+            node_count=100, max_ticks=200, defense_enabled=False, p_same=0.4, p_cross=0.1
+        )
         try:
-            writer = PostgresWriter(pool, runner.experiment_id, runner.bus, runner)
-            await writer.start()
+            writer = await _start_writer(pool, runner)
             await runner.publish_initial()
             await runner._run_loop()
 
-            await _wait_for_finalize(runner.experiment_id)
+            await _wait_for_finalize(writer)
 
             total = runner._emitter.last_seq + 1
             assert total > DRAIN_BATCH_CAP, "test fixture must exceed the batch cap"
@@ -248,18 +264,16 @@ def test_concurrent_experiments_are_isolated_by_experiment_id():
         runner_a = _make_runner(seed=1)
         runner_b = _make_runner(seed=2)
         try:
-            writer_a = PostgresWriter(pool, runner_a.experiment_id, runner_a.bus, runner_a)
-            writer_b = PostgresWriter(pool, runner_b.experiment_id, runner_b.bus, runner_b)
-            await writer_a.start()
-            await writer_b.start()
+            writer_a = await _start_writer(pool, runner_a)
+            writer_b = await _start_writer(pool, runner_b)
             await runner_a.publish_initial()
             await runner_b.publish_initial()
 
             await asyncio.gather(runner_a._run_loop(), runner_b._run_loop())
 
             await asyncio.gather(
-                _wait_for_finalize(runner_a.experiment_id),
-                _wait_for_finalize(runner_b.experiment_id),
+                _wait_for_finalize(writer_a),
+                _wait_for_finalize(writer_b),
             )
 
             for runner in (runner_a, runner_b):

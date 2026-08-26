@@ -21,29 +21,44 @@ pytestmark = requires_postgres
 
 
 def _make_runner(**overrides) -> ExperimentRunner:
-    config = ExperimentConfig(seed=42, node_count=25, max_ticks=5, **overrides)
-    runner = ExperimentRunner(config)
+    defaults = {"seed": 42, "node_count": 25, "max_ticks": 5}
+    defaults.update(overrides)
+    runner = ExperimentRunner(ExperimentConfig(**defaults))
     runner.tick_interval = 0
     return runner
 
 
 async def _persist_completed_run(pool, **config_overrides) -> ExperimentRunner:
     runner = _make_runner(**config_overrides)
+    # Mirrors the exact production call site in routes_experiments.py --
+    # writer_registry.add() happens at the call site, not inside
+    # PostgresWriter itself.
     writer = PostgresWriter(pool, runner.experiment_id, runner.bus, runner)
     await writer.start()
+    writer_registry.add(runner.experiment_id, writer)
     await runner.publish_initial()
     await runner._run_loop()
 
     deadline = asyncio.get_event_loop().time() + 5.0
-    while writer_registry.get(runner.experiment_id) is not None:
+    while not writer._task.done():
         if asyncio.get_event_loop().time() > deadline:
             raise AssertionError("writer did not finalize within the timeout")
         await asyncio.sleep(0.01)
     return runner
 
 
-async def _cleanup(pool, experiment_id) -> None:
-    await pool.execute("DELETE FROM experiments WHERE experiment_id = $1", experiment_id)
+async def _cleanup(*experiment_ids: object) -> None:
+    # Self-contained: creates and closes its own pool within this single
+    # asyncio.run() call. asyncpg pools/connections are bound to the event
+    # loop that created them, so a pool created in an earlier, separate
+    # asyncio.run() call (whose loop is already closed by the time this
+    # runs) cannot be reused here.
+    pool = await create_pool(TEST_SETTINGS)
+    try:
+        for experiment_id in experiment_ids:
+            await pool.execute("DELETE FROM experiments WHERE experiment_id = $1", experiment_id)
+    finally:
+        await pool.close()
 
 
 def test_detail_and_events_and_replay_snapshot_for_a_persisted_run():
@@ -55,7 +70,6 @@ def test_detail_and_events_and_replay_snapshot_for_a_persisted_run():
             await pool.close()
 
     runner = asyncio.run(setup())
-    pool_for_cleanup = asyncio.run(create_pool(TEST_SETTINGS))
     try:
         with TestClient(app) as client:
             exp_id = str(runner.experiment_id)
@@ -103,8 +117,7 @@ def test_detail_and_events_and_replay_snapshot_for_a_persisted_run():
             assert all_seqs == list(range(runner._emitter.last_seq + 1))
             assert len(all_seqs) == len(set(all_seqs))
     finally:
-        asyncio.run(_cleanup(pool_for_cleanup, runner.experiment_id))
-        asyncio.run(pool_for_cleanup.close())
+        asyncio.run(_cleanup(runner.experiment_id))
 
 
 def test_incidents_endpoint_only_returns_incident_event_types():
@@ -116,7 +129,6 @@ def test_incidents_endpoint_only_returns_incident_event_types():
             await pool.close()
 
     runner = asyncio.run(setup())
-    pool_for_cleanup = asyncio.run(create_pool(TEST_SETTINGS))
     try:
         with TestClient(app) as client:
             resp = client.get(f"/api/experiments/{runner.experiment_id}/incidents")
@@ -132,8 +144,7 @@ def test_incidents_endpoint_only_returns_incident_event_types():
             }
             assert all(e["event_type"] in incident_types for e in events)
     finally:
-        asyncio.run(_cleanup(pool_for_cleanup, runner.experiment_id))
-        asyncio.run(pool_for_cleanup.close())
+        asyncio.run(_cleanup(runner.experiment_id))
 
 
 def test_list_filters_and_paginates_by_status_and_defense_enabled():
@@ -147,7 +158,6 @@ def test_list_filters_and_paginates_by_status_and_defense_enabled():
             await pool.close()
 
     on_runner, off_runner = asyncio.run(setup())
-    pool_for_cleanup = asyncio.run(create_pool(TEST_SETTINGS))
     try:
         with TestClient(app) as client:
             resp = client.get("/api/experiments", params={"defense_enabled": "true", "limit": 100})
@@ -167,9 +177,7 @@ def test_list_filters_and_paginates_by_status_and_defense_enabled():
                 next_id = resp2.json()["items"][0]["experiment_id"]
                 assert next_id != body["items"][0]["experiment_id"]
     finally:
-        asyncio.run(_cleanup(pool_for_cleanup, on_runner.experiment_id))
-        asyncio.run(_cleanup(pool_for_cleanup, off_runner.experiment_id))
-        asyncio.run(pool_for_cleanup.close())
+        asyncio.run(_cleanup(on_runner.experiment_id, off_runner.experiment_id))
 
 
 def test_history_endpoints_404_for_unknown_experiment():
