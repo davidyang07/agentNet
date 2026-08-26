@@ -151,11 +151,16 @@ export function reduce(state: GraphState, frame: StreamFrame): GraphState {
     const existing = state.nodes.get(event.target_agent_id);
     if (existing) {
       nodes = new Map(nodes);
+      const isDuplicateClaim = event.metadata?.["already_compromised"] === true;
       nodes.set(event.target_agent_id, {
         ...existing,
         security_state: "compromised",
-        compromised_by: event.source_agent_id ?? null,
-        tick_compromised: event.sim_tick,
+        ...(isDuplicateClaim
+          ? {}
+          : {
+              compromised_by: event.source_agent_id ?? null,
+              tick_compromised: event.sim_tick,
+            }),
       });
     }
   }

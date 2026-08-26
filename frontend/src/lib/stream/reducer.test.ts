@@ -156,6 +156,40 @@ describe("compromise", () => {
     expect(targetNode?.tick_compromised).toBe(5);
   });
 
+  it("keeps first-claim compromised_by/tick_compromised when a duplicate already_compromised claim arrives", () => {
+    let state = reduce(initialGraphState, snapshot());
+    state = reduce(
+      state,
+      evFrame(
+        event({
+          event_type: "COMPROMISE_SUCCEEDED",
+          sim_tick: 5,
+          seq: 1,
+          source_agent_id: "attacker-A",
+          target_agent_id: "agent-001",
+        }),
+      ),
+    );
+    state = reduce(
+      state,
+      evFrame(
+        event({
+          event_type: "COMPROMISE_SUCCEEDED",
+          sim_tick: 5,
+          seq: 2,
+          source_agent_id: "attacker-B",
+          target_agent_id: "agent-001",
+          metadata: { already_compromised: true },
+        }),
+      ),
+    );
+
+    const targetNode = state.nodes.get("agent-001");
+    expect(targetNode?.security_state).toBe("compromised");
+    expect(targetNode?.compromised_by).toBe("attacker-A");
+    expect(targetNode?.tick_compromised).toBe(5);
+  });
+
   it("does not affect an unrelated node when a compromise event is applied", () => {
     let state = reduce(initialGraphState, snapshot());
     state = reduce(
