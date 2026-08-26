@@ -35,7 +35,19 @@ export const initialControlState: ControlState = {
 };
 
 export function canStart(s: ControlState): boolean {
-  return s.status === "idle" && s.pending === null;
+  // "idle" (never run yet) plus the two terminal statuses ("finished",
+  // "stopped") — a run that has ended, one way or another, has no live
+  // background task, so starting a brand-new experiment from here is safe.
+  // Excluding "running"/"paused" is what forces Reset (which stops the old
+  // run first) rather than Start to be used while a run is still active.
+  // Without the terminal statuses here, the config form would permanently
+  // lock up after the very first Start for the rest of the session — Reset
+  // only ever reruns the *same* activeConfig, so this is the only way to
+  // launch a second, differently-configured experiment without a refresh.
+  return (
+    (s.status === "idle" || s.status === "finished" || s.status === "stopped") &&
+    s.pending === null
+  );
 }
 
 export function canPause(s: ControlState): boolean {
@@ -90,6 +102,11 @@ export function controlReducer(state: ControlState, action: ControlAction): Cont
         status: action.status,
         pending: null,
         operationId: null,
+        // A fresh backend runner always starts at its own default speed
+        // (1.0), regardless of what the previous run's speed happened to
+        // be left at — matters once Start can fire again after a prior run
+        // ended (canStart above), not just on the very first Start.
+        speed: 1,
         error: null,
         activeConfig: action.config,
       };

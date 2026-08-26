@@ -84,6 +84,57 @@ describe("start", () => {
     expect(s).toEqual(running());
   });
 
+  it("start_requested is rejected while paused", () => {
+    const s = controlReducer(running({ status: "paused" }), {
+      type: "start_requested",
+      operationId: 1,
+    });
+    expect(s).toEqual(running({ status: "paused" }));
+  });
+
+  // Regression: canStart used to require status === "idle" exactly, which
+  // only the very first Start of a session ever satisfies — Reset always
+  // reruns the *same* activeConfig, so once a run had started there was no
+  // way left to launch a *different*-configured experiment without a full
+  // page refresh. A run that has ended (finished naturally, or been
+  // stopped) has no live background task, so starting a brand-new
+  // experiment from either state is exactly as safe as starting from idle.
+  it("start_requested is accepted after a run has finished, launching a genuinely new experiment", () => {
+    const finished = running({ status: "finished", activeConfig: FIXTURE_CONFIG_A });
+    const s1 = controlReducer(finished, { type: "start_requested", operationId: 5 });
+    expect(s1.pending).toBe("start");
+    const s2 = controlReducer(s1, {
+      type: "start_succeeded",
+      operationId: 5,
+      experimentId: EXP_B,
+      status: "running",
+      config: FIXTURE_CONFIG_B,
+    });
+    expect(s2.experimentId).toBe(EXP_B);
+    expect(s2.activeConfig).toBe(FIXTURE_CONFIG_B);
+    expect(s2.status).toBe("running");
+  });
+
+  it("start_requested is accepted after a run has been stopped", () => {
+    const stopped = running({ status: "stopped" });
+    expect(controlReducer(stopped, { type: "start_requested", operationId: 1 }).pending).toBe(
+      "start",
+    );
+  });
+
+  it("start_succeeded resets speed to 1, regardless of the previous run's speed", () => {
+    const finished = running({ status: "finished", speed: 8 });
+    const s1 = controlReducer(finished, { type: "start_requested", operationId: 1 });
+    const s2 = controlReducer(s1, {
+      type: "start_succeeded",
+      operationId: 1,
+      experimentId: EXP_B,
+      status: "running",
+      config: FIXTURE_CONFIG_B,
+    });
+    expect(s2.speed).toBe(1);
+  });
+
   it("start_succeeded sets experimentId/status and clears pending", () => {
     const pending = controlReducer(initialControlState, { type: "start_requested", operationId: 1 });
     const s = controlReducer(pending, {
@@ -357,7 +408,7 @@ describe("can* table, exhaustive over status x pending", () => {
       revision: 0,
       activeConfig: null,
     };
-    expect(canStart(s)).toBe(status === "idle");
+    expect(canStart(s)).toBe(status === "idle" || status === "finished" || status === "stopped");
     expect(canPause(s)).toBe(status === "running");
     expect(canResume(s)).toBe(status === "paused");
     expect(canSetSpeed(s)).toBe(status === "running" || status === "paused");
