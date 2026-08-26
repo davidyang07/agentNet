@@ -3,14 +3,25 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ExperimentConfig } from "@/lib/api/client";
 import type { selectMetrics } from "@/lib/stream/reducer";
 
+import { loadHistoricalArm } from "./loadHistoricalArm";
 import { runExperimentToCompletion } from "./runToCompletion";
-import { buildComparisonConfigs, runBothArms, type ArmResult } from "./useComparison";
+import {
+  buildComparisonConfigs,
+  runBothArms,
+  runBothHistoricalArms,
+  type ArmResult,
+} from "./useComparison";
 
 vi.mock("./runToCompletion", () => ({
   runExperimentToCompletion: vi.fn(),
 }));
 
+vi.mock("./loadHistoricalArm", () => ({
+  loadHistoricalArm: vi.fn(),
+}));
+
 const mockedRun = vi.mocked(runExperimentToCompletion);
+const mockedLoadHistorical = vi.mocked(loadHistoricalArm);
 
 const BASE_CONFIG: ExperimentConfig = {
   seed: 42,
@@ -143,5 +154,47 @@ describe("runBothArms", () => {
     await runBothArms(BASE_CONFIG, onArmUpdate);
 
     expect(onArmUpdate).toHaveBeenCalledWith("B", { error: "plain string failure" });
+  });
+});
+
+describe("runBothHistoricalArms", () => {
+  beforeEach(() => {
+    mockedLoadHistorical.mockReset();
+  });
+
+  it("loads both historical arms independently and reports incomplete alongside metrics", async () => {
+    mockedLoadHistorical.mockImplementation(async (experimentId: string) => {
+      if (experimentId === "exp-a") {
+        return { experimentId, metrics: fakeMetrics({ compromised: 3 }), incomplete: false };
+      }
+      return { experimentId, metrics: fakeMetrics({ compromised: 9 }), incomplete: true };
+    });
+
+    const updates: Array<{ arm: "A" | "B"; result: ArmResult }> = [];
+    await runBothHistoricalArms("exp-a", "exp-b", (arm, result) => updates.push({ arm, result }));
+
+    expect(mockedLoadHistorical).toHaveBeenCalledTimes(2);
+    expect(mockedLoadHistorical).toHaveBeenCalledWith("exp-a");
+    expect(mockedLoadHistorical).toHaveBeenCalledWith("exp-b");
+
+    const a = updates.find((u) => u.arm === "A")!;
+    const b = updates.find((u) => u.arm === "B")!;
+    expect(a.result).toEqual({ metrics: fakeMetrics({ compromised: 3 }), incomplete: false });
+    expect(b.result).toEqual({ metrics: fakeMetrics({ compromised: 9 }), incomplete: true });
+  });
+
+  it("A's failure and B's success don't affect each other", async () => {
+    mockedLoadHistorical.mockImplementation(async (experimentId: string) => {
+      if (experimentId === "exp-a") throw new Error("exp-a not found");
+      return { experimentId, metrics: fakeMetrics(), incomplete: false };
+    });
+
+    const updates: Array<{ arm: "A" | "B"; result: ArmResult }> = [];
+    await runBothHistoricalArms("exp-a", "exp-b", (arm, result) => updates.push({ arm, result }));
+
+    const a = updates.find((u) => u.arm === "A")!;
+    const b = updates.find((u) => u.arm === "B")!;
+    expect(a.result).toEqual({ error: "exp-a not found" });
+    expect("error" in b.result).toBe(false);
   });
 });

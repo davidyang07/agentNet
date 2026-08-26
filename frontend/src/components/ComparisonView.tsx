@@ -9,7 +9,7 @@ import { useComparison, type ArmState } from "@/lib/comparison/useComparison";
 const BUTTON_CLASS =
   "rounded-md border border-slate-700 px-3 py-1 text-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
 
-function ArmPanel({ label, arm }: { label: string; arm: ArmState }) {
+export function ArmPanel({ label, arm }: { label: string; arm: ArmState }) {
   return (
     <div className="flex-1 rounded-md border border-slate-800 p-3 text-sm">
       <h3 className="mb-2 font-medium text-slate-300">{label}</h3>
@@ -19,6 +19,12 @@ function ArmPanel({ label, arm }: { label: string; arm: ArmState }) {
       {arm.status === "running" && <p className="text-slate-400">Running…</p>}
 
       {arm.status === "error" && <p className="text-red-400">{arm.error}</p>}
+
+      {arm.status === "done" && arm.incomplete && (
+        <p className="mb-2 text-xs text-amber-400">
+          Incomplete persisted run -- metrics reflect only what was actually recorded.
+        </p>
+      )}
 
       {arm.status === "done" && arm.metrics && (
         <dl className="space-y-1 text-slate-400">
