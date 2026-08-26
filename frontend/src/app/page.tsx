@@ -58,7 +58,7 @@ function ExperimentView({
         </div>
       )}
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-visible">
         <aside className="w-64 shrink-0 overflow-y-auto border-r border-slate-800 p-4 text-sm">
           <h2 className="mb-2 font-medium text-slate-300">Experiment</h2>
           <dl className="space-y-1 text-slate-400">
@@ -91,7 +91,7 @@ function ExperimentView({
 
         <MetricsPanel state={state} />
 
-        <section className="flex-1 overflow-hidden">
+        <section className="min-h-[260px] flex-1 overflow-hidden">
           <NetworkGraph state={state} onNodeClick={setSelectedAgentId} />
         </section>
       </div>
@@ -261,7 +261,7 @@ export default function Home() {
   }, [apply, state.status, state.pending, state.experimentId, state.revision]);
 
   return (
-    <main className="flex h-screen flex-col bg-slate-950 text-slate-100">
+    <main className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
       <header className="flex shrink-0 flex-col gap-3 border-b border-slate-800 px-4 py-3">
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-semibold">AgentNet</h1>

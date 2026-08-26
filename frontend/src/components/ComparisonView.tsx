@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import { DEFAULT_CONFIG } from "@/components/ConfigForm";
 import type { ExperimentConfig } from "@/lib/api/client";
 import { useComparison, type ArmState } from "@/lib/comparison/useComparison";
@@ -57,28 +59,50 @@ function ArmPanel({ label, arm }: { label: string; arm: ArmState }) {
 export function ComparisonView({ baseConfig }: { baseConfig: ExperimentConfig | null }) {
   const { armA, armB, runComparison } = useComparison();
   const running = armA.status === "running" || armB.status === "running";
+  // Collapsed by default: this panel isn't part of the core configure ->
+  // Start -> observe loop, and its two metrics tables permanently occupy
+  // a lot of vertical space in the header — enough to squeeze the graph
+  // (the hero visual) down to near-nothing on a laptop-height viewport if
+  // always expanded.
+  const [expanded, setExpanded] = useState(running);
 
   return (
     <section className="flex flex-col gap-2 border-t border-slate-800 pt-3 text-sm">
       <div className="flex items-center justify-between">
-        <h2 className="font-medium text-slate-300">Comparison</h2>
+        <button
+          type="button"
+          className="flex items-center gap-2 font-medium text-slate-300 hover:text-slate-100"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+        >
+          <span className="text-slate-500">{expanded ? "▾" : "▸"}</span>
+          Comparison
+        </button>
         <button
           className={BUTTON_CLASS}
-          onClick={() => runComparison(baseConfig ?? DEFAULT_CONFIG)}
+          onClick={() => {
+            setExpanded(true);
+            runComparison(baseConfig ?? DEFAULT_CONFIG);
+          }}
           disabled={running}
         >
           Compare (defense on/off)
         </button>
       </div>
-      <p className="text-xs text-slate-500">
-        Simulation results only — not real-world security evidence. Both arms rerun the same
-        config (seed, topology, etc.) with only <code>defense_enabled</code> flipped.
-      </p>
 
-      <div className="flex gap-3">
-        <ArmPanel label="Defense ON" arm={armA} />
-        <ArmPanel label="Defense OFF" arm={armB} />
-      </div>
+      {expanded && (
+        <>
+          <p className="text-xs text-slate-500">
+            Simulation results only — not real-world security evidence. Both arms rerun the same
+            config (seed, topology, etc.) with only <code>defense_enabled</code> flipped.
+          </p>
+
+          <div className="flex gap-3">
+            <ArmPanel label="Defense ON" arm={armA} />
+            <ArmPanel label="Defense OFF" arm={armB} />
+          </div>
+        </>
+      )}
     </section>
   );
 }
