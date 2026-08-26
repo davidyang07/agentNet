@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
 import { AgentDetailDrawer } from "@/components/AgentDetailDrawer";
+import { ComparisonView } from "@/components/ComparisonView";
 import { ConfigForm } from "@/components/ConfigForm";
 import { ControlBar } from "@/components/ControlBar";
 import { EventStream } from "@/components/EventStream";
@@ -273,6 +274,7 @@ export default function Home() {
           />
         </div>
         <ConfigForm disabled={!canStart(state)} onStart={handleStart} />
+        <ComparisonView baseConfig={state.activeConfig} />
       </header>
 
       {state.experimentId && (
