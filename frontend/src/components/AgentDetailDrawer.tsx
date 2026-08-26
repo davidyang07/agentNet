@@ -9,10 +9,19 @@ export function deriveNeighbors(nodeId: string, edges: EdgeView[]): string[] {
 export function describeCompromisedBy(node: NodeView): string {
   const isCompromisedOrQuarantined =
     node.security_state === "compromised" || node.security_state === "quarantined";
-  if (isCompromisedOrQuarantined && node.compromised_by == null) {
-    return "unknown (before this session's connection)";
+  if (!isCompromisedOrQuarantined) {
+    return "—";
   }
-  return node.compromised_by ?? "—";
+  if (node.compromised_by != null) {
+    return node.compromised_by;
+  }
+  // The seeded initial compromise (BRIEF's "patient zero") genuinely has no
+  // source agent — tick_compromised === 0 is how build_world() marks it —
+  // so it's a known fact, not data lost before this session connected.
+  if (node.tick_compromised === 0) {
+    return "— (initial compromise)";
+  }
+  return "unknown (before this session's connection)";
 }
 
 export function AgentDetailDrawer({
@@ -33,7 +42,7 @@ export function AgentDetailDrawer({
   const isCompromisedOrQuarantined =
     node.security_state === "compromised" || node.security_state === "quarantined";
   const tickCompromised =
-    isCompromisedOrQuarantined && node.compromised_by == null
+    isCompromisedOrQuarantined && node.compromised_by == null && node.tick_compromised !== 0
       ? "unknown (before this session's connection)"
       : (node.tick_compromised ?? "—");
   const neighbors = deriveNeighbors(node.id, edges);

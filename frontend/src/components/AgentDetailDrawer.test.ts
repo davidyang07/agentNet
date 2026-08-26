@@ -33,7 +33,17 @@ describe("describeCompromisedBy", () => {
     expect(describeCompromisedBy(n)).toBe("unknown (before this session's connection)");
   });
 
-  it("returns the actual agent id when compromised_by is non-null", () => {
+  it("labels the seeded patient-zero node (tick_compromised 0, no source) distinctly from lost data", () => {
+    const n = node({
+      id: "agent-000",
+      security_state: "compromised",
+      compromised_by: null,
+      tick_compromised: 0,
+    });
+    expect(describeCompromisedBy(n)).toBe("— (initial compromise)");
+  });
+
+  it("still returns the actual agent id when compromised_by is non-null", () => {
     const n = node({
       id: "agent-000",
       security_state: "compromised",
