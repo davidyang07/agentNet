@@ -32,20 +32,6 @@ const NetworkGraph = dynamic(
   { ssr: false },
 );
 
-// SPEC §6.2's own canonical demo config.
-const CANONICAL_CONFIG: ExperimentConfig = {
-  seed: 42,
-  node_count: 60,
-  edge_density: 2,
-  software_type_count: 3,
-  p_same: 0.15,
-  p_cross: 0.03,
-  max_ticks: 200,
-  detector_sensitivity: 0.2,
-  defense_enabled: true,
-  initial_compromised: "highest_degree",
-};
-
 // Keyed by experimentId in the parent so a Reset (a brand new experimentId)
 // remounts this fresh — GraphState resets for free, no explicit setState
 // needed to clear the previous run's nodes/edges/event log.
@@ -193,6 +179,8 @@ export default function Home() {
   const handleReset = useCallback(async () => {
     if (!canReset(stateRef.current) || !stateRef.current.experimentId) return;
     const oldId = stateRef.current.experimentId;
+    const configToRerun = stateRef.current.activeConfig;
+    if (!configToRerun) return;
     const operationId = nextOperationId.current++;
     if (!apply({ type: "reset_requested", operationId })) return;
 
@@ -212,7 +200,7 @@ export default function Home() {
     // The old run is now confirmed stopped-or-gone. A failure from here on
     // must not leave local state claiming the old run is still "running".
     try {
-      const summary = await createExperiment(CANONICAL_CONFIG);
+      const summary = await createExperiment(configToRerun);
       apply({
         type: "reset_create_succeeded",
         operationId,
