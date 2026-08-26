@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useReducer, useRef } from "react";
 
+import { ConfigForm } from "@/components/ConfigForm";
 import { ControlBar } from "@/components/ControlBar";
 import { EventStream } from "@/components/EventStream";
 import {
@@ -48,7 +49,13 @@ const CANONICAL_CONFIG: ExperimentConfig = {
 // Keyed by experimentId in the parent so a Reset (a brand new experimentId)
 // remounts this fresh — GraphState resets for free, no explicit setState
 // needed to clear the previous run's nodes/edges/event log.
-function ExperimentView({ experimentId }: { experimentId: string }) {
+function ExperimentView({
+  experimentId,
+  activeConfig,
+}: {
+  experimentId: string;
+  activeConfig: ExperimentConfig;
+}) {
   const { state, schemaError } = useExperimentStream(experimentId);
 
   return (
@@ -65,23 +72,23 @@ function ExperimentView({ experimentId }: { experimentId: string }) {
           <dl className="space-y-1 text-slate-400">
             <div className="flex justify-between">
               <dt>seed</dt>
-              <dd className="font-mono">{CANONICAL_CONFIG.seed}</dd>
+              <dd className="font-mono">{activeConfig.seed}</dd>
             </div>
             <div className="flex justify-between">
               <dt>node_count</dt>
-              <dd className="font-mono">{CANONICAL_CONFIG.node_count}</dd>
+              <dd className="font-mono">{activeConfig.node_count}</dd>
             </div>
             <div className="flex justify-between">
               <dt>edge_density</dt>
-              <dd className="font-mono">{CANONICAL_CONFIG.edge_density}</dd>
+              <dd className="font-mono">{activeConfig.edge_density}</dd>
             </div>
             <div className="flex justify-between">
               <dt>p_same</dt>
-              <dd className="font-mono">{CANONICAL_CONFIG.p_same}</dd>
+              <dd className="font-mono">{activeConfig.p_same}</dd>
             </div>
             <div className="flex justify-between">
               <dt>p_cross</dt>
-              <dd className="font-mono">{CANONICAL_CONFIG.p_cross}</dd>
+              <dd className="font-mono">{activeConfig.p_cross}</dd>
             </div>
             <div className="flex justify-between border-t border-slate-800 pt-1">
               <dt>tick</dt>
@@ -119,11 +126,14 @@ export default function Home() {
     return true;
   }, []);
 
-  const handleStart = useCallback(() => {
+  // Defaults to CANONICAL_CONFIG so ControlBar's own Start button (which
+  // still calls onStart with no arguments) keeps working unchanged;
+  // ConfigForm's Start button passes its edited draft explicitly.
+  const handleStart = useCallback((config: ExperimentConfig = CANONICAL_CONFIG) => {
     if (!canStart(stateRef.current)) return;
     const operationId = nextOperationId.current++;
     if (!apply({ type: "start_requested", operationId })) return;
-    createExperiment(CANONICAL_CONFIG)
+    createExperiment(config)
       .then((summary) => {
         apply({
           type: "start_succeeded",
@@ -252,20 +262,27 @@ export default function Home() {
 
   return (
     <main className="flex h-screen flex-col bg-slate-950 text-slate-100">
-      <header className="flex shrink-0 items-center justify-between border-b border-slate-800 px-4 py-3">
-        <h1 className="text-lg font-semibold">AgentNet</h1>
-        <ControlBar
-          state={state}
-          onStart={handleStart}
-          onPause={handlePause}
-          onResume={handleResume}
-          onReset={handleReset}
-          onSpeedChange={handleSpeedChange}
-        />
+      <header className="flex shrink-0 flex-col gap-3 border-b border-slate-800 px-4 py-3">
+        <div className="flex items-center justify-between">
+          <h1 className="text-lg font-semibold">AgentNet</h1>
+          <ControlBar
+            state={state}
+            onStart={handleStart}
+            onPause={handlePause}
+            onResume={handleResume}
+            onReset={handleReset}
+            onSpeedChange={handleSpeedChange}
+          />
+        </div>
+        <ConfigForm disabled={!canStart(state)} onStart={handleStart} />
       </header>
 
       {state.experimentId && (
-        <ExperimentView key={state.experimentId} experimentId={state.experimentId} />
+        <ExperimentView
+          key={state.experimentId}
+          experimentId={state.experimentId}
+          activeConfig={state.activeConfig!}
+        />
       )}
     </main>
   );
