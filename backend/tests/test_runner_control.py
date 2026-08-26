@@ -142,6 +142,54 @@ def test_concurrent_stop_calls_emit_exactly_one_stopped_event():
     asyncio.run(run())
 
 
+def test_summary_last_seq_matches_emitter():
+    async def run() -> None:
+        runner = _make_runner()
+        await runner.publish_initial()
+        assert runner.summary().last_seq == runner._emitter.last_seq
+        await runner._run_loop()
+        assert runner.summary().last_seq == runner._emitter.last_seq
+
+    asyncio.run(run())
+
+
+def test_snapshot_carries_compromise_provenance_for_every_node():
+    """Regression: snapshot() once built NodeView with only id/software_type/
+    security_state, silently dropping compromised_by/tick_compromised even
+    though AgentNode carries them — breaking the agent detail drawer's
+    ground truth on every fresh connect, not just on reconnect
+    (M1_PLAN.md §9: NodeView exists precisely so a snapshot alone is enough)."""
+
+    async def run() -> None:
+        runner = _make_runner(p_same=1.0, p_cross=1.0, detector_sensitivity=0.0)
+        await _drive_to_finished(runner)
+
+        seed_nodes = [
+            n
+            for n in runner.state.nodes.values()
+            if n.security_state != "healthy" and n.compromised_by is None
+        ]
+        assert len(seed_nodes) == 1
+        seed = seed_nodes[0]
+        assert seed.tick_compromised == 0
+
+        propagated = [n for n in runner.state.nodes.values() if n.compromised_by is not None]
+        assert propagated, "expected propagation beyond the seed node"
+
+        by_id = {n.id: n for n in runner.snapshot().nodes}
+
+        seed_view = by_id[seed.id]
+        assert seed_view.compromised_by is None
+        assert seed_view.tick_compromised == 0
+
+        for node in propagated:
+            view = by_id[node.id]
+            assert view.compromised_by == node.compromised_by
+            assert view.tick_compromised == node.tick_compromised
+
+    asyncio.run(run())
+
+
 def test_every_concurrent_stop_waits_for_task_settlement():
     async def run() -> None:
         runner = _make_runner()

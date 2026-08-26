@@ -36,6 +36,7 @@ class ExperimentSummary(BaseModel):
     experiment_id: UUID
     status: Literal["running", "paused", "finished", "stopped"]
     sim_tick: int
+    last_seq: int
     config: ExperimentConfig
 
 

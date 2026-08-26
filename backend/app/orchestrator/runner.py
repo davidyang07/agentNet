@@ -119,6 +119,7 @@ class ExperimentRunner:
             experiment_id=self.experiment_id,
             status=self.status,
             sim_tick=self.state.tick,
+            last_seq=self._emitter.last_seq,
             config=self.config,
         )
 
@@ -129,7 +130,13 @@ class ExperimentRunner:
             sim_tick=self.state.tick,
             status=self.status,
             nodes=[
-                NodeView(id=n.id, software_type=n.software_type, security_state=n.security_state)
+                NodeView(
+                    id=n.id,
+                    software_type=n.software_type,
+                    security_state=n.security_state,
+                    compromised_by=n.compromised_by,
+                    tick_compromised=n.tick_compromised,
+                )
                 for n in self.state.nodes.values()
             ],
             edges=[EdgeView(source=a, target=b) for a, b in self.state.edges],

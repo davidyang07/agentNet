@@ -279,6 +279,8 @@ export interface components {
             status: "running" | "paused" | "finished" | "stopped";
             /** Sim Tick */
             sim_tick: number;
+            /** Last Seq */
+            last_seq: number;
             config: components["schemas"]["ExperimentConfig"];
         };
         /** HTTPValidationError */
