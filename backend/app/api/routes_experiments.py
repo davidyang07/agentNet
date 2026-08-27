@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request
 
+from app.config import get_settings
 from app.orchestrator.registry import registry
 from app.orchestrator.runner import ExperimentRunner, InvalidTransitionError
 from app.persistence.registry import writer_registry
@@ -16,6 +17,16 @@ router = APIRouter(prefix="/api/experiments", tags=["experiments"])
 
 @router.post("", response_model=ExperimentSummary, status_code=201)
 async def create_experiment(config: ExperimentConfig, request: Request) -> ExperimentSummary:
+    # Fail fast (docs/PHASE_2_PLAN.md §8): never construct a runner that can
+    # never make a real model call. model_provider="mock" always succeeds --
+    # it needs no external service.
+    if config.real_agent_count > 0 and config.model_provider == "vllm":
+        if not get_settings().vllm_base_url:
+            raise HTTPException(
+                status_code=400,
+                detail="vLLM base_url not configured; set VLLM_BASE_URL or use model_provider=mock",
+            )
+
     runner = ExperimentRunner(config)
 
     # Persistence is additive and best-effort: a Postgres outage (no pool, or
