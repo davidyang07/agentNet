@@ -21,13 +21,22 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
     claims: dict[str, str] = {}
 
     for source in sources:
-        source_type = state.nodes[source].software_type
+        source_node = state.nodes[source]
+        source_type = source_node.software_type
         targets = sorted(
             t
-            for t in state.nodes[source].neighbors
+            for t in source_node.neighbors
             if state.nodes[t].security_state == SecurityState.HEALTHY
         )
         for target in targets:
+            # A real-real edge is owned exclusively by agents.runtime's
+            # LLM-mediated attempt, not this probabilistic mechanism -- each
+            # edge is attacked by exactly one path (docs/PHASE_2_PLAN.md §5).
+            # A no-op whenever no node is agent_kind="real" (real_agent_count
+            # defaults to 0), which is what keeps this function's behavior
+            # byte-for-byte unchanged for the synthetic baseline.
+            if source_node.agent_kind == "real" and state.nodes[target].agent_kind == "real":
+                continue
             same = state.nodes[target].software_type == source_type
             p = config.p_same if same else config.p_cross
             draw = rng(config.seed, state.tick, target, f"infect:{source}").random()
