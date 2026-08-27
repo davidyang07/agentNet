@@ -37,6 +37,10 @@ export function MetricsPanel({ state }: { state: GraphState }) {
           <dt>Outbreak duration</dt>
           <dd className="font-mono">{metrics.outbreakDuration}</dd>
         </div>
+        <div className="flex justify-between">
+          <dt>Model calls</dt>
+          <dd className="font-mono">{metrics.modelCalls}</dd>
+        </div>
       </dl>
     </aside>
   );

@@ -45,7 +45,11 @@ export function NetworkGraph({
       graph.addNode(node.id, {
         x: Math.random(),
         y: Math.random(),
-        size: 4,
+        // Size, not color, distinguishes real (LLM-backed) agents from
+        // simulated ones -- color is reserved exclusively for security_state
+        // (SPEC §4), so agent_kind gets its own visual channel instead
+        // (docs/PHASE_2_PLAN.md §11).
+        size: node.agent_kind === "real" ? 6 : 4,
         label: node.id,
         color: COLORS[node.security_state] ?? COLORS.healthy,
       });

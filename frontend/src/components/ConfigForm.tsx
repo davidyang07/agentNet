@@ -182,6 +182,37 @@ export function ConfigForm({
           defense_enabled
         </label>
 
+        <label className="flex flex-col gap-1">
+          real_agent_count
+          <input
+            className={INPUT_CLASS}
+            type="number"
+            step={1}
+            value={draft.real_agent_count}
+            disabled={disabled}
+            onChange={(e) => setField("real_agent_count", clamp(Math.trunc(Number(e.target.value)), 0, 20))}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          model_provider
+          <select
+            className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+            value={draft.model_provider}
+            disabled={disabled || draft.real_agent_count === 0}
+            onChange={(e) => setField("model_provider", e.target.value as ExperimentConfig["model_provider"])}
+          >
+            <option value="mock">mock</option>
+            <option value="vllm">vllm</option>
+          </select>
+        </label>
+
+        {draft.real_agent_count > 0 && draft.model_provider === "vllm" && (
+          <p className="basis-full text-xs text-amber-500">
+            vllm requires VLLM_BASE_URL configured on the backend, or Start will fail with 400.
+          </p>
+        )}
+
         <button className={BUTTON_CLASS} type="submit" disabled={disabled}>
           Start
         </button>

@@ -74,6 +74,10 @@ export function AgentDetailDrawer({
           <dd className="font-mono">{node.software_type}</dd>
         </div>
         <div className="flex justify-between">
+          <dt>agent_kind</dt>
+          <dd className="font-mono">{node.agent_kind}</dd>
+        </div>
+        <div className="flex justify-between">
           <dt>neighbors</dt>
           <dd className="font-mono">{neighbors.length > 0 ? neighbors.join(", ") : "—"}</dd>
         </div>
