@@ -18,6 +18,19 @@ class ExperimentConfig(BaseModel):
     defense_enabled: bool = Field(True)
     initial_compromised: Literal["highest_degree", "random_node"] = "highest_degree"
 
+    # Phase 2 (docs/PHASE_2_PLAN.md §8): opt-in, defaults preserve the
+    # synthetic baseline exactly. Deliberately NOT here: vLLM base_url/api
+    # key -- those are infra/credentials, kept in app/config.py::Settings so
+    # they never round-trip through this persisted, API-returned config.
+    real_agent_count: int = Field(0, ge=0, le=20)
+    model_provider: Literal["mock", "vllm"] = "mock"
+    model_name: str = "qwen-mock"
+    model_max_tokens: int = Field(64, ge=1, le=512)
+    model_timeout_s: float = Field(20.0, ge=1.0, le=120.0)
+    model_max_retries: int = Field(1, ge=0, le=3)
+    model_max_concurrency: int = Field(4, ge=1, le=16)
+    model_max_requests_per_experiment: int = Field(500, ge=1, le=5000)
+
 
 class NodeView(BaseModel):
     id: str
@@ -25,6 +38,10 @@ class NodeView(BaseModel):
     security_state: SecurityState
     compromised_by: str | None = None
     tick_compromised: int | None = None
+    # Never confidential_token -- see docs/PHASE_2_PLAN.md §4/§11: exposing
+    # it here would hand every client the synthetic secret the experiment is
+    # testing whether real agents leak.
+    agent_kind: Literal["simulated", "real"] = "simulated"
 
 
 class EdgeView(BaseModel):

@@ -145,6 +145,7 @@ class ExperimentRunner:
                     security_state=n.security_state,
                     compromised_by=n.compromised_by,
                     tick_compromised=n.tick_compromised,
+                    agent_kind=n.agent_kind,
                 )
                 for n in self.state.nodes.values()
             ],
