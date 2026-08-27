@@ -340,6 +340,47 @@ export interface components {
              * @enum {string}
              */
             initial_compromised: "highest_degree" | "random_node";
+            /**
+             * Real Agent Count
+             * @default 0
+             */
+            real_agent_count: number;
+            /**
+             * Model Provider
+             * @default mock
+             * @enum {string}
+             */
+            model_provider: "mock" | "vllm";
+            /**
+             * Model Name
+             * @default qwen-mock
+             */
+            model_name: string;
+            /**
+             * Model Max Tokens
+             * @default 64
+             */
+            model_max_tokens: number;
+            /**
+             * Model Timeout S
+             * @default 20
+             */
+            model_timeout_s: number;
+            /**
+             * Model Max Retries
+             * @default 1
+             */
+            model_max_retries: number;
+            /**
+             * Model Max Concurrency
+             * @default 4
+             */
+            model_max_concurrency: number;
+            /**
+             * Model Max Requests Per Experiment
+             * @default 500
+             */
+            model_max_requests_per_experiment: number;
         };
         /** ExperimentDetail */
         ExperimentDetail: {
@@ -437,6 +478,12 @@ export interface components {
             compromised_by?: string | null;
             /** Tick Compromised */
             tick_compromised?: number | null;
+            /**
+             * Agent Kind
+             * @default simulated
+             * @enum {string}
+             */
+            agent_kind: "simulated" | "real";
         };
         /**
          * SecurityState
