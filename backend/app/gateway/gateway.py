@@ -44,11 +44,20 @@ class ModelGateway:
         degrades this attempt to a controlled failure, never the live run.
         `asyncio.CancelledError` (a BaseException) is never caught here and
         always propagates, so ExperimentRunner.stop()'s task cancellation is
-        never silently swallowed mid-call."""
-        if self._used >= self._budget:
-            return None
+        never silently swallowed mid-call.
 
+        The budget check-and-increment happens *after* acquiring the
+        semaphore, not before: checking `self._used` before queuing on the
+        semaphore lets multiple callers queued past `max_concurrency` each
+        observe the same stale count and all pass the check once the
+        semaphore admits them, overrunning the budget under concurrent load
+        (real_agent_step's asyncio.gather is exactly this shape whenever a
+        tick has more real-real attempts than max_concurrency). Checking and
+        incrementing back-to-back with no `await` between them, once inside
+        the semaphore, is atomic under asyncio's cooperative scheduling."""
         async with self._semaphore:
+            if self._used >= self._budget:
+                return None
             self._used += 1
             for attempt in range(self._max_retries + 1):
                 try:

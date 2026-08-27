@@ -89,6 +89,27 @@ def test_budget_exhaustion_stops_provider_calls():
     assert gateway.requests_used == 3
 
 
+def test_budget_exhaustion_holds_under_concurrent_load():
+    """Regression for a real race: checking self._used before queuing on
+    the semaphore let every caller queued past max_concurrency observe the
+    same stale count and all pass the check once admitted, overrunning the
+    budget -- exactly real_agent_step's asyncio.gather calling shape
+    whenever a tick has more real-real attempts than max_concurrency
+    (docs/PHASE_2_PLAN.md §3's "hard backstop... regardless of node_count x
+    max_ticks x real-real edge count" claim)."""
+    provider = _CountingProvider()
+    gateway = _gateway(provider, max_concurrency=2, max_requests_per_experiment=3)
+
+    async def run():
+        return await asyncio.gather(*(gateway.complete(_request(f"a-{i}")) for i in range(10)))
+
+    results = asyncio.run(run())
+    assert provider.calls == 3
+    assert gateway.requests_used == 3
+    assert sum(1 for r in results if r is not None) == 3
+    assert sum(1 for r in results if r is None) == 7
+
+
 def test_retry_then_give_up_returns_none():
     provider = _AlwaysFailsProvider()
     gateway = _gateway(provider, max_retries=2)
