@@ -2,6 +2,7 @@ import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -16,6 +17,13 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
+    # One shared httpx.AsyncClient for the process lifetime, mirroring
+    # app.state.pg_pool -- VLLMProvider instances (one per real-agent
+    # experiment) all share this single connection pool while each
+    # experiment's ModelGateway keeps its own semaphore/budget state
+    # (docs/PHASE_2_PLAN.md §3). Construction can't fail (no eager
+    # connection), unlike the Postgres pool.
+    app.state.http_client = httpx.AsyncClient()
     # Persistence is additive and must never block the app from serving live
     # (in-memory) experiments: a Postgres outage at startup degrades to
     # app.state.pg_pool = None rather than failing app startup (see
@@ -40,6 +48,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     await writer_registry.shutdown_all()
     if app.state.pg_pool is not None:
         await app.state.pg_pool.close()
+    await app.state.http_client.aclose()
 
 
 app = FastAPI(lifespan=lifespan)

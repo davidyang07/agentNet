@@ -2,11 +2,13 @@ import asyncio
 from typing import Literal
 from uuid import UUID, uuid4
 
+from app.agents.runtime import real_agent_step
 from app.engine.propagation import is_finished
 from app.engine.tick import advance
 from app.engine.topology import build_world
 from app.events.bus import EventBus
 from app.events.emitter import EventEmitter
+from app.gateway.gateway import ModelGateway
 from app.schemas.events import EventDraft, EventType
 from app.schemas.experiment import EdgeView, ExperimentConfig, ExperimentSummary, NodeView
 from app.schemas.frames import SnapshotFrame
@@ -23,11 +25,17 @@ class ExperimentRunner:
 
     tick_interval_default = 0.25
 
-    def __init__(self, config: ExperimentConfig) -> None:
+    def __init__(self, config: ExperimentConfig, gateway: ModelGateway | None = None) -> None:
         self.experiment_id: UUID = uuid4()
         self.config = config
         self.bus = EventBus()
         self._emitter = EventEmitter(self.experiment_id)
+        # Phase 2 (docs/PHASE_2_PLAN.md §2, §7): None unless the caller built
+        # one (routes_experiments.py, only when real_agent_count > 0) --
+        # real_agent_step is only ever called when this is set, so every
+        # existing test/call site constructing ExperimentRunner(config) with
+        # no gateway is completely unaffected.
+        self._gateway = gateway
         self.status: Status = "running"
         self.state, topology_drafts = build_world(config)
         self._running = True
@@ -87,6 +95,16 @@ class ExperimentRunner:
             if not self._running:
                 break
             self.state, drafts = advance(self.state, self.config)
+            if self._gateway is not None:
+                # Runs after advance()'s propagation+detection, not
+                # interleaved between them -- a real agent compromised this
+                # tick is first eligible for quarantine detection next tick,
+                # a deliberate, documented one-tick timing difference from
+                # the simulated path (docs/PHASE_2_PLAN.md §2, §16).
+                self.state, real_drafts = await real_agent_step(
+                    self.state, self.config, self._gateway, tick=self.state.tick
+                )
+                drafts = [*drafts, *real_drafts]
             events = self._emitter.emit(drafts)
             await self.bus.publish(events)
             await asyncio.sleep(self.tick_interval / self._speed)

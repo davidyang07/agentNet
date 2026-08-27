@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Request
 
 from app.config import get_settings
+from app.gateway.factory import build_gateway
 from app.orchestrator.registry import registry
 from app.orchestrator.runner import ExperimentRunner, InvalidTransitionError
 from app.persistence.registry import writer_registry
@@ -27,7 +28,8 @@ async def create_experiment(config: ExperimentConfig, request: Request) -> Exper
                 detail="vLLM base_url not configured; set VLLM_BASE_URL or use model_provider=mock",
             )
 
-    runner = ExperimentRunner(config)
+    gateway = build_gateway(config, get_settings(), request.app.state.http_client)
+    runner = ExperimentRunner(config, gateway=gateway)
 
     # Persistence is additive and best-effort: a Postgres outage (no pool, or
     # a failed writer start) must never block or fail experiment creation --
