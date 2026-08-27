@@ -6,6 +6,7 @@ function node(overrides: Partial<NodeView> & Pick<NodeView, "id">): NodeView {
   return {
     software_type: "sw-a",
     security_state: "healthy",
+    agent_kind: "simulated",
     ...overrides,
   };
 }

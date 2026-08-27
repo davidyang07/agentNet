@@ -78,6 +78,7 @@ describe("replay/live reduce() equivalence", () => {
       software_type: "sw-a",
       security_state: id === seedId ? "compromised" : "healthy",
       tick_compromised: id === seedId ? 0 : null,
+      agent_kind: "simulated",
     })),
     edges: [{ source: nodeIds[0], target: nodeIds[1] }],
   };

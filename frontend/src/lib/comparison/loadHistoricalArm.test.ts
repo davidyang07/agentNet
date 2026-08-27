@@ -16,8 +16,14 @@ const snapshotFrame: SnapshotFrame = {
   sim_tick: 0,
   status: "finished",
   nodes: [
-    { id: "a", software_type: "sw-a", security_state: "compromised", tick_compromised: 0 },
-    { id: "b", software_type: "sw-a", security_state: "healthy" },
+    {
+      id: "a",
+      software_type: "sw-a",
+      security_state: "compromised",
+      tick_compromised: 0,
+      agent_kind: "simulated",
+    },
+    { id: "b", software_type: "sw-a", security_state: "healthy", agent_kind: "simulated" },
   ],
   edges: [{ source: "a", target: "b" }],
 };

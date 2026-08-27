@@ -27,6 +27,14 @@ const FIXTURE_CONFIG_A: ExperimentConfig = {
   detector_sensitivity: 0.2,
   defense_enabled: true,
   initial_compromised: "highest_degree",
+  real_agent_count: 0,
+  model_provider: "mock",
+  model_name: "qwen-mock",
+  model_max_tokens: 64,
+  model_timeout_s: 20,
+  model_max_retries: 1,
+  model_max_concurrency: 4,
+  model_max_requests_per_experiment: 500,
 };
 
 const FIXTURE_CONFIG_B: ExperimentConfig = {
@@ -40,6 +48,14 @@ const FIXTURE_CONFIG_B: ExperimentConfig = {
   detector_sensitivity: 0.3,
   defense_enabled: false,
   initial_compromised: "random_node",
+  real_agent_count: 0,
+  model_provider: "mock",
+  model_name: "qwen-mock",
+  model_max_tokens: 64,
+  model_timeout_s: 20,
+  model_max_retries: 1,
+  model_max_concurrency: 4,
+  model_max_requests_per_experiment: 500,
 };
 
 function running(overrides: Partial<ControlState> = {}): ControlState {

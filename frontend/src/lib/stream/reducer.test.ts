@@ -15,7 +15,7 @@ const EXPERIMENT_A = "11111111-1111-1111-1111-111111111111";
 const EXPERIMENT_B = "22222222-2222-2222-2222-222222222222";
 
 function node(id: string, security_state: NodeView["security_state"] = "healthy"): NodeView {
-  return { id, software_type: "sw-a", security_state };
+  return { id, software_type: "sw-a", security_state, agent_kind: "simulated" };
 }
 
 function snapshot(overrides: Partial<SnapshotFrame> = {}): SnapshotFrame {
@@ -590,5 +590,91 @@ describe("unknown schema version", () => {
         ),
       ),
     ).toThrow();
+  });
+});
+
+describe("phase 2 model/tool events", () => {
+  it("increments modelCalls on MODEL_REQUESTED and appears in recentEvents", () => {
+    let state = reduce(initialGraphState, snapshot());
+    state = reduce(
+      state,
+      evFrame(
+        event({
+          event_type: "MODEL_REQUESTED",
+          sim_tick: 1,
+          seq: 1,
+          agent_id: "agent-001",
+          metadata: { source_agent_id: "agent-000" },
+        }),
+      ),
+    );
+
+    expect(selectMetrics(state).modelCalls).toBe(1);
+    expect(state.recentEvents).toHaveLength(1);
+  });
+
+  it("does not increment modelCalls on MODEL_RESPONDED or TOOL_EXECUTED", () => {
+    let state = reduce(initialGraphState, snapshot());
+    state = reduce(
+      state,
+      evFrame(event({ event_type: "MODEL_RESPONDED", sim_tick: 1, seq: 1, agent_id: "agent-001" })),
+    );
+    state = reduce(
+      state,
+      evFrame(event({ event_type: "TOOL_EXECUTED", sim_tick: 1, seq: 2, agent_id: "agent-001" })),
+    );
+
+    expect(selectMetrics(state).modelCalls).toBe(0);
+  });
+
+  it("MODEL_REQUESTED/MODEL_RESPONDED/TOOL_EXECUTED are not security incidents", () => {
+    let state = reduce(initialGraphState, snapshot());
+    const types = ["MODEL_REQUESTED", "MODEL_RESPONDED", "TOOL_EXECUTED"] as const;
+    for (const [i, type] of types.entries()) {
+      state = reduce(
+        state,
+        evFrame(event({ event_type: type, sim_tick: 1, seq: i + 1, agent_id: "agent-001" })),
+      );
+    }
+
+    expect(state.incidentsByAgent.size).toBe(0);
+  });
+
+  it("modelCalls resets to 0 on a fresh (different-experiment) snapshot, preserved across a same-experiment reconnect", () => {
+    let state = reduce(initialGraphState, snapshot());
+    state = reduce(
+      state,
+      evFrame(event({ event_type: "MODEL_REQUESTED", sim_tick: 1, seq: 1, agent_id: "agent-001" })),
+    );
+    expect(selectMetrics(state).modelCalls).toBe(1);
+
+    const reconnected = reduce(state, snapshot({ last_seq: 1 }));
+    expect(selectMetrics(reconnected).modelCalls).toBe(1);
+
+    const fresh = reduce(state, snapshot({ experiment_id: EXPERIMENT_B, last_seq: -1 }));
+    expect(selectMetrics(fresh).modelCalls).toBe(0);
+  });
+
+  it("COMPROMISE_SUCCEEDED still increments newCompromises after a MODEL_REQUESTED event (metrics object is not clobbered)", () => {
+    let state = reduce(initialGraphState, snapshot());
+    state = reduce(
+      state,
+      evFrame(event({ event_type: "MODEL_REQUESTED", sim_tick: 1, seq: 1, agent_id: "agent-001" })),
+    );
+    state = reduce(
+      state,
+      evFrame(
+        event({
+          event_type: "COMPROMISE_SUCCEEDED",
+          sim_tick: 1,
+          seq: 2,
+          source_agent_id: "agent-000",
+          target_agent_id: "agent-001",
+        }),
+      ),
+    );
+
+    expect(selectMetrics(state).modelCalls).toBe(1);
+    expect(selectMetrics(state).newCompromises).toBe(1);
   });
 });

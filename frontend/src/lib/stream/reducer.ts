@@ -36,6 +36,11 @@ export type GraphState = {
     // this live session. Kept outside recentEvents so its 200-event cap cannot
     // silently erase the metric (M1_PLAN §6).
     newCompromises: number;
+    // Cumulative count of MODEL_REQUESTED events -- one per real-agent
+    // lateral-compromise attempt (docs/PHASE_2_PLAN.md §11). Zero for any
+    // experiment with real_agent_count=0, since no MODEL_REQUESTED event is
+    // ever emitted in that case.
+    modelCalls: number;
   };
   // Per-agent security-incident history, capped at INCIDENT_LOG_CAP per agent.
   // One event may appear under more than one agent (e.g. a COMPROMISE_SUCCEEDED
@@ -50,7 +55,7 @@ export const initialGraphState: GraphState = {
   nodes: new Map(),
   edges: [],
   recentEvents: [],
-  metrics: { newCompromises: 0 },
+  metrics: { newCompromises: 0, modelCalls: 0 },
   incidentsByAgent: new Map(),
 };
 
@@ -92,6 +97,7 @@ export function selectMetrics(state: GraphState): {
   newCompromises: number;
   totalExposure: number;
   outbreakDuration: number;
+  modelCalls: number;
 } {
   let healthy = 0;
   let compromised = 0;
@@ -109,6 +115,7 @@ export function selectMetrics(state: GraphState): {
     newCompromises: state.metrics.newCompromises,
     totalExposure: compromised + quarantined,
     outbreakDuration: state.tick,
+    modelCalls: state.metrics.modelCalls,
   };
 }
 
@@ -148,7 +155,9 @@ export function reduce(state: GraphState, frame: StreamFrame): GraphState {
       nodes,
       edges: frame.edges,
       recentEvents: sameExperiment ? state.recentEvents : [],
-      metrics: sameExperiment ? state.metrics : { newCompromises: initialExposure },
+      metrics: sameExperiment
+        ? state.metrics
+        : { newCompromises: initialExposure, modelCalls: 0 },
       incidentsByAgent: sameExperiment ? state.incidentsByAgent : new Map(),
     };
   }
@@ -191,7 +200,10 @@ export function reduce(state: GraphState, frame: StreamFrame): GraphState {
 
   let metrics = state.metrics;
   if (event.event_type === "COMPROMISE_SUCCEEDED" && event.metadata?.["already_compromised"] !== true) {
-    metrics = { newCompromises: metrics.newCompromises + 1 };
+    metrics = { ...metrics, newCompromises: metrics.newCompromises + 1 };
+  }
+  if (event.event_type === "MODEL_REQUESTED") {
+    metrics = { ...metrics, modelCalls: metrics.modelCalls + 1 };
   }
 
   const incidentsByAgent = recordIncident(state.incidentsByAgent, event);
