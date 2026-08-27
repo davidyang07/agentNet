@@ -57,6 +57,18 @@ M1_EVENT_TYPES = M0_EVENT_TYPES | frozenset(
     }
 )
 
+# Phase 2 additionally emits model/tool interaction events for real
+# (LLM-backed) agents' lateral prompt-injection attempts
+# (docs/PHASE_2_PLAN.md §7). COMPROMISE_*/ANOMALY_DETECTED/AGENT_QUARANTINED
+# are reused verbatim -- these three are the only genuinely new emitted types.
+PHASE_2_EVENT_TYPES = M1_EVENT_TYPES | frozenset(
+    {
+        EventType.MODEL_REQUESTED,
+        EventType.MODEL_RESPONDED,
+        EventType.TOOL_EXECUTED,
+    }
+)
+
 # Event types with per-agent security significance for the incident timeline
 # -- mirrors frontend/src/lib/stream/reducer.ts's INCIDENT_EVENT_TYPES
 # exactly. There is no codegen coverage for enum *values* across languages
