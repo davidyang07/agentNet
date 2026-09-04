@@ -175,6 +175,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/experiments/{experiment_id}/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Metrics */
+        get: operations["get_metrics_api_experiments__experiment_id__metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/experiments/{experiment_id}/detail": {
         parameters: {
             query?: never;
@@ -621,6 +638,23 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         JsonValue: unknown;
+        /** MetricsResponse */
+        MetricsResponse: {
+            /** Compromise Fraction */
+            compromise_fraction: number;
+            /** Retained Utility */
+            retained_utility: number;
+            /** Blast Radius Fraction */
+            blast_radius_fraction: number;
+            /** Privileged Exposure */
+            privileged_exposure: number;
+            /** Security Plane Integrity */
+            security_plane_integrity: number;
+            /** Attack Success Rate */
+            attack_success_rate: number;
+            /** False Quarantine Rate */
+            false_quarantine_rate: number;
+        };
         /**
          * NodeType
          * @enum {string}
@@ -1051,6 +1085,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CriticalNodesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_metrics_api_experiments__experiment_id__metrics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                experiment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetricsResponse"];
                 };
             };
             /** @description Validation Error */

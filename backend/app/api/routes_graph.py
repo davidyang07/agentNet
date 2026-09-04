@@ -12,7 +12,9 @@ from app.graph.analysis import attack_paths, blast_radius, critical_nodes
 from app.graph.builder import build_security_graph
 from app.graph.security_graph import SecurityGraph
 from app.graph.types import NodeType
+from app.metrics import compute as metrics
 from app.orchestrator.registry import registry
+from app.orchestrator.runner import ExperimentRunner
 from app.schemas.graph import (
     AttackPathsResponse,
     BlastRadiusResponse,
@@ -22,14 +24,20 @@ from app.schemas.graph import (
     GraphNodeView,
     SecurityGraphView,
 )
+from app.schemas.metrics import MetricsResponse
 
 router = APIRouter(prefix="/api/experiments", tags=["graph"])
 
 
-def _security_graph_for(experiment_id: UUID) -> SecurityGraph:
+def _runner_for(experiment_id: UUID) -> ExperimentRunner:
     runner = registry.get(experiment_id)
     if runner is None:
         raise HTTPException(status_code=404, detail="experiment not found")
+    return runner
+
+
+def _security_graph_for(experiment_id: UUID) -> SecurityGraph:
+    runner = _runner_for(experiment_id)
     return build_security_graph(runner.state, runner.config)
 
 
@@ -72,4 +80,22 @@ async def get_critical_nodes(experiment_id: UUID, top_n: int = 5) -> CriticalNod
     ranked = critical_nodes(graph, top_n=top_n)
     return CriticalNodesResponse(
         nodes=[CriticalNodeView(id=node_id, betweenness=score) for node_id, score in ranked]
+    )
+
+
+@router.get("/{experiment_id}/metrics", response_model=MetricsResponse)
+async def get_metrics(experiment_id: UUID) -> MetricsResponse:
+    runner = _runner_for(experiment_id)
+    graph = build_security_graph(runner.state, runner.config)
+    # Bounded by EventBus.RING_SIZE, same limitation every other live-runner
+    # event consumer already lives with (docs/PLAN.md §6/§9).
+    events = runner.bus.since(-1) or []
+    return MetricsResponse(
+        compromise_fraction=metrics.compromise_fraction(runner.state),
+        retained_utility=metrics.retained_utility(runner.state),
+        blast_radius_fraction=metrics.blast_radius_fraction(graph),
+        privileged_exposure=metrics.privileged_exposure(graph),
+        security_plane_integrity=metrics.security_plane_integrity(graph),
+        attack_success_rate=metrics.attack_success_rate(events),
+        false_quarantine_rate=metrics.false_quarantine_rate(events),
     )
