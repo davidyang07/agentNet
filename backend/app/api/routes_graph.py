@@ -15,6 +15,7 @@ from app.graph.types import NodeType
 from app.metrics import compute as metrics
 from app.orchestrator.registry import registry
 from app.orchestrator.runner import ExperimentRunner
+from app.remediation.analyze import recommend
 from app.schemas.graph import (
     AttackPathsResponse,
     BlastRadiusResponse,
@@ -26,6 +27,7 @@ from app.schemas.graph import (
     SecurityGraphView,
 )
 from app.schemas.metrics import MetricsResponse
+from app.schemas.remediation import RecommendationView, RemediationResponse
 
 router = APIRouter(prefix="/api/experiments", tags=["graph"])
 
@@ -113,4 +115,17 @@ async def get_metrics(experiment_id: UUID) -> MetricsResponse:
         security_plane_integrity=metrics.security_plane_integrity(graph),
         attack_success_rate=metrics.attack_success_rate(events),
         false_quarantine_rate=metrics.false_quarantine_rate(events),
+    )
+
+
+@router.get("/{experiment_id}/remediation", response_model=RemediationResponse)
+async def get_remediation(experiment_id: UUID) -> RemediationResponse:
+    runner = _runner_for(experiment_id)
+    fraction = metrics.compromise_fraction(runner.state)
+    recommendations = recommend(runner.config, fraction)
+    return RemediationResponse(
+        recommendations=[
+            RecommendationView(description=r.description, config_diff=r.config_diff)
+            for r in recommendations
+        ]
     )

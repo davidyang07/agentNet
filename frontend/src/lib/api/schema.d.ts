@@ -216,6 +216,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/experiments/{experiment_id}/remediation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Remediation */
+        get: operations["get_remediation_api_experiments__experiment_id__remediation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/experiments/{experiment_id}/detail": {
         parameters: {
             query?: never;
@@ -707,6 +724,20 @@ export interface components {
             /** Chain */
             chain: string[];
         };
+        /** RecommendationView */
+        RecommendationView: {
+            /** Description */
+            description: string;
+            /** Config Diff */
+            config_diff: {
+                [key: string]: unknown;
+            };
+        };
+        /** RemediationResponse */
+        RemediationResponse: {
+            /** Recommendations */
+            recommendations: components["schemas"]["RecommendationView"][];
+        };
         /** SecurityGraphView */
         SecurityGraphView: {
             /** Nodes */
@@ -1178,6 +1209,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MetricsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_remediation_api_experiments__experiment_id__remediation_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                experiment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemediationResponse"];
                 };
             };
             /** @description Validation Error */
