@@ -5,8 +5,15 @@ import {
   fetchEventHistory,
   fetchIncidents,
   fetchReplaySnapshot,
+  getAttackPaths,
+  getBlastRadius,
+  getCriticalNodes,
   getExperiment,
   getExperimentDetail,
+  getMetrics,
+  getProvenance,
+  getRemediation,
+  getSecurityGraph,
   listExperiments,
   pauseExperiment,
   resumeExperiment,
@@ -184,5 +191,78 @@ describe("api client", () => {
   it("fetchReplaySnapshot throws on 404 (no tick-0 events persisted)", async () => {
     fetchMock.mockResolvedValueOnce(errResponse(404));
     await expect(fetchReplaySnapshot("missing")).rejects.toThrow("404");
+  });
+
+  it("getSecurityGraph GETs /api/experiments/{id}/graph", async () => {
+    fetchMock.mockResolvedValueOnce(okResponse({ nodes: [], edges: [] }));
+    await getSecurityGraph("a");
+    const [url] = fetchMock.mock.calls[0];
+    expect(String(url)).toMatch(/\/api\/experiments\/a\/graph$/);
+  });
+
+  it("getAttackPaths GETs .../analysis/attack-paths with source/target params", async () => {
+    fetchMock.mockResolvedValueOnce(okResponse({ paths: [] }));
+    await getAttackPaths("a", "agent-000", "agent-001");
+    const [url] = fetchMock.mock.calls[0];
+    const parsed = new URL(String(url));
+    expect(parsed.pathname).toBe("/api/experiments/a/analysis/attack-paths");
+    expect(parsed.searchParams.get("source")).toBe("agent-000");
+    expect(parsed.searchParams.get("target")).toBe("agent-001");
+  });
+
+  it("getBlastRadius GETs .../analysis/blast-radius", async () => {
+    fetchMock.mockResolvedValueOnce(
+      okResponse({ compromised: [], reachable: [], fraction: 0 }),
+    );
+    await getBlastRadius("a");
+    const [url] = fetchMock.mock.calls[0];
+    expect(String(url)).toMatch(/\/api\/experiments\/a\/analysis\/blast-radius$/);
+  });
+
+  it("getCriticalNodes GETs .../analysis/critical-nodes with an optional top_n param", async () => {
+    fetchMock.mockResolvedValueOnce(okResponse({ nodes: [] }));
+    await getCriticalNodes("a", 3);
+    const [url] = fetchMock.mock.calls[0];
+    const parsed = new URL(String(url));
+    expect(parsed.pathname).toBe("/api/experiments/a/analysis/critical-nodes");
+    expect(parsed.searchParams.get("top_n")).toBe("3");
+  });
+
+  it("getProvenance GETs .../analysis/provenance with a node_id param", async () => {
+    fetchMock.mockResolvedValueOnce(okResponse({ chain: ["agent-000"] }));
+    await getProvenance("a", "agent-000");
+    const [url] = fetchMock.mock.calls[0];
+    const parsed = new URL(String(url));
+    expect(parsed.pathname).toBe("/api/experiments/a/analysis/provenance");
+    expect(parsed.searchParams.get("node_id")).toBe("agent-000");
+  });
+
+  it("getMetrics GETs .../metrics", async () => {
+    fetchMock.mockResolvedValueOnce(
+      okResponse({
+        compromise_fraction: 0,
+        retained_utility: 1,
+        blast_radius_fraction: 0,
+        privileged_exposure: 0,
+        security_plane_integrity: 1,
+        attack_success_rate: 0,
+        false_quarantine_rate: 0,
+      }),
+    );
+    await getMetrics("a");
+    const [url] = fetchMock.mock.calls[0];
+    expect(String(url)).toMatch(/\/api\/experiments\/a\/metrics$/);
+  });
+
+  it("getRemediation GETs .../remediation", async () => {
+    fetchMock.mockResolvedValueOnce(okResponse({ recommendations: [] }));
+    await getRemediation("a");
+    const [url] = fetchMock.mock.calls[0];
+    expect(String(url)).toMatch(/\/api\/experiments\/a\/remediation$/);
+  });
+
+  it("getSecurityGraph throws on non-ok response", async () => {
+    fetchMock.mockResolvedValueOnce(errResponse(404));
+    await expect(getSecurityGraph("missing")).rejects.toThrow("404");
   });
 });

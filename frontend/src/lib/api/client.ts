@@ -7,6 +7,13 @@ export type ExperimentListResponse = components["schemas"]["ExperimentListRespon
 export type ExperimentDetail = components["schemas"]["ExperimentDetail"];
 export type EventHistoryResponse = components["schemas"]["EventHistoryResponse"];
 export type HistorySnapshotFrame = components["schemas"]["SnapshotFrame"];
+export type SecurityGraphView = components["schemas"]["SecurityGraphView"];
+export type AttackPathsResponse = components["schemas"]["AttackPathsResponse"];
+export type BlastRadiusResponse = components["schemas"]["BlastRadiusResponse"];
+export type CriticalNodesResponse = components["schemas"]["CriticalNodesResponse"];
+export type ProvenanceResponse = components["schemas"]["ProvenanceResponse"];
+export type MetricsResponse = components["schemas"]["MetricsResponse"];
+export type RemediationResponse = components["schemas"]["RemediationResponse"];
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
 const BACKEND_WS_URL = process.env.NEXT_PUBLIC_BACKEND_WS_URL ?? "ws://localhost:8000";
@@ -149,6 +156,82 @@ export async function fetchReplaySnapshot(experimentId: string): Promise<History
   const res = await fetch(`${BACKEND_URL}/api/experiments/${experimentId}/replay-snapshot`);
   if (!res.ok) {
     throw new Error(`failed to fetch replay snapshot: ${res.status}`);
+  }
+  return res.json();
+}
+
+// Security graph + analysis (docs/PLAN.md §2.5/§8) -- live experiment only;
+// history/replay equivalents are not yet built (docs/PLAN.md §9).
+
+export async function getSecurityGraph(experimentId: string): Promise<SecurityGraphView> {
+  const res = await fetch(`${BACKEND_URL}/api/experiments/${experimentId}/graph`);
+  if (!res.ok) {
+    throw new Error(`failed to get security graph: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getAttackPaths(
+  experimentId: string,
+  source: string,
+  target: string,
+): Promise<AttackPathsResponse> {
+  const url = new URL(`${BACKEND_URL}/api/experiments/${experimentId}/analysis/attack-paths`);
+  url.searchParams.set("source", source);
+  url.searchParams.set("target", target);
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`failed to get attack paths: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getBlastRadius(experimentId: string): Promise<BlastRadiusResponse> {
+  const res = await fetch(`${BACKEND_URL}/api/experiments/${experimentId}/analysis/blast-radius`);
+  if (!res.ok) {
+    throw new Error(`failed to get blast radius: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getCriticalNodes(
+  experimentId: string,
+  topN?: number,
+): Promise<CriticalNodesResponse> {
+  const url = new URL(`${BACKEND_URL}/api/experiments/${experimentId}/analysis/critical-nodes`);
+  if (topN !== undefined) url.searchParams.set("top_n", String(topN));
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`failed to get critical nodes: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getProvenance(
+  experimentId: string,
+  nodeId: string,
+): Promise<ProvenanceResponse> {
+  const url = new URL(`${BACKEND_URL}/api/experiments/${experimentId}/analysis/provenance`);
+  url.searchParams.set("node_id", nodeId);
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`failed to get provenance: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getMetrics(experimentId: string): Promise<MetricsResponse> {
+  const res = await fetch(`${BACKEND_URL}/api/experiments/${experimentId}/metrics`);
+  if (!res.ok) {
+    throw new Error(`failed to get metrics: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getRemediation(experimentId: string): Promise<RemediationResponse> {
+  const res = await fetch(`${BACKEND_URL}/api/experiments/${experimentId}/remediation`);
+  if (!res.ok) {
+    throw new Error(`failed to get remediation: ${res.status}`);
   }
   return res.json();
 }
