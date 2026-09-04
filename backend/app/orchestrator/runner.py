@@ -2,13 +2,13 @@ import asyncio
 from typing import Literal
 from uuid import UUID, uuid4
 
-from app.agents.runtime import real_agent_step
 from app.engine.propagation import is_finished
 from app.engine.tick import advance
 from app.engine.topology import build_world
 from app.events.bus import EventBus
 from app.events.emitter import EventEmitter
 from app.gateway.gateway import ModelGateway
+from app.scenarios.registry import run_async_scenarios
 from app.schemas.events import EventDraft, EventType
 from app.schemas.experiment import EdgeView, ExperimentConfig, ExperimentSummary, NodeView
 from app.schemas.frames import SnapshotFrame
@@ -101,7 +101,7 @@ class ExperimentRunner:
                 # tick is first eligible for quarantine detection next tick,
                 # a deliberate, documented one-tick timing difference from
                 # the simulated path (docs/PHASE_2_PLAN.md §2, §16).
-                self.state, real_drafts = await real_agent_step(
+                self.state, real_drafts = await run_async_scenarios(
                     self.state, self.config, self._gateway, tick=self.state.tick
                 )
                 drafts = [*drafts, *real_drafts]
