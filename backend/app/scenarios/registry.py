@@ -16,6 +16,7 @@ import logging
 
 from app.engine.state import WorldState
 from app.gateway.gateway import ModelGateway
+from app.scenarios.adaptive_attacker_scenario import adaptive_attacker_scenario
 from app.scenarios.base import AsyncScenario, Scenario
 from app.scenarios.prompt_injection_scenario import prompt_injection_scenario
 from app.scenarios.propagation_scenario import propagation_scenario
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 SYNC_SCENARIOS: dict[str, Scenario] = {
     propagation_scenario.name: propagation_scenario,
+    adaptive_attacker_scenario.name: adaptive_attacker_scenario,
 }
 
 ASYNC_SCENARIOS: dict[str, AsyncScenario] = {

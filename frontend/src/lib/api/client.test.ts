@@ -38,6 +38,7 @@ const CONFIG: ExperimentConfig = {
   credential_count: 0,
   resource_count: 0,
   sentinel_count: 0,
+  adaptive_detection_threshold: 0.3,
 };
 
 function okResponse(body: unknown) {

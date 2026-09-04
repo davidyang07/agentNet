@@ -41,6 +41,11 @@ class ExperimentConfig(BaseModel):
     sentinel_count: int = Field(0, ge=0, le=5)
     active_scenarios: list[str] = Field(default_factory=lambda: ["propagation"])
 
+    # Adaptive attacker (docs/PLAN.md §4): only consulted by the
+    # "adaptive_attacker" scenario, which is opt-in via active_scenarios --
+    # this default has no effect unless that scenario is selected.
+    adaptive_detection_threshold: float = Field(0.3, ge=0.0, le=1.0)
+
 
 class NodeView(BaseModel):
     id: str

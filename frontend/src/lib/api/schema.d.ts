@@ -502,6 +502,11 @@ export interface components {
             sentinel_count: number;
             /** Active Scenarios */
             active_scenarios?: string[];
+            /**
+             * Adaptive Detection Threshold
+             * @default 0.3
+             */
+            adaptive_detection_threshold: number;
         };
         /** ExperimentDetail */
         ExperimentDetail: {

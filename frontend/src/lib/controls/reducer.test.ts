@@ -39,6 +39,7 @@ const FIXTURE_CONFIG_A: ExperimentConfig = {
   credential_count: 0,
   resource_count: 0,
   sentinel_count: 0,
+  adaptive_detection_threshold: 0.3,
 };
 
 const FIXTURE_CONFIG_B: ExperimentConfig = {
@@ -64,6 +65,7 @@ const FIXTURE_CONFIG_B: ExperimentConfig = {
   credential_count: 0,
   resource_count: 0,
   sentinel_count: 0,
+  adaptive_detection_threshold: 0.3,
 };
 
 function running(overrides: Partial<ControlState> = {}): ControlState {
