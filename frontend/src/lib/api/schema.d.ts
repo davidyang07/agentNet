@@ -507,6 +507,11 @@ export interface components {
              * @default 0.3
              */
             adaptive_detection_threshold: number;
+            /**
+             * False Quarantine Rate
+             * @default 0
+             */
+            false_quarantine_rate: number;
         };
         /** ExperimentDetail */
         ExperimentDetail: {

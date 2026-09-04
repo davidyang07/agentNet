@@ -39,6 +39,7 @@ const CONFIG: ExperimentConfig = {
   resource_count: 0,
   sentinel_count: 0,
   adaptive_detection_threshold: 0.3,
+  false_quarantine_rate: 0,
 };
 
 function okResponse(body: unknown) {

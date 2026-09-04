@@ -43,6 +43,32 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
                 )
             )
 
+    # Byzantine/security-plane attack (docs/PLAN.md §5): a subverted
+    # quarantine authority falsely reporting a HEALTHY node. Defaults to 0.0,
+    # a strict no-op that leaves this function's output byte-for-byte
+    # unchanged for every existing caller/test. The observable violation is
+    # mechanical, not an LLM judge: AGENT_QUARANTINED with
+    # metadata.legitimate=false and no preceding ANOMALY_DETECTED on that
+    # target -- exactly what distinguishes it from the legitimate path above.
+    if config.false_quarantine_rate > 0.0:
+        healthy = sorted(
+            node_id
+            for node_id, node in state.nodes.items()
+            if node.security_state == SecurityState.HEALTHY
+        )
+        for node_id in healthy:
+            draw = rng(config.seed, state.tick, node_id, "false_quarantine").random()
+            if draw < config.false_quarantine_rate:
+                quarantined.add(node_id)
+                drafts.append(
+                    EventDraft(
+                        sim_tick=state.tick,
+                        event_type=EventType.AGENT_QUARANTINED,
+                        agent_id=node_id,
+                        metadata={"legitimate": False},
+                    )
+                )
+
     if not quarantined:
         return state, drafts
 

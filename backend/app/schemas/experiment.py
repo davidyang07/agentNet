@@ -46,6 +46,10 @@ class ExperimentConfig(BaseModel):
     # this default has no effect unless that scenario is selected.
     adaptive_detection_threshold: float = Field(0.3, ge=0.0, le=1.0)
 
+    # False quarantine / subverted quarantine authority (docs/PLAN.md §5).
+    # Defaults to 0.0, a strict no-op preserving every existing behavior.
+    false_quarantine_rate: float = Field(0.0, ge=0.0, le=1.0)
+
 
 class NodeView(BaseModel):
     id: str
