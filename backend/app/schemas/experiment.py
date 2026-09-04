@@ -31,6 +31,16 @@ class ExperimentConfig(BaseModel):
     model_max_concurrency: int = Field(4, ge=1, le=16)
     model_max_requests_per_experiment: int = Field(500, ge=1, le=5000)
 
+    # Security graph (docs/PLAN.md §2.4): all default to 0, which yields a
+    # graph containing only AGENT nodes + COMMUNICATES_WITH/TRUSTS edges --
+    # i.e. every existing behavior stays byte-for-byte unchanged unless a
+    # caller opts in.
+    tool_count: int = Field(0, ge=0, le=20)
+    credential_count: int = Field(0, ge=0, le=20)
+    resource_count: int = Field(0, ge=0, le=20)
+    sentinel_count: int = Field(0, ge=0, le=5)
+    active_scenarios: list[str] = Field(default_factory=lambda: ["propagation"])
+
 
 class NodeView(BaseModel):
     id: str

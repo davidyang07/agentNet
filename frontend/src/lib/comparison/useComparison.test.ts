@@ -42,6 +42,10 @@ const BASE_CONFIG: ExperimentConfig = {
   model_max_retries: 1,
   model_max_concurrency: 4,
   model_max_requests_per_experiment: 500,
+  tool_count: 0,
+  credential_count: 0,
+  resource_count: 0,
+  sentinel_count: 0,
 };
 
 function withoutDefenseEnabled(config: ExperimentConfig): Omit<ExperimentConfig, "defense_enabled"> {

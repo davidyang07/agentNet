@@ -107,6 +107,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/experiments/{experiment_id}/graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Security Graph */
+        get: operations["get_security_graph_api_experiments__experiment_id__graph_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/experiments/{experiment_id}/analysis/attack-paths": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Attack Paths */
+        get: operations["get_attack_paths_api_experiments__experiment_id__analysis_attack_paths_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/experiments/{experiment_id}/analysis/blast-radius": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Blast Radius */
+        get: operations["get_blast_radius_api_experiments__experiment_id__analysis_blast_radius_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/experiments/{experiment_id}/analysis/critical-nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Critical Nodes */
+        get: operations["get_critical_nodes_api_experiments__experiment_id__analysis_critical_nodes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/experiments/{experiment_id}/detail": {
         parameters: {
             query?: never;
@@ -219,6 +287,37 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AttackPathsResponse */
+        AttackPathsResponse: {
+            /** Paths */
+            paths: string[][];
+        };
+        /** BlastRadiusResponse */
+        BlastRadiusResponse: {
+            /** Compromised */
+            compromised: string[];
+            /** Reachable */
+            reachable: string[];
+            /** Fraction */
+            fraction: number;
+        };
+        /** CriticalNodeView */
+        CriticalNodeView: {
+            /** Id */
+            id: string;
+            /** Betweenness */
+            betweenness: number;
+        };
+        /** CriticalNodesResponse */
+        CriticalNodesResponse: {
+            /** Nodes */
+            nodes: components["schemas"]["CriticalNodeView"][];
+        };
+        /**
+         * EdgeType
+         * @enum {string}
+         */
+        EdgeType: "communicates_with" | "delegates_to" | "trusts" | "can_access" | "uses_credential" | "monitors" | "quarantine_authority" | "updates_threat_memory";
         /** EdgeView */
         EdgeView: {
             /** Source */
@@ -381,6 +480,28 @@ export interface components {
              * @default 500
              */
             model_max_requests_per_experiment: number;
+            /**
+             * Tool Count
+             * @default 0
+             */
+            tool_count: number;
+            /**
+             * Credential Count
+             * @default 0
+             */
+            credential_count: number;
+            /**
+             * Resource Count
+             * @default 0
+             */
+            resource_count: number;
+            /**
+             * Sentinel Count
+             * @default 0
+             */
+            sentinel_count: number;
+            /** Active Scenarios */
+            active_scenarios?: string[];
         };
         /** ExperimentDetail */
         ExperimentDetail: {
@@ -461,12 +582,40 @@ export interface components {
             last_seq: number;
             config: components["schemas"]["ExperimentConfig"];
         };
+        /** GraphEdgeView */
+        GraphEdgeView: {
+            /** Source */
+            source: string;
+            /** Target */
+            target: string;
+            edge_type: components["schemas"]["EdgeType"];
+            /** Attrs */
+            attrs: {
+                [key: string]: unknown;
+            };
+        };
+        /** GraphNodeView */
+        GraphNodeView: {
+            /** Id */
+            id: string;
+            node_type: components["schemas"]["NodeType"];
+            security_state: components["schemas"]["SecurityState"];
+            /** Attrs */
+            attrs: {
+                [key: string]: unknown;
+            };
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
         JsonValue: unknown;
+        /**
+         * NodeType
+         * @enum {string}
+         */
+        NodeType: "agent" | "tool" | "mcp_server" | "credential" | "resource" | "memory_store" | "sentinel" | "security_control";
         /** NodeView */
         NodeView: {
             /** Id */
@@ -484,6 +633,13 @@ export interface components {
              * @enum {string}
              */
             agent_kind: "simulated" | "real";
+        };
+        /** SecurityGraphView */
+        SecurityGraphView: {
+            /** Nodes */
+            nodes: components["schemas"]["GraphNodeView"][];
+            /** Edges */
+            edges: components["schemas"]["GraphEdgeView"][];
         };
         /**
          * SecurityState
@@ -756,6 +912,135 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExperimentSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_security_graph_api_experiments__experiment_id__graph_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                experiment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecurityGraphView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_attack_paths_api_experiments__experiment_id__analysis_attack_paths_get: {
+        parameters: {
+            query: {
+                source: string;
+                target: string;
+            };
+            header?: never;
+            path: {
+                experiment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttackPathsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_blast_radius_api_experiments__experiment_id__analysis_blast_radius_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                experiment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastRadiusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_critical_nodes_api_experiments__experiment_id__analysis_critical_nodes_get: {
+        parameters: {
+            query?: {
+                top_n?: number;
+            };
+            header?: never;
+            path: {
+                experiment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CriticalNodesResponse"];
                 };
             };
             /** @description Validation Error */
