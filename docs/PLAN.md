@@ -132,7 +132,7 @@ additive metadata" pattern already established.
 
 ### 2.3 Persistence: no new migration required
 
-`docs/migrations/0001_initial.sql`'s two tables (`experiments`, `experiment_events`) are untouched.
+`backend/migrations/0001_initial.sql`'s two tables (`experiments`, `experiment_events`) are untouched.
 The graph structure itself is **never persisted** — precisely because the existing system already
 proves this pattern works: `routes_history.py:218` calls `build_world(config)` again at replay
 time rather than reading a stored topology, because topology is a pure deterministic function of
@@ -160,12 +160,16 @@ credential_count: int = Field(0, ge=0, le=20)
 resource_count: int = Field(0, ge=0, le=20)
 sentinel_count: int = Field(0, ge=0, le=5)
 active_scenarios: list[str] = Field(default_factory=lambda: ["propagation"])
+adaptive_detection_threshold: float = Field(0.3, ge=0.0, le=1.0)   # §4, only used by "adaptive_attacker"
+false_quarantine_rate: float = Field(0.0, ge=0.0, le=1.0)           # §5, false-quarantine attack
 ```
 
-`active_scenarios` lists scenario-registry keys to run each tick, in list order (deterministic).
-`routes_experiments.py::create_experiment` keeps appending `"prompt_injection"` automatically when
-`real_agent_count > 0` and it's not already present — the current auto-enable behavior, unchanged,
-just expressed through the registry instead of a hardcoded call.
+`active_scenarios` lists sync-scenario-registry keys to run each tick, in list order
+(deterministic). **As implemented (see §9), the async registry is not yet gated by
+`active_scenarios`** — `orchestrator/runner.py` still runs every registered async scenario
+unconditionally whenever a gateway is present, exactly matching pre-refactor behavior (each async
+scenario already no-ops with no eligible source/target pair) rather than the auto-append design
+originally sketched here.
 
 ### 2.5 New API surface (additive; flows through the existing OpenAPI→`schema.d.ts` typegen
 pipeline automatically — `make types` picks these up with zero new frontend-contract machinery)
@@ -183,6 +187,14 @@ GET /api/experiments/{id}/analysis/blast-radius
 GET /api/experiments/{id}/analysis/critical-nodes?top_n=5
     → CriticalNodesResponse { nodes: [{id: string, betweenness: float}] }
 
+GET /api/experiments/{id}/analysis/provenance?node_id=
+    → ProvenanceResponse { chain: string[] }
+
+GET /api/experiments/{id}/metrics
+    → MetricsResponse { compromise_fraction, retained_utility, blast_radius_fraction,
+                         privileged_exposure, security_plane_integrity, attack_success_rate,
+                         false_quarantine_rate }
+
 GET /api/experiments/{id}/remediation
     → RemediationResponse { recommendations: [{description: string, config_diff: object}] }
 ```
@@ -195,18 +207,22 @@ a browser.
 
 ---
 
-## 3. Pluggable scenario framework
+## 3. Pluggable scenario framework (**implemented** — see §9 for the one gap)
 
 `app/scenarios/base.py`:
 
 ```python
 class Scenario(Protocol):
     name: str
-    def step(self, state: WorldState, config: ExperimentConfig, graph: SecurityGraph
+    def step(self, state: WorldState, config: ExperimentConfig
               ) -> tuple[WorldState, list[EventDraft]]: ...
 ```
 
-Async (LLM-backed) scenarios implement `AsyncScenario` with `async def step(...)` instead — the
+A scenario that needs the typed security graph (e.g. §5's not-yet-built graph-structural attacks)
+calls `build_security_graph(state, config)` itself — a cheap, pure, already-deterministic
+derivation (§2.3) — rather than the interface threading a graph through every call site; no
+implemented scenario needed that yet. Async (LLM-backed) scenarios implement `AsyncScenario` with
+`async def step(self, state, config, gateway, tick)` instead — the
 same sync/async split that already exists between `app/engine/propagation.py` (sync) and
 `app/agents/runtime.py::real_agent_step` (async), now formalized as an interface rather than two
 hardcoded call sites. **Neither existing function's body changes.** `app/scenarios/registry.py`
@@ -223,21 +239,23 @@ the API's default), so no existing test's expected output changes.
 
 ---
 
-## 4. Adaptive attacker (deterministic, rule-based v1)
+## 4. Adaptive attacker (deterministic, rule-based v1 — **implemented**)
 
-`app/scenarios/adaptive.py` implements observe→choose→attack→observe-defense→adapt as a scenario
-whose **state lives in `WorldState`**, not in the function — consistent with the engine's existing
-purity contract (`AgentNode.compromised_by`/`tick_compromised` already prove per-node memory
-threaded through pure `step()` calls works). A new optional `WorldState.attacker_memory:
-AdaptiveAttackerState | None` dataclass tracks, per attacker "identity": ticks since last detected
-attempt, current strategy (`"aggressive"` targets highest-degree neighbors; `"stealthy"` targets
-lowest-degree, lower p, to reduce detection odds), and a rolling detection-rate estimate. Each tick:
-observe (`ANOMALY_DETECTED`/`AGENT_QUARANTINED` events from the *previous* tick, already available
-in `WorldState` via node `security_state`), choose (switch strategy via a deterministic threshold
-on the rolling rate, not a random draw — reproducible and inspectable), attack (delegate to the
-chosen strategy's target-selection + `rng(seed, tick, node_id, "adaptive_attack")` draw, same
-keying discipline as every other draw site), adapt (update `attacker_memory` for next tick). Fully
-deterministic and unit-testable without any LLM or provider.
+`app/scenarios/adaptive_attacker_scenario.py` implements observe→choose→attack→observe-defense→
+adapt as a scenario whose **state lives in `WorldState` itself**, not in a separate persisted
+field — simpler than originally sketched here (no `WorldState.attacker_memory` dataclass was
+needed): strategy is recomputed fresh each tick from the quarantine rate among nodes the attacker
+has ever compromised (`node.compromised_by is not None`), which is exactly as reproducible as a
+persisted rolling estimate since it's a pure function of already-present state, per the engine's
+existing purity contract. Each tick: observe (that rate, computed from the current `WorldState`),
+choose (`"stealthy"` once the rate reaches `config.adaptive_detection_threshold`, `"aggressive"`
+otherwise — a deterministic threshold, not a random draw), attack (one attempt per compromised
+source per tick — the highest-degree healthy neighbor if aggressive, lowest-degree if stealthy —
+via `rng(seed, tick, target, f"adaptive:{source}")`, the same keying discipline as every other draw
+site), adapt (nothing to persist; next tick's observe step already sees the updated state). Owns
+the tick increment exactly like `propagation.step`, so it's an alternative to it, not a supplement —
+`active_scenarios` should select one or the other. Fully deterministic and unit-testable without
+any LLM or provider.
 
 ---
 
@@ -271,17 +289,21 @@ Built on the graph model from §2.2 — each is a scenario:
 
 ---
 
-## 6. Metrics (priority 5 — `app/metrics/`, pure functions over `WorldState` + `SecurityGraph` +
-persisted event log; no new persistence, computed on demand like the analysis endpoints)
+## 6. Metrics (priority 5 — `app/metrics/compute.py`, pure functions over `WorldState` +
+`SecurityGraph` + a bounded live event buffer; no new persistence, computed on demand like the
+analysis endpoints — **implemented**, see §9 for exact scope)
 
-| Metric | Definition |
-|---|---|
-| Attack success rate | `COMPROMISE_SUCCEEDED` count / (`COMPROMISE_SUCCEEDED` + `COMPROMISE_FAILED`) count |
-| Compromise fraction | `len(compromised nodes) / len(all AGENT nodes)` |
-| Blast radius | `len(analysis.blast_radius(graph, compromised))` (§2.5) |
-| Detection latency | ticks between a node's `tick_compromised` and its `ANOMALY_DETECTED` |
-| Containment latency | ticks between `ANOMALY_DETECTED` and `AGENT_QUARANTINED` |
-| False quarantine rate | `AGENT_QUARANTINED` events with `metadata.legitimate == false` / total `AGENT_QUARANTINED` |
+| Metric | Definition | Status |
+|---|---|---|
+| Compromise fraction | `compromise_fraction(state)` = compromised agents / all agents | done |
+| Retained utility | `retained_utility(state)` = agents neither compromised nor quarantined / all agents | done |
+| Blast radius fraction | `blast_radius_fraction(graph)` = agent nodes in `analysis.blast_radius(graph)` / all agents | done |
+| Privileged exposure | `privileged_exposure(graph)` = credential/resource nodes in `analysis.blast_radius(graph)` | done |
+| Security-plane integrity | `security_plane_integrity(graph)` = healthy sentinel/security-control nodes / all such nodes | done |
+| Attack success rate | `attack_success_rate(events)` = `COMPROMISE_SUCCEEDED` / (`COMPROMISE_SUCCEEDED` + `COMPROMISE_FAILED`) | done |
+| False quarantine rate | `false_quarantine_rate(events)` = `AGENT_QUARANTINED` with `metadata.legitimate == false` / total `AGENT_QUARANTINED` | done |
+| Detection latency | ticks between a node's `tick_compromised` and its `ANOMALY_DETECTED` | not implemented |
+| Containment latency | ticks between `ANOMALY_DETECTED` and `AGENT_QUARANTINED` | not implemented |
 | Retained utility | fraction of agents neither `COMPROMISED` nor `QUARANTINED` at run end |
 | Privileged exposure | count of `RESOURCE`/`CREDENTIAL` nodes reachable (via `analysis.attack_paths`) from any currently-compromised agent |
 | Security-plane integrity | fraction of `SENTINEL`/`SECURITY_CONTROL` nodes with `security_state == HEALTHY` |
@@ -291,15 +313,17 @@ them in; the backend functions and an API endpoint are implementable and indepen
 
 ---
 
-## 7. Remediation engine (priority 7)
+## 7. Remediation engine (priority 7 — **implemented**, narrower than this section originally
+sketched; see §9 for why)
 
-`app/remediation/analyze.py::recommend(graph, event_log) -> list[Recommendation]` — deterministic,
-rule-based (no LLM): e.g. "a `RESOURCE` is reachable from ≥1 compromised agent and has no
-`SENTINEL` on its access path → recommend `sentinel_count += 1`"; "a credential's `USES_CREDENTIAL`
-fan-in exceeds N agents → recommend splitting it." Each `Recommendation` carries a `config_diff:
+`app/remediation/analyze.py::recommend(config: ExperimentConfig, compromise_fraction: float) ->
+list[Recommendation]` — deterministic, rule-based (no LLM). Above a fixed compromise-fraction
+threshold: if `defense_enabled` is `False`, recommend enabling it; otherwise, if
+`detector_sensitivity < 1.0`, recommend raising it. Each `Recommendation` carries a `config_diff:
 dict` directly usable as a `POST /api/experiments` body for re-testing, and re-testing is scored by
-running the existing comparison flow (baseline config vs. `config_diff` applied) and comparing the
-§6 metrics — verifying the fix without any new re-test machinery.
+running the existing comparison flow (baseline config vs. `config_diff` applied) and comparing §6's
+metrics — verifying the fix without any new re-test machinery. The graph-structural rules originally
+sketched here (sentinel placement, credential-fan-in splitting) are **not implemented** — see §9.
 
 ---
 
@@ -335,24 +359,83 @@ LLM-backed agents), full frontend (graph/metrics/event-stream/config/control/det
 replay/comparison components), CI (backend pytest+ruff, frontend vitest+eslint+tsc+build+typegen
 drift).
 
-### Implemented by this plan, this session (see commit log for exact scope)
-Security graph module + analysis (attack paths, blast radius, critical nodes, provenance) — see
-§2.2–2.5. Pluggable scenario framework wrapping the two existing attacks — see §3. Adaptive
-attacker — see §4. As much of §5–7 as time allowed, tracked precisely below rather than claimed
-speculatively.
+### Implemented this session (see git log for exact commits/scope; every item below shipped with
+passing tests, ran through the full backend pytest+ruff and frontend vitest+eslint+tsc+build gates,
+and — where it touches the tick loop or RNG — a `scripts/verify_determinism.py` pass)
 
-### Explicitly remaining (not built this session; next in priority order)
-1. Full Byzantine/security-plane scenario set (§5) beyond whatever landed this session.
-2. Metrics module (§6) as a dedicated package + API endpoint (individual metrics may already be
-   derivable ad hoc from graph/analysis endpoints; a dedicated aggregator is not yet built).
-3. Remediation engine (§7).
-4. Frontend integration: typed-node rendering (color/shape per `NodeType`), an attack-path/blast-
-   radius panel, a remediation panel. The backend contract (§2.5) is ready for this; no frontend
-   code changes are in scope this session.
-5. LangGraph/MCP/OpenTelemetry adapters — no work started; genuinely out of scope until 1–4 above
-   are solid, per the priority order in the originating instruction.
-6. CI/staging validation of the new endpoints beyond unit/integration tests already added to the
-   existing `make test`/`make lint` gates.
+**Priority 1 — security graph + analysis (done).** `app/graph/` (`types.py`, `security_graph.py`,
+`builder.py`, `analysis.py`): the full typed node/edge model from §2.2, `build_security_graph`
+deterministically extending a `WorldState` with tools/credentials/resources/sentinels/security
+controls (four new zero-default `ExperimentConfig` fields), and `attack_paths`/`blast_radius`/
+`critical_nodes`/`provenance`. Four API endpoints (`/graph`, `/analysis/attack-paths`,
+`/analysis/blast-radius`, `/analysis/critical-nodes`) over the live runner. No new Postgres
+migration, per §2.3. 24+ tests.
 
-This section will be updated in the final commit of this session with the precise as-built list —
-do not treat the bullets above as a promise; treat the git log and test suite as ground truth.
+**Priority 2 — pluggable scenario framework (done).** `app/scenarios/` (`base.py`, `registry.py`,
+`propagation_scenario.py`, `prompt_injection_scenario.py`): `propagation.step` and
+`real_agent_step` wrapped unchanged behind `Scenario`/`AsyncScenario` protocols; `engine/tick.py`
+now runs `config.active_scenarios` (default `["propagation"]`) through the registry. **Known
+simplification, not yet closed:** the async registry is not gated by `active_scenarios` — it always
+runs every registered async scenario whenever a gateway is present, matching pre-refactor behavior
+exactly (each async scenario already no-ops with no eligible pair) rather than adding new
+config-driven selection there.
+
+**Priority 3 — adaptive attacker (done).** `app/scenarios/adaptive_attacker_scenario.py`:
+observe→choose→attack→observe→adapt, strategy recomputed each tick directly from `WorldState` (no
+separate persisted attacker-memory field — simpler than §4's original sketch, and equally
+deterministic/testable). Registered as `"adaptive_attacker"`, opt-in, owns the tick increment like
+`propagation.step` (mutually exclusive with it in `active_scenarios`, not combinable). 10 tests
+including two driving a full experiment through `ExperimentRunner`.
+
+**Priority 4 — Byzantine/security-plane attacks (partial).** Only **false quarantine** is
+implemented, as an opt-in `false_quarantine_rate` extension to the existing, unmodified
+`app/security/detection.py::step` (default 0.0 = strict no-op). **Not implemented:** sentinel
+compromise, threat-memory poisoning, attestation replay, Byzantine collusion — none of §5's other
+four attacks have any code. Sentinel/`SECURITY_CONTROL` graph nodes exist (priority 1) but are
+purely structural/analysis-only; nothing in the codebase can compromise them yet.
+
+**Priority 5 — metrics (partial).** `app/metrics/compute.py` + `GET /.../metrics`:
+`compromise_fraction`, `retained_utility`, `blast_radius_fraction`, `privileged_exposure`,
+`security_plane_integrity`, `attack_success_rate`, `false_quarantine_rate` — all implemented and
+tested. **Not implemented:** detection latency and containment latency (§6) — both need per-event
+tick correlation (first `ANOMALY_DETECTED`/`AGENT_QUARANTINED` tick minus `tick_compromised`) that
+this pass deliberately didn't approximate rather than ship an unverified definition.
+
+**Priority 6 — causal replay/observability (done, small delta).** This was already substantially
+covered by the pre-existing Phase 1.5 event-log persistence/replay/comparison infrastructure. The
+one gap — reconstructing a single node's compromise chain — is closed by
+`GET /.../analysis/provenance`, reusing priority 1's `analysis.provenance` unchanged.
+
+**Priority 7 — remediation engine (done, narrower than originally sketched).**
+`app/remediation/analyze.py::recommend` only recommends `detector_sensitivity` and
+`defense_enabled` — the two config levers with a *causally verified* effect on
+`app/security/detection.py`'s actual behavior. §7's original sketch (sentinel placement, credential
+consolidation) is **not implemented**: those levers have no effect on any scenario or defense logic
+in this codebase today, so recommending them would be an unverifiable, fabricated "fix." This was
+checked, not assumed: `test_routes_remediation.py::test_applying_the_recommendation_measurably_improves_compromise_fraction`
+proves a real recommendation, applied to a fresh experiment, actually improves the targeted metric.
+
+**Priority 8 — frontend integration (partial, data layer only).** `frontend/src/lib/api/client.ts`
+gained typed fetch wrappers for all seven new endpoints, with unit tests. **Not implemented:** any
+new visual component (typed-node rendering by `NodeType`, an attack-path/blast-radius panel, a
+remediation panel) — this session has no way to drive a real browser to verify new UI renders
+correctly, and shipping unverified changes to the dashboard's hero visual (`NetworkGraph.tsx`,
+explicitly called out as a delicate first-class surface in `docs/BRIEF.md` §8) was judged worse
+than not shipping them.
+
+### Explicitly remaining (accurate as of the last commit this session; next in priority order)
+1. Sentinel compromise, threat-memory poisoning, attestation replay, Byzantine collusion (§5).
+2. Detection latency / containment latency metrics (§6).
+3. Graph-structural remediation rules (§7) — blocked on (1): they need sentinel/credential nodes to
+   actually participate in some scenario's mechanics before a recommendation about them is
+   verifiable.
+4. Frontend visual components (§9 priority 8 above) — needs a real browser/visual-verification pass
+   this session didn't have.
+5. LangGraph/MCP/OpenTelemetry adapters (priority 9) — no work started; genuinely out of scope
+   until 1–4 above are solid, per the priority order in the originating instruction, and per
+   `docs/BRIEF.md`'s explicit "not a generic agent framework, don't compete with LangGraph."
+6. CI/staging validation beyond the existing `make test`/`make lint` gates (priority 10) — every
+   change this session already runs through those gates; a dedicated staging environment or
+   additional CI stages were not built.
+
+Treat the git log and test suite as ground truth over this section if they ever disagree.

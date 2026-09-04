@@ -2,9 +2,11 @@
 
 **AgentNet is a Multi-Agent Adversarial Resilience Platform.** It models interconnected agents,
 tools/MCP servers, credentials, resources, and security controls as a typed security graph; runs
-reproducible adversarial scenarios (including adaptive and Byzantine/security-plane attacks)
-against it; measures compromise propagation and defense resilience; and recommends and re-tests
-fixes. See `docs/PLAN.md` for the current architecture, domain model, and roadmap.
+reproducible adversarial scenarios (a deterministic adaptive attacker, and a first
+security-plane/Byzantine attack — see "Security graph, scenarios, metrics, remediation" below for
+exactly what's implemented so far vs. planned); measures compromise propagation and defense
+resilience; and recommends and re-tests fixes. See `docs/PLAN.md` for the current architecture,
+domain model, and roadmap, including the precise as-built status.
 
 Users construct isolated networks of simulated autonomous agents, run controlled adversarial
 scenarios, watch compromise propagate in real time, inspect fine-grained security telemetry, and
@@ -61,6 +63,38 @@ implemented.
   real model call is irreducible async I/O that the engine's pure/synchronous `step()` contract
   forbids.
 
+## Security graph, scenarios, metrics, remediation
+
+On top of the foundation above, AgentNet models a **typed security graph** — agents, tools/MCP
+servers, credentials, resources, and sentinels/security-control nodes, connected by typed edges
+(communication, trust, tool/resource access, credential use, monitoring, quarantine authority) —
+and runs **pluggable attack scenarios** against it. `docs/PLAN.md` is the authoritative reference;
+this is a short, honest summary of what's implemented right now:
+
+- **`GET /api/experiments/{id}/graph`** and **`.../analysis/{attack-paths,blast-radius,
+  critical-nodes,provenance}`** — the typed graph and its analysis (reachability, blast radius,
+  choke points, compromise provenance), computed on demand from the live experiment, no new
+  database tables.
+- **Pluggable scenarios** (`active_scenarios` config field): `"propagation"` (the original
+  probabilistic attacker, default, unchanged) and `"adaptive_attacker"` (deterministic
+  observe→choose→attack→adapt — switches between an aggressive highest-degree-neighbor strategy
+  and a stealthier lowest-degree one based on the observed quarantine rate).
+- **`false_quarantine_rate`** config field: an opt-in security-plane attack where a subverted
+  quarantine authority falsely quarantines healthy agents (defaults to `0.0`, a strict no-op).
+- **`GET /api/experiments/{id}/metrics`** — compromise fraction, retained utility, blast-radius
+  fraction, privileged exposure, security-plane integrity, attack success rate, false-quarantine
+  rate.
+- **`GET /api/experiments/{id}/remediation`** — a deterministic, rule-based recommendation (raise
+  `detector_sensitivity`, or enable `defense_enabled`) whenever compromise is high; re-testing it is
+  just starting a new experiment with the recommended config and comparing metrics — reusing the
+  comparison feature below with no new machinery.
+
+**Not yet built:** sentinel compromise, threat-memory poisoning, attestation replay, Byzantine
+collusion; detection/containment-latency metrics; graph-structural remediation (e.g. sentinel
+placement); any new frontend visualization for the graph/metrics/remediation endpoints above (the
+typed API client exists in `frontend/src/lib/api/client.ts`, but no UI consumes it yet); LangGraph/
+MCP/OpenTelemetry adapters. See `docs/PLAN.md` §9 for the precise list and why each was deferred.
+
 ## Getting started
 
 ### Option A: Docker Compose (recommended — no manual Postgres/Python/Node setup)
@@ -106,8 +140,7 @@ Open `http://localhost:3000`.
    and when, quarantine status, and an incident timeline of everything observed for that agent
    in this session.
 5. Use **Pause**/**Resume** to freeze and continue the run exactly where it left off, and
-   **Speed** to change pacing without changing the outcome — determinism is unaffected by both
-   (`docs/M1_PLAN.md` §10 explains why).
+   **Speed** to change pacing without changing the outcome — determinism is unaffected by both.
 6. **Reset** stops the current run and starts a fresh one with the exact same configuration and
    seed — the propagation/quarantine sequence should match the prior run.
 7. Once a run has finished or been reset, editing the form and clicking **Start** again launches
