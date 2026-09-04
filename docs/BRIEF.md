@@ -5,6 +5,14 @@
 > **How to use it:** read this before making architectural or product decisions. Do **not** load it into every session — it is referenced deliberately (`@docs/BRIEF.md`), not auto-loaded. Durable per-turn rules live in `CLAUDE.md`.
 >
 > **Status:** the six decisions formerly open in §13 are now resolved — §13 records them, `docs/SPEC.md` carries the mechanism. Questions of that kind that are *not* recorded there remain undecided: surface them and ask rather than inventing an answer.
+>
+> **Pivot notice:** the product is evolving from the M0→Phase 2 vertical-slice roadmap described
+> below into a **Multi-Agent Adversarial Resilience Platform** — a typed security graph (agents,
+> tools/MCP, credentials, resources, sentinels, security controls), pluggable adversarial
+> scenarios, an adaptive attacker, and a remediation loop. `docs/PLAN.md` is the authoritative
+> architecture/roadmap document for that direction. The product pillars, engineering principles,
+> and event-system mechanism below remain accurate and are preserved; the §11 roadmap and §3
+> milestone framing are superseded by `docs/PLAN.md`.
 
 ---
 

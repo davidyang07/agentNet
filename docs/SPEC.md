@@ -3,6 +3,12 @@
 > **Scope:** the §4 vertical slice only. This document is subordinate to `docs/BRIEF.md`; where they conflict, the brief wins on intent and this document wins on mechanism.
 >
 > **Status:** all six §13 open decisions are resolved below (§1), plus one adjacent transport choice. No decision here may be changed silently — amend §1 and note the date.
+>
+> **Pivot notice:** this document specifies the M0 vertical slice mechanism (event schema,
+> RNG, engine clock, snapshot/delta protocol). That mechanism is preserved unchanged under the
+> product's evolution into a Multi-Agent Adversarial Resilience Platform — see `docs/PLAN.md`
+> for the current authoritative architecture (typed security graph, pluggable attack scenarios,
+> adaptive attacker, remediation) that builds on top of it.
 
 ---
 

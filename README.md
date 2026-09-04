@@ -1,6 +1,10 @@
 # AgentNet
 
-**AgentNet is a multi-agent AI security simulation, observability, and defense platform.**
+**AgentNet is a Multi-Agent Adversarial Resilience Platform.** It models interconnected agents,
+tools/MCP servers, credentials, resources, and security controls as a typed security graph; runs
+reproducible adversarial scenarios (including adaptive and Byzantine/security-plane attacks)
+against it; measures compromise propagation and defense resilience; and recommends and re-tests
+fixes. See `docs/PLAN.md` for the current architecture, domain model, and roadmap.
 
 Users construct isolated networks of simulated autonomous agents, run controlled adversarial
 scenarios, watch compromise propagate in real time, inspect fine-grained security telemetry, and
@@ -18,7 +22,9 @@ test automated containment.
 > produces genuinely non-deterministic, real-model output, and that path is opt-in and requires
 > manual infrastructure setup (see "Real (LLM-backed) agents" below).
 
-Product context lives in `docs/BRIEF.md`; the binding technical spec is `docs/SPEC.md`.
+The authoritative architecture/roadmap is `docs/PLAN.md`. Original product context lives in
+`docs/BRIEF.md`; the M0 mechanism spec (event schema, RNG, engine clock) is `docs/SPEC.md` and
+remains in force.
 
 **Current status:** Milestone 0 (the vertical slice: engine → events → API → WebSocket → live
 graph), Milestone 1 (quarantine defense, metrics, agent detail, Start/Pause/Reset/Speed controls,
