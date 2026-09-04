@@ -47,3 +47,7 @@ class CriticalNodeView(BaseModel):
 
 class CriticalNodesResponse(BaseModel):
     nodes: list[CriticalNodeView]
+
+
+class ProvenanceResponse(BaseModel):
+    chain: list[str]

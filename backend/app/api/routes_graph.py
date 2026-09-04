@@ -8,7 +8,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
 
-from app.graph.analysis import attack_paths, blast_radius, critical_nodes
+from app.graph.analysis import attack_paths, blast_radius, critical_nodes, provenance
 from app.graph.builder import build_security_graph
 from app.graph.security_graph import SecurityGraph
 from app.graph.types import NodeType
@@ -22,6 +22,7 @@ from app.schemas.graph import (
     CriticalNodeView,
     GraphEdgeView,
     GraphNodeView,
+    ProvenanceResponse,
     SecurityGraphView,
 )
 from app.schemas.metrics import MetricsResponse
@@ -81,6 +82,20 @@ async def get_critical_nodes(experiment_id: UUID, top_n: int = 5) -> CriticalNod
     return CriticalNodesResponse(
         nodes=[CriticalNodeView(id=node_id, betweenness=score) for node_id, score in ranked]
     )
+
+
+@router.get("/{experiment_id}/analysis/provenance", response_model=ProvenanceResponse)
+async def get_provenance(experiment_id: UUID, node_id: str) -> ProvenanceResponse:
+    """Backtraces node_id to its ultimate (patient zero) source via the
+    compromised_by chain already carried by AgentNode -- reconstructs the
+    causal attack trace (docs/PLAN.md §9's "causal replay/observability")
+    without any new persistence, reusing app/graph/analysis.py::provenance
+    (already implemented and tested in priority 1)."""
+    runner = _runner_for(experiment_id)
+    if node_id not in runner.state.nodes:
+        raise HTTPException(status_code=404, detail="node not found in this experiment")
+    compromised_by = {n.id: n.compromised_by for n in runner.state.nodes.values()}
+    return ProvenanceResponse(chain=provenance(compromised_by, node_id))
 
 
 @router.get("/{experiment_id}/metrics", response_model=MetricsResponse)

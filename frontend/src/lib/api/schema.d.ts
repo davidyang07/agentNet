@@ -175,6 +175,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/experiments/{experiment_id}/analysis/provenance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Provenance
+         * @description Backtraces node_id to its ultimate (patient zero) source via the
+         *     compromised_by chain already carried by AgentNode -- reconstructs the
+         *     causal attack trace (docs/PLAN.md §9's "causal replay/observability")
+         *     without any new persistence, reusing app/graph/analysis.py::provenance
+         *     (already implemented and tested in priority 1).
+         */
+        get: operations["get_provenance_api_experiments__experiment_id__analysis_provenance_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/experiments/{experiment_id}/metrics": {
         parameters: {
             query?: never;
@@ -678,6 +702,11 @@ export interface components {
              */
             agent_kind: "simulated" | "real";
         };
+        /** ProvenanceResponse */
+        ProvenanceResponse: {
+            /** Chain */
+            chain: string[];
+        };
         /** SecurityGraphView */
         SecurityGraphView: {
             /** Nodes */
@@ -1085,6 +1114,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CriticalNodesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_provenance_api_experiments__experiment_id__analysis_provenance_get: {
+        parameters: {
+            query: {
+                node_id: string;
+            };
+            header?: never;
+            path: {
+                experiment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProvenanceResponse"];
                 };
             };
             /** @description Validation Error */
