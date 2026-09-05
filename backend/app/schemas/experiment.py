@@ -39,7 +39,17 @@ class ExperimentConfig(BaseModel):
     credential_count: int = Field(0, ge=0, le=20)
     resource_count: int = Field(0, ge=0, le=20)
     sentinel_count: int = Field(0, ge=0, le=5)
-    active_scenarios: list[str] = Field(default_factory=lambda: ["propagation"])
+    # "prompt_injection" (the real-agent lateral prompt-injection scenario,
+    # docs/PHASE_2_PLAN.md §7) is in the default so real_agent_count > 0
+    # keeps working exactly as before this field started gating async
+    # scenarios too (docs/PLAN.md §3) -- every existing real-agent test
+    # relies on it running whenever eligible without setting this field.
+    # Excluding it from an explicit active_scenarios list now genuinely
+    # disables it, which was not previously possible short of
+    # real_agent_count=0.
+    active_scenarios: list[str] = Field(
+        default_factory=lambda: ["propagation", "prompt_injection"]
+    )
 
     # Adaptive attacker (docs/PLAN.md §4): only consulted by the
     # "adaptive_attacker" scenario, which is opt-in via active_scenarios --

@@ -12,6 +12,14 @@ def test_experiment_config_new_fields_have_m0_preserving_defaults():
     assert config.initial_compromised == "highest_degree"
 
 
+def test_default_active_scenarios_includes_prompt_injection():
+    # docs/PLAN.md §3: real_agent_count > 0 must keep working exactly as
+    # before app/scenarios/registry.py::run_async_scenarios started gating
+    # by active_scenarios, so the default must include "prompt_injection".
+    config = ExperimentConfig(seed=1)
+    assert config.active_scenarios == ["propagation", "prompt_injection"]
+
+
 def test_detector_sensitivity_accepts_explicit_value_in_bounds():
     config = ExperimentConfig(seed=1, detector_sensitivity=0.75)
     assert config.detector_sensitivity == 0.75

@@ -159,17 +159,18 @@ tool_count: int = Field(0, ge=0, le=20)
 credential_count: int = Field(0, ge=0, le=20)
 resource_count: int = Field(0, ge=0, le=20)
 sentinel_count: int = Field(0, ge=0, le=5)
-active_scenarios: list[str] = Field(default_factory=lambda: ["propagation"])
+active_scenarios: list[str] = Field(default_factory=lambda: ["propagation", "prompt_injection"])
 adaptive_detection_threshold: float = Field(0.3, ge=0.0, le=1.0)   # §4, only used by "adaptive_attacker"
 false_quarantine_rate: float = Field(0.0, ge=0.0, le=1.0)           # §5, false-quarantine attack
 ```
 
-`active_scenarios` lists sync-scenario-registry keys to run each tick, in list order
-(deterministic). **As implemented (see §9), the async registry is not yet gated by
-`active_scenarios`** — `orchestrator/runner.py` still runs every registered async scenario
-unconditionally whenever a gateway is present, exactly matching pre-refactor behavior (each async
-scenario already no-ops with no eligible source/target pair) rather than the auto-append design
-originally sketched here.
+`active_scenarios` lists both sync- and async-scenario-registry keys to run each tick, in list order
+(deterministic) — **implemented**, closing the gap this section used to flag: the default includes
+`"prompt_injection"` so `real_agent_count > 0` keeps working exactly as before this field started
+gating async scenarios too, and excluding it from an explicit `active_scenarios` list now genuinely
+disables it (previously impossible short of `real_agent_count=0`). Simpler than the auto-append
+design originally sketched here — no config-derived list mutation, just the default value itself
+carrying both scenario names.
 
 ### 2.5 New API surface (additive; flows through the existing OpenAPI→`schema.d.ts` typegen
 pipeline automatically — `make types` picks these up with zero new frontend-contract machinery)
@@ -207,7 +208,7 @@ a browser.
 
 ---
 
-## 3. Pluggable scenario framework (**implemented** — see §9 for the one gap)
+## 3. Pluggable scenario framework (**implemented**)
 
 `app/scenarios/base.py`:
 
@@ -472,16 +473,23 @@ requirements.
    is written.
 3. A dedicated staging environment (rest of priority 10) — CI itself is now solid; a staging
    deploy target was never in scope for a local-first, no-paid-credentials project.
-4. Two known simplifications, neither touched across any session so far: the async scenario registry
-   still isn't gated by `active_scenarios` (§3) — gating it by membership would silently stop
-   `"prompt_injection"` from running by default (today's `active_scenarios` default,
-   `["propagation"]`, doesn't include it, and no real-agent test sets it explicitly), which is a real
-   behavior change needing a deliberate design decision (e.g. auto-appending it when
-   `real_agent_count > 0`), not a mechanical fix — and the graph-structural remediation lever
-   originally sketched in §7 (credential consolidation) remains unimplemented for want of a causal
-   hook.
+4. The graph-structural remediation lever originally sketched in §7 (credential consolidation)
+   remains unimplemented for want of a causal hook — no scenario or defense logic in this codebase
+   reacts to credential topology today, so recommending changes to it would be unverifiable.
 5. This session again had no local Postgres/Docker access, so persistence/history/migration tests
    were not re-run (untouched by this session's changes; last verified under the first session's
    environment, and CI already covers them on every push via a real Postgres service container).
+
+### Closed this session: async scenario registry gating (§3)
+Previously flagged here as a "known simplification": `run_async_scenarios` now gates by
+`active_scenarios` exactly like `run_sync_scenarios` does, rather than running every registered
+async scenario unconditionally. The default `active_scenarios` gained `"prompt_injection"` alongside
+`"propagation"` so `real_agent_count > 0` keeps working exactly as before for every existing test and
+API caller (no test asserted the literal old default `["propagation"]`, so this is safe); excluding
+`"prompt_injection"` from an explicit `active_scenarios` list now genuinely disables it, which was
+not previously possible short of `real_agent_count=0`. `_warn_if_truly_unknown` was added so a name
+valid in the *other* registry (e.g. `"prompt_injection"` seen by the sync path) doesn't spuriously
+log as an unrecognized scenario. 8 new tests covering the default, the new exclusion capability, and
+an empty-list no-op.
 
 Treat the git log and test suite as ground truth over this section if they ever disagree.
