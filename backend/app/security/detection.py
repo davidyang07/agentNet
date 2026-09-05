@@ -2,8 +2,33 @@ from dataclasses import replace
 
 from app.engine.rng import rng
 from app.engine.state import SecurityState, WorldState
+from app.graph.builder import build_security_graph
+from app.graph.types import EdgeType, NodeType
 from app.schemas.events import EventDraft, EventType
 from app.schemas.experiment import ExperimentConfig
+
+
+def _suppressed_by_compromised_sentinels(state: WorldState, config: ExperimentConfig) -> set[str]:
+    """Sentinel compromise (docs/PLAN.md §5): a subverted sentinel's
+    ANOMALY_DETECTED emissions become unreliable for the agents it monitors.
+    Cheap and pure (like every other on-demand graph build in this codebase)
+    -- only builds the graph when sentinels exist at all, so the zero-sentinel
+    default path never pays for it."""
+    if config.sentinel_count <= 0 or not state.compromised_graph_nodes:
+        return set()
+    graph = build_security_graph(state, config)
+    compromised_sentinels = {
+        n.id
+        for n in graph.nodes_of_type(NodeType.SENTINEL)
+        if n.id in state.compromised_graph_nodes
+    }
+    if not compromised_sentinels:
+        return set()
+    return {
+        edge.target
+        for edge in graph.edges(frozenset({EdgeType.MONITORS}))
+        if edge.source in compromised_sentinels
+    }
 
 
 def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[EventDraft]]:
@@ -14,10 +39,12 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
     if not config.defense_enabled:
         return state, []
 
+    suppressed = _suppressed_by_compromised_sentinels(state, config)
+
     compromised = sorted(
         node_id
         for node_id, node in state.nodes.items()
-        if node.security_state == SecurityState.COMPROMISED
+        if node.security_state == SecurityState.COMPROMISED and node_id not in suppressed
     )
 
     drafts: list[EventDraft] = []

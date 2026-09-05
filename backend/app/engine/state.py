@@ -33,3 +33,12 @@ class WorldState:
     tick: int
     nodes: dict[str, AgentNode]
     edges: tuple[tuple[str, str], ...]
+    # Byzantine/security-plane attacks (docs/PLAN.md §5): ids of non-agent
+    # security-graph nodes (SENTINEL, SECURITY_CONTROL, CREDENTIAL, ...)
+    # currently compromised. Agent compromise stays tracked on AgentNode
+    # itself (unchanged); this set exists because those node kinds have no
+    # WorldState-resident dataclass of their own -- app/graph/builder.py
+    # reads it to set a GraphNode's security_state, exactly mirroring how it
+    # already reads AgentNode.security_state for AGENT nodes. Defaults to
+    # empty, so every existing WorldState() call site is unaffected.
+    compromised_graph_nodes: frozenset[str] = frozenset()

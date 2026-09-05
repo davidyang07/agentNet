@@ -50,6 +50,23 @@ class ExperimentConfig(BaseModel):
     # Defaults to 0.0, a strict no-op preserving every existing behavior.
     false_quarantine_rate: float = Field(0.0, ge=0.0, le=1.0)
 
+    # Sentinel compromise (docs/PLAN.md §5): per-tick probability that a
+    # SENTINEL monitoring at least one currently-COMPROMISED agent is itself
+    # subverted. Defaults to 0.0 (no-op); only meaningful with sentinel_count > 0.
+    sentinel_compromise_rate: float = Field(0.0, ge=0.0, le=1.0)
+
+    # Attestation replay (docs/PLAN.md §5): per-tick probability a
+    # COMPROMISED agent presents a stale nonce instead of the current tick's.
+    # Defaults to 0.0 (no-op); only meaningful with sentinel_count > 0 (the
+    # attestation_service control node is part of the security plane).
+    attestation_replay_rate: float = Field(0.0, ge=0.0, le=1.0)
+
+    # Byzantine collusion (docs/PLAN.md §5): per-tick probability that a pair
+    # of COMPROMISED agents jointly exceed credential access scope on a
+    # CREDENTIAL neither legitimately holds. Defaults to 0.0 (no-op); only
+    # meaningful with credential_count > 0.
+    byzantine_collusion_rate: float = Field(0.0, ge=0.0, le=1.0)
+
 
 class NodeView(BaseModel):
     id: str

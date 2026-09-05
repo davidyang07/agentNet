@@ -11,10 +11,19 @@ time with no separate persistence for graph structure.
 from __future__ import annotations
 
 from app.engine.rng import rng
-from app.engine.state import WorldState
+from app.engine.state import SecurityState, WorldState
 from app.graph.security_graph import SecurityGraph
 from app.graph.types import EdgeType, GraphEdge, GraphNode, NodeType
 from app.schemas.experiment import ExperimentConfig
+
+
+def _state_for(node_id: str, compromised_graph_nodes: frozenset[str]) -> SecurityState:
+    """Non-agent graph nodes (tools, credentials, sentinels, ...) have no
+    WorldState-resident dataclass of their own -- WorldState.compromised_graph_nodes
+    is their compromise record (docs/PLAN.md §5)."""
+    if node_id in compromised_graph_nodes:
+        return SecurityState.COMPROMISED
+    return SecurityState.HEALTHY
 
 
 def build_security_graph(state: WorldState, config: ExperimentConfig) -> SecurityGraph:
@@ -46,8 +55,10 @@ def build_security_graph(state: WorldState, config: ExperimentConfig) -> Securit
         )
 
     _attach_tools(graph, sorted_agent_ids, config)
-    _attach_credentials_and_resources(graph, sorted_agent_ids, config)
-    _attach_security_plane(graph, sorted_agent_ids, config)
+    _attach_credentials_and_resources(
+        graph, sorted_agent_ids, config, state.compromised_graph_nodes
+    )
+    _attach_security_plane(graph, sorted_agent_ids, config, state.compromised_graph_nodes)
 
     return graph
 
@@ -68,7 +79,10 @@ def _attach_tools(graph: SecurityGraph, agent_ids: list[str], config: Experiment
 
 
 def _attach_credentials_and_resources(
-    graph: SecurityGraph, agent_ids: list[str], config: ExperimentConfig
+    graph: SecurityGraph,
+    agent_ids: list[str],
+    config: ExperimentConfig,
+    compromised_graph_nodes: frozenset[str],
 ) -> None:
     if not agent_ids:
         return
@@ -77,7 +91,13 @@ def _attach_credentials_and_resources(
 
     for i in range(config.credential_count):
         credential_id = f"credential-{i:03d}"
-        graph.add_node(GraphNode(id=credential_id, node_type=NodeType.CREDENTIAL))
+        graph.add_node(
+            GraphNode(
+                id=credential_id,
+                node_type=NodeType.CREDENTIAL,
+                security_state=_state_for(credential_id, compromised_graph_nodes),
+            )
+        )
         draw = rng(config.seed, 0, credential_id, "credential_holder")
         holder = draw.choice(agent_ids)
         graph.add_edge(
@@ -91,7 +111,10 @@ def _attach_credentials_and_resources(
 
 
 def _attach_security_plane(
-    graph: SecurityGraph, agent_ids: list[str], config: ExperimentConfig
+    graph: SecurityGraph,
+    agent_ids: list[str],
+    config: ExperimentConfig,
+    compromised_graph_nodes: frozenset[str],
 ) -> None:
     if config.sentinel_count <= 0 or not agent_ids:
         return
@@ -103,7 +126,12 @@ def _attach_security_plane(
         ("quarantine_authority", "control-quarantine"),
     ):
         graph.add_node(
-            GraphNode(id=control_id, node_type=NodeType.SECURITY_CONTROL, attrs={"kind": kind})
+            GraphNode(
+                id=control_id,
+                node_type=NodeType.SECURITY_CONTROL,
+                security_state=_state_for(control_id, compromised_graph_nodes),
+                attrs={"kind": kind},
+            )
         )
 
     for agent_id in agent_ids:
@@ -117,7 +145,13 @@ def _attach_security_plane(
 
     for i in range(config.sentinel_count):
         sentinel_id = f"sentinel-{i:03d}"
-        graph.add_node(GraphNode(id=sentinel_id, node_type=NodeType.SENTINEL))
+        graph.add_node(
+            GraphNode(
+                id=sentinel_id,
+                node_type=NodeType.SENTINEL,
+                security_state=_state_for(sentinel_id, compromised_graph_nodes),
+            )
+        )
         graph.add_edge(
             GraphEdge(
                 source=sentinel_id,

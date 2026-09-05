@@ -35,6 +35,16 @@ class EventType(StrEnum):
     THREAT_SIGNATURE_PUBLISHED = "THREAT_SIGNATURE_PUBLISHED"
     THREAT_SIGNATURE_RECEIVED = "THREAT_SIGNATURE_RECEIVED"
     AGENT_RECOVERED = "AGENT_RECOVERED"
+    # Byzantine/security-plane attacks (docs/PLAN.md §5): the generic
+    # compromise substrate for scenarios where the violation itself -- not a
+    # probabilistic draw -- is the meaningful unit (metadata.violation_type
+    # discriminates, e.g. "sentinel_subverted", "credential_scope_exceeded").
+    POLICY_VIOLATION = "POLICY_VIOLATION"
+    # Attestation replay (docs/PLAN.md §5): ATTESTATION_VERIFIED carries
+    # metadata.replayed=true when a stale nonce is presented -- mechanical,
+    # deterministic, no LLM judge needed.
+    ATTESTATION_ISSUED = "ATTESTATION_ISSUED"
+    ATTESTATION_VERIFIED = "ATTESTATION_VERIFIED"
 
 
 # M0 emits only this subset (SPEC §3.5).
