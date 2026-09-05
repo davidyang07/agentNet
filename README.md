@@ -97,18 +97,23 @@ this is a short, honest summary of what's implemented right now:
   below with no new machinery.
 - **`SecurityInsightsPanel`** — a dashboard sidebar surfacing all of the above (metrics, a non-agent
   node-type summary, critical nodes, remediation recommendations) without touching the network
-  graph visualization itself.
+  graph visualization itself. Also rendered on `/history/[id]` against a persisted run's
+  reconstructed final state (via the `/replay/...` endpoints below), so the same security-plane
+  view works for both a live and a historical experiment.
 - **`GET /api/experiments/{id}/otel-trace`** — the experiment's event log exported as an OTLP/JSON
   trace, for ingestion by any OpenTelemetry-compatible observability backend.
+- **History/replay parity** — `GET /api/experiments/{id}/replay/{graph,metrics,remediation,
+  analysis/*}` reconstruct a persisted experiment's exact final state from `(seed, config,
+  final_sim_tick)` (`app/engine/replay.py`, no event-log replay needed) and mirror the live
+  endpoints' response shapes field-for-field. The comparison view (`frontend/src/lib/comparison/`)
+  fetches the same rich `MetricsResponse` for both a live and a historical arm.
 
 **Not yet built:** typed-node rendering inside the network graph visualization itself (still the
 dashboard's one delicate, unmodified hero visual — no browser-verification tooling has been
 available in any session so far); MCP integration (deliberately not attempted; LangGraph topology
 import *is* implemented — see below); graph-structural remediation beyond `sentinel_count` (e.g.
 credential consolidation — no causal hook for it exists yet); a staging deployment environment
-(out of scope for a local-first project); history/replay equivalents of the metrics/graph/analysis
-endpoints (so the comparison view can show security-plane metrics for a historical run, not just a
-live one). See `docs/PLAN.md` §9/§10 for the precise list.
+(out of scope for a local-first project). See `docs/PLAN.md` §9/§11 for the precise list.
 
 ## Getting started
 
@@ -238,9 +243,11 @@ here; every other command below runs unaffected against the mock provider.
 ```bash
 cd backend
 .venv/bin/python scripts/run_benchmark.py             # or: make benchmark (from repo root)
+.venv/bin/python scripts/run_benchmark_audit.py        # or: make benchmark-audit
 .venv/bin/python scripts/run_golden_demo.py            # or: make golden-demo
 .venv/bin/python scripts/run_external_import_demo.py   # or: make import-demo
 .venv/bin/python scripts/agentshield_test.py            # or: make agentshield-test
+.venv/bin/python scripts/agentshield_test.py --json     # machine-readable output for CI log parsers
 ```
 
 - **`run_benchmark.py`** runs 14 attack-scenario presets (propagation, the deterministic adaptive
@@ -249,18 +256,26 @@ cd backend
   2,500-agent scale run), 7 defense-posture variants of the same attack, and a before/after
   remediation comparison — all zero-real-provider-call, seeded, and reproducible. Writes
   `backend/.artifacts/benchmark/{results.json,report.md}`.
+- **`run_benchmark_audit.py`** sweeps all 14 attack scenarios and all 7 defense variants (21 configs)
+  for a remediation opportunity, re-tests every one that triggers a recommendation, and ranks the
+  real measured `retained_utility` improvement — surfacing the single strongest remediation result
+  across the whole matrix instead of one hand-picked case. Strongest result as of this writing:
+  `propagation_no_defense` (enable defense), `retained_utility` `0.0` → `0.8875`. Writes
+  `backend/.artifacts/benchmark/{audit.json,audit.md}`.
 - **`run_golden_demo.py`** runs one scenario whose real event log narrates the full story: indirect
   prompt injection → propagation → an initial legitimate quarantine → the adaptive attacker's
   deterministic strategy switch → a sentinel subverted mid-run → a false threat signature (trust
   manipulation) → AgentNet's remediation engine flagging the `security_plane_integrity` gap → a
-  re-run with the fix applied, showing a real, reproducible improvement. Writes
-  `backend/.artifacts/golden_demo/{report.md,result.json}`.
+  re-run with the fix applied, showing a real, reproducible improvement. `report.md` leads with a
+  curated "Key beats" summary (collapsing the many repeated propagation lines) above the full
+  tick-by-tick narrative. Writes `backend/.artifacts/golden_demo/{report.md,result.json}`.
 - **`run_external_import_demo.py`** imports the real LangGraph sample app's topology
   (`examples/langgraph_research_agents/`) and runs an adversarial scenario against it — see that
   directory's README for what it is and how to regenerate its committed `topology.json`.
 - **`agentshield_test.py`** is a CI-friendly pass/fail gate over a fast subset of the above (the
   defense comparison plus the golden demo) — the `agentshield test` productization entry point;
-  wired into CI as its own job.
+  wired into CI as its own job. Pass `--json` for a single machine-readable line
+  (`{"ok": bool, "findings": [...], "duration_s": ...}`) instead of the default text output.
 
 `docs/PLAN.md` §10 records real measured numbers from an actual run of each of these — e.g., on the
 fixed defense-comparison attack, `defense_off` yields `retained_utility=0.0` vs.

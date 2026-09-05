@@ -592,15 +592,15 @@ manual `make benchmark`). Wired into CI as a new, additive `agentshield-test` jo
 (`.github/workflows/ci.yml`) alongside the existing `backend`/`frontend`/`schema-drift` jobs, none
 of which were modified.
 
-### Next recommended milestone
-History/replay equivalents of the `/metrics`, `/graph`, and `/analysis/*` endpoints (§2.5's live
-path was implemented first; a persisted-run equivalent was flagged as future work then and still
-is), so the frontend's existing comparison view (`frontend/src/lib/comparison/`) can show
-before/after security-plane metrics for a historical remediation re-test — today that comparison
-only surfaces stream-derived counts (total/healthy/compromised/quarantined), not the richer
-`MetricsResponse` fields this session's benchmark work relies on. That, plus an actual browser pass
-on `NetworkGraph.tsx` typed-node rendering and a real Qwen/vLLM validation run once a GPU endpoint
-is available, are the three highest-value remaining items.
+### Next recommended milestone (closed — see §11)
+~~History/replay equivalents of the `/metrics`, `/graph`, and `/analysis/*` endpoints...~~ **Done
+in §11 below**: `app/engine/replay.py` + seven new `/replay/...` routes in `routes_history.py`, and
+the frontend comparison view now fetches the same rich `MetricsResponse` for both live and
+historical arms. The two items below remain the highest-value open work:
+1. An actual browser pass on `NetworkGraph.tsx` typed-node rendering (no browser/screenshot tool
+   has been available in any session so far, this one included — see §11's confirmation).
+2. A real Qwen/vLLM validation run once a GPU endpoint is available (exact command in README's
+   "Real-model benchmark/golden-demo validation" section).
 
 ### Closed this session: async scenario registry gating (§3)
 Previously flagged here as a "known simplification": `run_async_scenarios` now gates by
@@ -613,5 +613,86 @@ not previously possible short of `real_agent_count=0`. `_warn_if_truly_unknown` 
 valid in the *other* registry (e.g. `"prompt_injection"` seen by the sync path) doesn't spuriously
 log as an unrecognized scenario. 8 new tests covering the default, the new exclusion capability, and
 an empty-list no-op.
+
+## 11. Continuation: history/replay parity, remediation audit, CI hardening
+
+Continuing from the product-validation session above (still a clean, green state at commit
+`3db28f9`), this session closed the "Next recommended milestone" plus four more of the user's
+explicitly prioritized gaps. Every number below is copied verbatim from an actual run of the
+commands listed, not invented.
+
+**History/replay parity (done).** `app/engine/replay.py::reconstruct_final_state(config,
+target_tick)` reconstructs a persisted experiment's exact final `WorldState` by re-running
+`build_world`/`advance`/`run_async_scenarios` bounded by the already-persisted `final_sim_tick`
+column, instead of always running to natural completion like `simulate()` — this matches a
+manually-stopped run's true historical final tick too, not just a naturally-finished one, with zero
+new persistence (world state is a pure function of `(seed, config)`, §2.3). Seven new routes in
+`routes_history.py` (`/replay/graph`, `/replay/analysis/{attack-paths,blast-radius,critical-nodes,
+provenance}`, `/replay/metrics`, `/replay/remediation`) mirror `routes_graph.py`'s live routes
+field-for-field — a Postgres-backed test asserts a live run and its persisted replay produce
+byte-identical JSON for `/graph`, `/metrics`, and `/remediation` given the same `(seed, config)`.
+**Deliberate limitation:** replaying a `model_provider != "mock"` real-agent run is refused
+(`ReplayUnsupportedError` → HTTP 409) — a real LLM isn't guaranteed deterministic, and replay must
+never silently re-issue real API calls. Frontend: `SecurityInsightsPanel` gained a `mode: "live" |
+"replay"` prop (replay mode fetches once, no polling, since a reconstructed run's state is static)
+and is now also rendered on `/history/[id]`. The comparison view's live arm (`runToCompletion.ts`)
+now fetches the same `/metrics` REST response the historical arm (`loadHistoricalArm.ts`, via the
+new `/replay/metrics`) fetches, so `ComparisonView.tsx` shows identical rich fields
+(`security_plane_integrity`, `blast_radius_fraction`, etc.) for both arms instead of the old
+stream-derived total/healthy/compromised/quarantined counts.
+
+**Cross-matrix remediation audit (done).** `app/benchmark/audit.py` +
+`backend/scripts/run_benchmark_audit.py` / `make benchmark-audit`: sweeps all 14 attack-scenario
+presets and all 7 defense-posture variants (21 configs total) through `recommend()` on their own
+baseline metrics, re-tests every one that triggers a recommendation, and ranks the real measured
+`retained_utility` delta. Writes `backend/.artifacts/benchmark/{audit.json,audit.md}`. **Strongest
+real result:** `propagation_no_defense` — "100% of agents are compromised and quarantine defense is
+disabled -- enable it", `retained_utility` 0.0 → 0.8875. A second, real finding worth recording
+honestly: for the combined/adaptive-Byzantine presets (`sentinel_compromise_attack`,
+`combined_byzantine_multi_vector`, `adaptive_plus_byzantine`), raising `sentinel_count` — the only
+lever `recommend()` has for a `security_plane_integrity` gap — does **not** reliably help; it grows
+the security-plane node pool that metric's denominator counts over, and measurably *worsened* both
+`security_plane_integrity` and `retained_utility` for `adaptive_plus_byzantine` (0.833→0.571 and
+0.925→0.6125 respectively) in this run. The golden demo's own sentinel_count 1→2 fix still reliably
+helps because it was empirically tuned for that single-attacker scenario (§9's priority 12 note);
+this is a real, causally-explained boundary on where that lever generalizes, not a bug to paper
+over.
+
+**`agentshield test` CI hardening (done).** `app/benchmark/cli.py::Finding` gained a `duration_s`
+field; `agentshield_test.py` gained a `--json` flag printing one machine-readable line (`{"ok":
+bool, "findings": [...], "duration_s": ...}`) alongside the existing human-readable text mode, which
+now also prints a `passed/total in Xs` summary line. Exit codes (0 pass / 1 fail) and the two
+underlying pass/fail criteria are unchanged.
+
+**LangGraph import regression coverage (strengthened).** Two additions to the existing 7-test
+suite: a golden-file test pinning the real committed numbers in
+`backend/.artifacts/external_import/result.json` (`compromise_fraction == 1.0`,
+`security_plane_integrity == 0.8`), and four error-path tests for `load_topology_json` (missing
+file → `FileNotFoundError`; malformed JSON → `json.JSONDecodeError`; missing required field / bad
+edge shape → pydantic `ValidationError`) — previously untested failure modes.
+
+**Golden demo polish (done).** `summarize_golden_demo_narrative()` collapses the ~60+ repeated
+"compromise propagated to X" lines down to one, so `make golden-demo`'s stdout and the top of
+`report.md` show a short "Key beats" list (attack → adaptation → security-plane failure →
+remediation → re-test, ~28 lines) instead of requiring a scroll through the full tick-by-tick log;
+the full narrative is still written below it in `report.md` for anyone who wants it.
+
+**Priority 7 — typed-node graph rendering (again left untouched, documented).** This session again
+had no browser/screenshot tool available (confirmed via `ToolSearch` at the start of the session),
+so `NetworkGraph.tsx` was deliberately not touched — consistent with every prior session's
+documented decision (§9 item 1). This remains the dashboard's highest-risk surface to change blind.
+
+**Docker/Postgres note:** unlike the prior two sessions (§9 item 5), this session *did* have Docker
+access and started `docker compose up -d postgres` + created an `agentnet_test` database, so the
+full Postgres-backed test suite (previously always skipped) ran for real throughout this session's
+work, including the new history/replay integration tests.
+
+### Remaining after this session
+1. An actual browser pass on `NetworkGraph.tsx` typed-node rendering — still the one open item from
+   §9/§10, for want of any browser/screenshot tool across every session so far.
+2. A real Qwen/vLLM validation run once a GPU endpoint is available — `backend/scripts/
+   run_golden_demo.py --model-provider vllm` (see README's "Real-model benchmark/golden-demo
+   validation" section for the exact setup). Not exercised this session either — no reachable vLLM
+   endpoint.
 
 Treat the git log and test suite as ground truth over this section if they ever disagree.
