@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { DEFAULT_CONFIG } from "@/components/ConfigForm";
+import { formatLatency, formatPercent } from "@/components/SecurityInsightsPanel";
 import type { ExperimentConfig } from "@/lib/api/client";
 import { useComparison, type ArmState } from "@/lib/comparison/useComparison";
 
@@ -29,32 +30,40 @@ export function ArmPanel({ label, arm }: { label: string; arm: ArmState }) {
       {arm.status === "done" && arm.metrics && (
         <dl className="space-y-1 text-slate-400">
           <div className="flex justify-between">
-            <dt>Total</dt>
-            <dd className="font-mono">{arm.metrics.total}</dd>
+            <dt>Compromise fraction</dt>
+            <dd className="font-mono">{formatPercent(arm.metrics.compromise_fraction)}</dd>
           </div>
           <div className="flex justify-between">
-            <dt>Healthy</dt>
-            <dd className="font-mono">{arm.metrics.healthy}</dd>
+            <dt>Retained utility</dt>
+            <dd className="font-mono">{formatPercent(arm.metrics.retained_utility)}</dd>
           </div>
           <div className="flex justify-between">
-            <dt>Compromised</dt>
-            <dd className="font-mono">{arm.metrics.compromised}</dd>
+            <dt>Blast radius</dt>
+            <dd className="font-mono">{formatPercent(arm.metrics.blast_radius_fraction)}</dd>
           </div>
           <div className="flex justify-between">
-            <dt>Quarantined</dt>
-            <dd className="font-mono">{arm.metrics.quarantined}</dd>
-          </div>
-          <div className="flex justify-between border-t border-slate-800 pt-1">
-            <dt>New compromises</dt>
-            <dd className="font-mono">{arm.metrics.newCompromises}</dd>
+            <dt>Privileged exposure</dt>
+            <dd className="font-mono">{arm.metrics.privileged_exposure}</dd>
           </div>
           <div className="flex justify-between">
-            <dt>Total exposure</dt>
-            <dd className="font-mono">{arm.metrics.totalExposure}</dd>
+            <dt>Security-plane integrity</dt>
+            <dd className="font-mono">{formatPercent(arm.metrics.security_plane_integrity)}</dd>
           </div>
           <div className="flex justify-between">
-            <dt>Outbreak duration</dt>
-            <dd className="font-mono">{arm.metrics.outbreakDuration}</dd>
+            <dt>Attack success rate</dt>
+            <dd className="font-mono">{formatPercent(arm.metrics.attack_success_rate)}</dd>
+          </div>
+          <div className="flex justify-between">
+            <dt>False quarantine rate</dt>
+            <dd className="font-mono">{formatPercent(arm.metrics.false_quarantine_rate)}</dd>
+          </div>
+          <div className="flex justify-between">
+            <dt>Detection latency</dt>
+            <dd className="font-mono">{formatLatency(arm.metrics.detection_latency)}</dd>
+          </div>
+          <div className="flex justify-between">
+            <dt>Containment latency</dt>
+            <dd className="font-mono">{formatLatency(arm.metrics.containment_latency)}</dd>
           </div>
         </dl>
       )}

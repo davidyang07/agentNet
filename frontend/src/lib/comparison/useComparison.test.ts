@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ExperimentConfig } from "@/lib/api/client";
-import type { selectMetrics } from "@/lib/stream/reducer";
+import type { ExperimentConfig, MetricsResponse } from "@/lib/api/client";
 
 import { loadHistoricalArm } from "./loadHistoricalArm";
 import { runExperimentToCompletion } from "./runToCompletion";
@@ -59,16 +58,17 @@ function withoutDefenseEnabled(config: ExperimentConfig): Omit<ExperimentConfig,
   ) as Omit<ExperimentConfig, "defense_enabled">;
 }
 
-function fakeMetrics(overrides: Partial<ReturnType<typeof selectMetrics>> = {}) {
+function fakeMetrics(overrides: Partial<MetricsResponse> = {}): MetricsResponse {
   return {
-    total: 60,
-    healthy: 50,
-    compromised: 8,
-    quarantined: 2,
-    newCompromises: 8,
-    totalExposure: 10,
-    outbreakDuration: 12,
-    modelCalls: 0,
+    compromise_fraction: 0.1,
+    retained_utility: 0.8,
+    blast_radius_fraction: 0.2,
+    privileged_exposure: 1,
+    security_plane_integrity: 1,
+    attack_success_rate: 0.3,
+    false_quarantine_rate: 0,
+    detection_latency: 1,
+    containment_latency: 1,
     ...overrides,
   };
 }
@@ -100,7 +100,7 @@ describe("runBothArms", () => {
   });
 
   it("reports each arm's outcome exactly once; A's success and B's failure don't affect each other", async () => {
-    const metricsA = fakeMetrics({ compromised: 3 });
+    const metricsA = fakeMetrics({ compromise_fraction: 0.3 });
     mockedRun.mockImplementation(async (config: ExperimentConfig) => {
       if (config.defense_enabled) {
         return { experimentId: "exp-a", metrics: metricsA };
@@ -125,7 +125,7 @@ describe("runBothArms", () => {
   });
 
   it("reports each arm's outcome exactly once; A's failure and B's success don't affect each other", async () => {
-    const metricsB = fakeMetrics({ compromised: 20 });
+    const metricsB = fakeMetrics({ compromise_fraction: 0.9 });
     mockedRun.mockImplementation(async (config: ExperimentConfig) => {
       if (config.defense_enabled) {
         throw new Error("arm A blew up");
@@ -183,9 +183,9 @@ describe("runBothHistoricalArms", () => {
   it("loads both historical arms independently and reports incomplete alongside metrics", async () => {
     mockedLoadHistorical.mockImplementation(async (experimentId: string) => {
       if (experimentId === "exp-a") {
-        return { experimentId, metrics: fakeMetrics({ compromised: 3 }), incomplete: false };
+        return { experimentId, metrics: fakeMetrics({ compromise_fraction: 0.3 }), incomplete: false };
       }
-      return { experimentId, metrics: fakeMetrics({ compromised: 9 }), incomplete: true };
+      return { experimentId, metrics: fakeMetrics({ compromise_fraction: 0.6 }), incomplete: true };
     });
 
     const updates: Array<{ arm: "A" | "B"; result: ArmResult }> = [];
@@ -197,8 +197,8 @@ describe("runBothHistoricalArms", () => {
 
     const a = updates.find((u) => u.arm === "A")!;
     const b = updates.find((u) => u.arm === "B")!;
-    expect(a.result).toEqual({ metrics: fakeMetrics({ compromised: 3 }), incomplete: false });
-    expect(b.result).toEqual({ metrics: fakeMetrics({ compromised: 9 }), incomplete: true });
+    expect(a.result).toEqual({ metrics: fakeMetrics({ compromise_fraction: 0.3 }), incomplete: false });
+    expect(b.result).toEqual({ metrics: fakeMetrics({ compromise_fraction: 0.6 }), incomplete: true });
   });
 
   it("A's failure and B's success don't affect each other", async () => {

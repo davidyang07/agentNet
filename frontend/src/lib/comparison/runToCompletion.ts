@@ -1,17 +1,13 @@
 import {
   createExperiment,
   getExperiment,
+  getMetrics,
   stopExperiment,
   backendWsUrl,
   type ExperimentConfig,
+  type MetricsResponse,
 } from "@/lib/api/client";
-import {
-  reduce,
-  initialGraphState,
-  selectMetrics,
-  type GraphState,
-  type StreamFrame,
-} from "@/lib/stream/reducer";
+import { reduce, initialGraphState, type GraphState, type StreamFrame } from "@/lib/stream/reducer";
 
 const STATUS_POLL_INTERVAL_MS = 1000;
 // Once REST reports a terminal status, the WS delivery of the final tick's
@@ -26,7 +22,7 @@ const CATCH_UP_TIMEOUT_MS = 5000;
 
 export type RunResult = {
   experimentId: string;
-  metrics: ReturnType<typeof selectMetrics>;
+  metrics: MetricsResponse;
 };
 
 /**
@@ -123,7 +119,14 @@ export async function runExperimentToCompletion(
   }
 
   ws.close();
-  const metrics = selectMetrics(graphState);
+  // The rich MetricsResponse (security-plane/remediation-relevant fields)
+  // is fetched over REST rather than derived from selectMetrics(graphState)
+  // -- the same live /metrics endpoint SecurityInsightsPanel already polls
+  // -- so a live comparison arm and a historical one (loadHistoricalArm.ts)
+  // report the exact same metric shape (docs/PLAN.md §9's "Next
+  // recommended milestone"). Fetched before stopExperiment so the runner
+  // is still registered.
+  const metrics = await getMetrics(experimentId);
   await stopExperiment(experimentId).catch(() => {});
   return { experimentId, metrics };
 }

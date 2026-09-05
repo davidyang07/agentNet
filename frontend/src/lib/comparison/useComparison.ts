@@ -2,19 +2,16 @@
 
 import { useCallback, useRef, useState } from "react";
 
-import type { ExperimentConfig } from "@/lib/api/client";
-import type { selectMetrics } from "@/lib/stream/reducer";
+import type { ExperimentConfig, MetricsResponse } from "@/lib/api/client";
 
 import { loadHistoricalArm } from "./loadHistoricalArm";
 import { runExperimentToCompletion } from "./runToCompletion";
 
-export type ArmResult =
-  | { metrics: ReturnType<typeof selectMetrics>; incomplete?: boolean }
-  | { error: string };
+export type ArmResult = { metrics: MetricsResponse; incomplete?: boolean } | { error: string };
 
 export type ArmState = {
   status: "idle" | "running" | "done" | "error";
-  metrics?: ReturnType<typeof selectMetrics>;
+  metrics?: MetricsResponse;
   error?: string;
   // Only ever set for a historical arm (compareHistorical) -- a live arm
   // always ran to natural completion, so this is always falsy there.

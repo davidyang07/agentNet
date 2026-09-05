@@ -1,22 +1,25 @@
-import { foldEvents, loadReplayData } from "@/lib/replay/loadReplayData";
-import { selectMetrics } from "@/lib/stream/reducer";
+import { getExperimentDetail, getReplayMetrics, type MetricsResponse } from "@/lib/api/client";
 
 export type HistoricalArmResult = {
   experimentId: string;
-  metrics: ReturnType<typeof selectMetrics>;
+  metrics: MetricsResponse;
   incomplete: boolean;
 };
 
 /**
- * Direct sibling of runToCompletion.ts for a *historical* arm: reuses
- * loadReplayData's snapshot+pagination fetch (the same path replay uses)
- * and folds every returned event through reduce() to compute final
- * metrics via the exact same selectMetrics() live comparison uses -- no
- * backend reduce-equivalent, no second fold implementation
- * (docs/PHASE_1_5_PLAN.md §10).
+ * Direct sibling of runToCompletion.ts for a *historical* arm: fetches the
+ * same rich MetricsResponse a live arm now fetches (docs/PLAN.md §9's "Next
+ * recommended milestone"), via the /replay/metrics endpoint added in
+ * app/api/routes_history.py -- no client-side event-log fold needed, since
+ * that endpoint already reconstructs the persisted run's final state
+ * server-side (app/engine/replay.py). `incomplete` is read directly from
+ * the experiment's `is_complete` column (the exact same source
+ * loadReplayData's own `incomplete` flag already used).
  */
 export async function loadHistoricalArm(experimentId: string): Promise<HistoricalArmResult> {
-  const data = await loadReplayData(experimentId);
-  const finalState = foldEvents(data.initialState, data.events, data.events.length);
-  return { experimentId, metrics: selectMetrics(finalState), incomplete: data.incomplete };
+  const [metrics, detail] = await Promise.all([
+    getReplayMetrics(experimentId),
+    getExperimentDetail(experimentId),
+  ]);
+  return { experimentId, metrics, incomplete: detail.is_complete !== true };
 }

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ExperimentConfig } from "@/lib/api/client";
-import { reduce, initialGraphState, selectMetrics, type StreamFrame } from "@/lib/stream/reducer";
+import type { ExperimentConfig, MetricsResponse } from "@/lib/api/client";
+import type { StreamFrame } from "@/lib/stream/reducer";
 
 import { runExperimentToCompletion } from "./runToCompletion";
 
@@ -36,6 +36,18 @@ const CONFIG: ExperimentConfig = {
 };
 
 const EXPERIMENT_ID = "exp-1";
+
+const METRICS_RESPONSE: MetricsResponse = {
+  compromise_fraction: 0.1,
+  retained_utility: 0.8,
+  blast_radius_fraction: 0.2,
+  privileged_exposure: 1,
+  security_plane_integrity: 1,
+  attack_success_rate: 0.5,
+  false_quarantine_rate: 0,
+  detection_latency: 2,
+  containment_latency: 1,
+};
 
 function okResponse(body: unknown) {
   return { ok: true, status: 200, json: async () => body } as Response;
@@ -131,12 +143,15 @@ describe("runExperimentToCompletion", () => {
     });
   }
 
-  it("resolves with metrics computed by the real reduce() once status polling sees a terminal state", async () => {
+  it("resolves with the rich MetricsResponse fetched over REST once status polling sees a terminal state", async () => {
     let getExperimentCalls = 0;
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       const method = init?.method ?? "GET";
       if (method === "POST" && String(url).endsWith("/api/experiments")) {
         return okResponse(summary("running"));
+      }
+      if (method === "GET" && String(url).endsWith(`/api/experiments/${EXPERIMENT_ID}/metrics`)) {
+        return okResponse(METRICS_RESPONSE);
       }
       if (method === "GET" && String(url).endsWith(`/api/experiments/${EXPERIMENT_ID}`)) {
         getExperimentCalls += 1;
@@ -171,16 +186,8 @@ describe("runExperimentToCompletion", () => {
 
     const result = await resultPromise;
 
-    let expectedState = initialGraphState;
-    expectedState = reduce(expectedState, snapshotFrame);
-    expectedState = reduce(expectedState, compromiseFrame);
-    expectedState = reduce(expectedState, otherEventFrame);
-    const expectedMetrics = selectMetrics(expectedState);
-
     expect(result.experimentId).toBe(EXPERIMENT_ID);
-    expect(result.metrics).toEqual(expectedMetrics);
-    expect(result.metrics.newCompromises).toBe(1);
-    expect(result.metrics.compromised).toBe(1);
+    expect(result.metrics).toEqual(METRICS_RESPONSE);
 
     const stopCalls = callsMatching("POST", `/api/experiments/${EXPERIMENT_ID}/stop`);
     expect(stopCalls).toHaveLength(1);
@@ -197,6 +204,9 @@ describe("runExperimentToCompletion", () => {
       const method = init?.method ?? "GET";
       if (method === "POST" && String(url).endsWith("/api/experiments")) {
         return okResponse(summary("running"));
+      }
+      if (method === "GET" && String(url).endsWith(`/api/experiments/${EXPERIMENT_ID}/metrics`)) {
+        return okResponse(METRICS_RESPONSE);
       }
       if (method === "GET" && String(url).endsWith(`/api/experiments/${EXPERIMENT_ID}`)) {
         getExperimentCalls += 1;
@@ -234,15 +244,17 @@ describe("runExperimentToCompletion", () => {
 
     const result = await resultPromise;
 
-    expect(result.metrics.newCompromises).toBe(1);
-    expect(result.metrics.compromised).toBe(1);
+    expect(result.metrics).toEqual(METRICS_RESPONSE);
   });
 
-  it("gives up waiting and reports observed metrics if the socket closes before catching up", async () => {
+  it("gives up waiting and reports metrics fetched over REST if the socket closes before catching up", async () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       const method = init?.method ?? "GET";
       if (method === "POST" && String(url).endsWith("/api/experiments")) {
         return okResponse(summary("running"));
+      }
+      if (method === "GET" && String(url).endsWith(`/api/experiments/${EXPERIMENT_ID}/metrics`)) {
+        return okResponse(METRICS_RESPONSE);
       }
       if (method === "GET" && String(url).endsWith(`/api/experiments/${EXPERIMENT_ID}`)) {
         return okResponse(summary("finished", 5));
@@ -263,7 +275,7 @@ describe("runExperimentToCompletion", () => {
     await vi.advanceTimersByTimeAsync(1000);
 
     const result = await resultPromise;
-    expect(result.metrics.newCompromises).toBe(1);
+    expect(result.metrics).toEqual(METRICS_RESPONSE);
   });
 
   it("rejects when the AbortSignal fires, and still best-effort stops the experiment and closes the WS", async () => {
