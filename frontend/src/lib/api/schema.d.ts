@@ -446,7 +446,7 @@ export interface components {
          * EventType
          * @enum {string}
          */
-        EventType: "EXPERIMENT_STARTED" | "EXPERIMENT_STOPPED" | "AGENT_CREATED" | "AGENT_STARTED" | "AGENT_STOPPED" | "MESSAGE_SENT" | "MESSAGE_RECEIVED" | "MODEL_REQUESTED" | "MODEL_RESPONDED" | "TOOL_REQUESTED" | "TOOL_EXECUTED" | "TOOL_DENIED" | "MEMORY_READ" | "MEMORY_WRITE" | "CREDENTIAL_ACCESSED" | "CREDENTIAL_REVOKED" | "COMPROMISE_ATTEMPTED" | "COMPROMISE_SUCCEEDED" | "COMPROMISE_FAILED" | "ANOMALY_DETECTED" | "AGENT_QUARANTINED" | "AGENT_RELEASED" | "PERMISSION_CHANGED" | "INFERENCE_DISABLED" | "THREAT_SIGNATURE_PUBLISHED" | "THREAT_SIGNATURE_RECEIVED" | "AGENT_RECOVERED";
+        EventType: "EXPERIMENT_STARTED" | "EXPERIMENT_STOPPED" | "AGENT_CREATED" | "AGENT_STARTED" | "AGENT_STOPPED" | "MESSAGE_SENT" | "MESSAGE_RECEIVED" | "MODEL_REQUESTED" | "MODEL_RESPONDED" | "TOOL_REQUESTED" | "TOOL_EXECUTED" | "TOOL_DENIED" | "MEMORY_READ" | "MEMORY_WRITE" | "CREDENTIAL_ACCESSED" | "CREDENTIAL_REVOKED" | "COMPROMISE_ATTEMPTED" | "COMPROMISE_SUCCEEDED" | "COMPROMISE_FAILED" | "ANOMALY_DETECTED" | "AGENT_QUARANTINED" | "AGENT_RELEASED" | "PERMISSION_CHANGED" | "INFERENCE_DISABLED" | "THREAT_SIGNATURE_PUBLISHED" | "THREAT_SIGNATURE_RECEIVED" | "AGENT_RECOVERED" | "POLICY_VIOLATION" | "ATTESTATION_ISSUED" | "ATTESTATION_VERIFIED";
         /** ExperimentConfig */
         ExperimentConfig: {
             /** Seed */
@@ -570,6 +570,21 @@ export interface components {
              * @default 0
              */
             false_quarantine_rate: number;
+            /**
+             * Sentinel Compromise Rate
+             * @default 0
+             */
+            sentinel_compromise_rate: number;
+            /**
+             * Attestation Replay Rate
+             * @default 0
+             */
+            attestation_replay_rate: number;
+            /**
+             * Byzantine Collusion Rate
+             * @default 0
+             */
+            byzantine_collusion_rate: number;
         };
         /** ExperimentDetail */
         ExperimentDetail: {
@@ -695,6 +710,10 @@ export interface components {
             attack_success_rate: number;
             /** False Quarantine Rate */
             false_quarantine_rate: number;
+            /** Detection Latency */
+            detection_latency?: number | null;
+            /** Containment Latency */
+            containment_latency?: number | null;
         };
         /**
          * NodeType

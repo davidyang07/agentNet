@@ -48,6 +48,9 @@ const BASE_CONFIG: ExperimentConfig = {
   sentinel_count: 0,
   adaptive_detection_threshold: 0.3,
   false_quarantine_rate: 0,
+  sentinel_compromise_rate: 0,
+  attestation_replay_rate: 0,
+  byzantine_collusion_rate: 0,
 };
 
 function withoutDefenseEnabled(config: ExperimentConfig): Omit<ExperimentConfig, "defense_enabled"> {

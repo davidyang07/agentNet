@@ -41,6 +41,9 @@ const FIXTURE_CONFIG_A: ExperimentConfig = {
   sentinel_count: 0,
   adaptive_detection_threshold: 0.3,
   false_quarantine_rate: 0,
+  sentinel_compromise_rate: 0,
+  attestation_replay_rate: 0,
+  byzantine_collusion_rate: 0,
 };
 
 const FIXTURE_CONFIG_B: ExperimentConfig = {
@@ -68,6 +71,9 @@ const FIXTURE_CONFIG_B: ExperimentConfig = {
   sentinel_count: 0,
   adaptive_detection_threshold: 0.3,
   false_quarantine_rate: 0,
+  sentinel_compromise_rate: 0,
+  attestation_replay_rate: 0,
+  byzantine_collusion_rate: 0,
 };
 
 function running(overrides: Partial<ControlState> = {}): ControlState {
