@@ -1,4 +1,4 @@
-.PHONY: dev test lint types verify-determinism migrate
+.PHONY: dev test lint types verify-determinism migrate benchmark golden-demo import-demo agentshield-test
 
 dev:
 	docker compose up --build
@@ -33,3 +33,29 @@ verify-determinism:
 # Applies pending migrations standalone, without booting the full app.
 migrate:
 	cd backend && .venv/bin/python scripts/migrate.py
+
+# Canonical benchmark suite (Priority 1 of the product-validation brief):
+# 12+ attack scenarios, 6+ defense configurations, a 2,500+ agent scale run,
+# and a before/after remediation comparison. Zero real provider calls.
+# Writes backend/.artifacts/benchmark/{results.json,report.md}.
+benchmark:
+	cd backend && .venv/bin/python scripts/run_benchmark.py
+
+# The golden demo scenario (Priority 2): one config whose event log narrates
+# indirect prompt injection -> propagation -> initial quarantine -> adaptive
+# attacker strategy switch -> sentinel compromise -> false threat-memory
+# report -> remediation -> re-test -> measurable improvement. Writes
+# backend/.artifacts/golden_demo/{report.md,result.json}.
+golden-demo:
+	cd backend && .venv/bin/python scripts/run_golden_demo.py
+
+# Runs an adversarial scenario against the real LangGraph sample app's
+# imported topology (Priority 3). Writes
+# backend/.artifacts/external_import/result.json.
+import-demo:
+	cd backend && .venv/bin/python scripts/run_external_import_demo.py
+
+# CI-friendly pass/fail gate over a fast subset of the benchmark suite plus
+# the golden demo (Productization). Exit 0 if every finding passes.
+agentshield-test:
+	cd backend && .venv/bin/python scripts/agentshield_test.py
