@@ -7,6 +7,7 @@ see README's benchmark section.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 
 from app.benchmark.golden_demo import run_golden_demo
@@ -19,11 +20,13 @@ class Finding:
     name: str
     passed: bool
     detail: str
+    duration_s: float
 
 
 def evaluate() -> list[Finding]:
     findings: list[Finding] = []
 
+    start = time.monotonic()
     off = run_preset(
         "defense_off", DEFENSE_BASE_ATTACK.model_copy(update=DEFENSE_VARIANTS["defense_off"])
     )
@@ -40,9 +43,11 @@ def evaluate() -> list[Finding]:
                 f"defense_off retained_utility={off.metrics['retained_utility']:.2f}, "
                 f"defense_high_sensitivity={high.metrics['retained_utility']:.2f}"
             ),
+            duration_s=time.monotonic() - start,
         )
     )
 
+    start = time.monotonic()
     demo = run_golden_demo()
     demo_passed = demo.rerun is not None and (
         demo.rerun.metrics["security_plane_integrity"]
@@ -56,6 +61,7 @@ def evaluate() -> list[Finding]:
                 f"baseline={demo.baseline.metrics['security_plane_integrity']:.2f}, "
                 f"rerun={(demo.rerun.metrics['security_plane_integrity'] if demo.rerun else None)}"
             ),
+            duration_s=time.monotonic() - start,
         )
     )
 
