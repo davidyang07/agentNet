@@ -212,6 +212,55 @@ Set these before starting the backend (or add them to `docker-compose.yml`'s `ba
 environment). `POST /api/experiments` rejects `model_provider: "vllm"` with a `400` before starting
 anything if `VLLM_BASE_URL` isn't set, rather than silently falling back to mock or failing mid-run.
 
+### Real-model benchmark/golden-demo validation (manual, requires a GPU)
+
+The benchmark suite and golden demo (below) default to `model_provider="mock"` — zero network
+calls, fully reproducible, the entire CI surface. To validate the golden demo against a real Qwen
+model through vLLM's OpenAI-compatible endpoint instead:
+
+```bash
+vllm serve Qwen/Qwen2.5-7B-Instruct --port 8001   # on a RunPod GPU pod or any reachable host
+export VLLM_BASE_URL=http://<host>:8001
+# export VLLM_API_KEY=...                          # if your endpoint requires one
+cd backend && .venv/bin/python scripts/run_golden_demo.py --model-provider vllm
+```
+
+No other code path changes — `app/gateway/factory.py::build_gateway` (already used by the live API)
+is the same function `app/benchmark/runner.py` uses to select `VLLMProvider` vs. `MockProvider`.
+This session had no reachable vLLM endpoint available, so this path is documented but unexercised
+here; every other command below runs unaffected against the mock provider.
+
+## Canonical benchmark suite, golden demo, and external integration
+
+```bash
+cd backend
+.venv/bin/python scripts/run_benchmark.py             # or: make benchmark (from repo root)
+.venv/bin/python scripts/run_golden_demo.py            # or: make golden-demo
+.venv/bin/python scripts/run_external_import_demo.py   # or: make import-demo
+.venv/bin/python scripts/agentshield_test.py            # or: make agentshield-test
+```
+
+- **`run_benchmark.py`** runs 14 attack-scenario presets (propagation, the deterministic adaptive
+  attacker, false quarantine, sentinel compromise, attestation replay, Byzantine collusion, a
+  combined multi-vector run, real-agent lateral prompt injection via the mock provider, and a
+  2,500-agent scale run), 7 defense-posture variants of the same attack, and a before/after
+  remediation comparison — all zero-real-provider-call, seeded, and reproducible. Writes
+  `backend/.artifacts/benchmark/{results.json,report.md}`.
+- **`run_golden_demo.py`** runs one scenario whose real event log narrates the full story: indirect
+  prompt injection → propagation → an initial legitimate quarantine → the adaptive attacker's
+  deterministic strategy switch → a sentinel subverted mid-run → a false threat signature (trust
+  manipulation) → AgentNet's remediation engine flagging the `security_plane_integrity` gap → a
+  re-run with the fix applied, showing a real, reproducible improvement. Writes
+  `backend/.artifacts/golden_demo/{report.md,result.json}`.
+- **`run_external_import_demo.py`** imports the real LangGraph sample app's topology
+  (`examples/langgraph_research_agents/`) and runs an adversarial scenario against it — see that
+  directory's README for what it is and how to regenerate its committed `topology.json`.
+- **`agentshield_test.py`** is a CI-friendly pass/fail gate over a fast subset of the above (the
+  defense comparison plus the golden demo) — the `agentshield test` productization entry point;
+  wired into CI as its own job.
+
+`docs/PLAN.md` records real measured numbers from an actual run of each of these.
+
 ## Verification
 
 ```bash
