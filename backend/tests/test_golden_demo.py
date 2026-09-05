@@ -1,4 +1,4 @@
-from app.benchmark.golden_demo import run_golden_demo
+from app.benchmark.golden_demo import run_golden_demo, summarize_golden_demo_narrative
 
 
 def test_golden_demo_is_deterministic():
@@ -39,3 +39,39 @@ def test_golden_demo_shows_measurable_resilience_improvement():
     assert (
         result.rerun.metrics["retained_utility"] >= result.baseline.metrics["retained_utility"]
     )
+
+
+def test_summarize_golden_demo_narrative_collapses_repeated_propagation_lines():
+    narrative = [
+        "tick 1: seeded initial compromise at agent-000",
+        "tick 2: compromise propagated to agent-001",
+        "tick 3: compromise propagated to agent-002",
+        "tick 4: compromise propagated to agent-003",
+        "tick 5: agent-004 quarantined by initial defense",
+    ]
+    summary = summarize_golden_demo_narrative(narrative)
+    propagated_lines = [line for line in summary if "compromise propagated to" in line]
+    assert len(propagated_lines) <= 1
+    assert "seeded initial compromise at agent-000" in "\n".join(summary)
+    assert "quarantined by initial defense" in "\n".join(summary)
+
+
+def test_summarize_golden_demo_narrative_preserves_order_and_all_required_beats():
+    result = run_golden_demo()
+    summary = summarize_golden_demo_narrative(result.narrative)
+    required_substrings = [
+        "prompt injection",
+        "quarantined",
+        "adaptive attacker",
+        "sentinel",
+        "false threat signature",
+        "security_plane_integrity",
+        "remediation recommended",
+        "re-ran",
+    ]
+    joined = "\n".join(summary)
+    for substring in required_substrings:
+        assert substring in joined, f"missing beat evidence in summary: {substring!r}"
+    # order-preserving: summary is a subsequence of the full narrative
+    it = iter(result.narrative)
+    assert all(line in it for line in summary)

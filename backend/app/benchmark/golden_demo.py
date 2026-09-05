@@ -111,6 +111,25 @@ def _narrate(run: BenchmarkRun) -> list[str]:
     return lines
 
 
+def summarize_golden_demo_narrative(narrative: list[str]) -> list[str]:
+    """Curated subset of the full narrative for the demo's headline output:
+    keeps every distinct beat line but collapses the many repeated
+    "compromise propagated to X" lines (one per newly-compromised agent,
+    often 20-60+ of them) down to the first occurrence, so the story's ten
+    beats read as a short list instead of being buried in bulk propagation
+    noise. The full, uncollapsed narrative remains available via
+    GoldenDemoResult.narrative for anyone who wants the tick-by-tick log."""
+    summary: list[str] = []
+    seen_propagation_line = False
+    for line in narrative:
+        if "compromise propagated to" in line:
+            if seen_propagation_line:
+                continue
+            seen_propagation_line = True
+        summary.append(line)
+    return summary
+
+
 def run_golden_demo(model_provider: str = "mock") -> GoldenDemoResult:
     config = GOLDEN_DEMO_CONFIG.model_copy(update={"model_provider": model_provider})
     baseline = run_headless_async("golden_demo_baseline", config)
