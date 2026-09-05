@@ -27,7 +27,8 @@ def test_simulate_final_state_matches_terminal_draft_counts():
     compromised_ids = {
         d.target_agent_id
         for d in drafts
-        if d.event_type.value == "COMPROMISE_SUCCEEDED" and not d.metadata.get("already_compromised")
+        if d.event_type.value == "COMPROMISE_SUCCEEDED"
+        and not d.metadata.get("already_compromised")
     }
     quarantined_ids = {d.agent_id for d in drafts if d.event_type.value == "AGENT_QUARANTINED"}
     for node_id, node in state.nodes.items():
