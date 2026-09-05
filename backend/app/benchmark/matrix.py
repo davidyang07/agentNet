@@ -155,7 +155,7 @@ REMEDIATION_CASE = ExperimentConfig(
     node_count=80,
     active_scenarios=["propagation", "sentinel_compromise"],
     sentinel_count=1,
-    sentinel_compromise_rate=0.5,
+    sentinel_compromise_rate=0.02,
     defense_enabled=True,
     detector_sensitivity=0.3,
 )
