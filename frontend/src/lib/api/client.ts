@@ -161,8 +161,8 @@ export async function fetchReplaySnapshot(experimentId: string): Promise<History
   return res.json();
 }
 
-// Security graph + analysis (docs/PLAN.md §2.5/§8) -- live experiment only;
-// history/replay equivalents are not yet built (docs/PLAN.md §9).
+// Security graph + analysis (docs/PLAN.md §2.5/§8) -- live experiment only.
+// History/replay equivalents are defined further down this file.
 
 export async function getSecurityGraph(experimentId: string): Promise<SecurityGraphView> {
   const res = await fetch(`${BACKEND_URL}/api/experiments/${experimentId}/graph`);
@@ -233,6 +233,94 @@ export async function getRemediation(experimentId: string): Promise<RemediationR
   const res = await fetch(`${BACKEND_URL}/api/experiments/${experimentId}/remediation`);
   if (!res.ok) {
     throw new Error(`failed to get remediation: ${res.status}`);
+  }
+  return res.json();
+}
+
+// History/replay equivalents of the security-graph/analysis/metrics/
+// remediation endpoints above (docs/PLAN.md §9's "Next recommended
+// milestone") -- same response shapes, backed by a persisted experiment's
+// reconstructed final state instead of a live in-memory runner.
+
+export async function getReplaySecurityGraph(experimentId: string): Promise<SecurityGraphView> {
+  const res = await fetch(`${BACKEND_URL}/api/experiments/${experimentId}/replay/graph`);
+  if (!res.ok) {
+    throw new Error(`failed to get replay security graph: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getReplayAttackPaths(
+  experimentId: string,
+  source: string,
+  target: string,
+): Promise<AttackPathsResponse> {
+  const url = new URL(
+    `${BACKEND_URL}/api/experiments/${experimentId}/replay/analysis/attack-paths`,
+  );
+  url.searchParams.set("source", source);
+  url.searchParams.set("target", target);
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`failed to get replay attack paths: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getReplayBlastRadius(experimentId: string): Promise<BlastRadiusResponse> {
+  const res = await fetch(
+    `${BACKEND_URL}/api/experiments/${experimentId}/replay/analysis/blast-radius`,
+  );
+  if (!res.ok) {
+    throw new Error(`failed to get replay blast radius: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getReplayCriticalNodes(
+  experimentId: string,
+  topN?: number,
+): Promise<CriticalNodesResponse> {
+  const url = new URL(
+    `${BACKEND_URL}/api/experiments/${experimentId}/replay/analysis/critical-nodes`,
+  );
+  if (topN !== undefined) url.searchParams.set("top_n", String(topN));
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`failed to get replay critical nodes: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getReplayProvenance(
+  experimentId: string,
+  nodeId: string,
+): Promise<ProvenanceResponse> {
+  const url = new URL(
+    `${BACKEND_URL}/api/experiments/${experimentId}/replay/analysis/provenance`,
+  );
+  url.searchParams.set("node_id", nodeId);
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`failed to get replay provenance: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getReplayMetrics(experimentId: string): Promise<MetricsResponse> {
+  const res = await fetch(`${BACKEND_URL}/api/experiments/${experimentId}/replay/metrics`);
+  if (!res.ok) {
+    throw new Error(`failed to get replay metrics: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getReplayRemediation(
+  experimentId: string,
+): Promise<RemediationResponse> {
+  const res = await fetch(`${BACKEND_URL}/api/experiments/${experimentId}/replay/remediation`);
+  if (!res.ok) {
+    throw new Error(`failed to get replay remediation: ${res.status}`);
   }
   return res.json();
 }
