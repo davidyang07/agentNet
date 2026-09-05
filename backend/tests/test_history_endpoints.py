@@ -4,6 +4,7 @@ MAX(seq) WHERE sim_tick=0, and event-log pagination across a full run with
 no gaps or duplicates."""
 
 import asyncio
+import json
 import uuid
 
 from fastapi.testclient import TestClient
@@ -195,3 +196,174 @@ def test_history_endpoints_503_when_pool_unavailable():
         fake_id = uuid.uuid4()
         assert client.get("/api/experiments").status_code == 503
         assert client.get(f"/api/experiments/{fake_id}/detail").status_code == 503
+
+
+def test_replay_graph_metrics_remediation_match_a_live_equivalent_run():
+    # Same config run twice: once through the live path (registry + /graph,
+    # /metrics, /remediation), once persisted and read back through the new
+    # /replay/* endpoints -- since both reconstruct the exact same
+    # deterministic (seed, config) run, their outputs must be identical.
+    config_kwargs = {
+        "seed": 9,
+        "node_count": 30,
+        "p_same": 0.3,
+        "max_ticks": 10,
+        "sentinel_count": 1,
+    }
+
+    async def setup() -> ExperimentRunner:
+        pool = await create_pool(TEST_SETTINGS)
+        try:
+            return await _persist_completed_run(pool, **config_kwargs)
+        finally:
+            await pool.close()
+
+    runner = asyncio.run(setup())
+    try:
+        with TestClient(app) as client:
+            live = ExperimentRunner(ExperimentConfig(**config_kwargs))
+            live.tick_interval = 0
+
+            async def run_live() -> None:
+                await live.publish_initial()
+                await live._run_loop()
+
+            asyncio.run(run_live())
+            from app.orchestrator.registry import registry
+
+            registry.add(live)
+            try:
+                live_graph = client.get(f"/api/experiments/{live.experiment_id}/graph").json()
+                live_metrics = client.get(f"/api/experiments/{live.experiment_id}/metrics").json()
+                live_remediation = client.get(
+                    f"/api/experiments/{live.experiment_id}/remediation"
+                ).json()
+            finally:
+                registry.remove(live.experiment_id)
+
+            exp_id = runner.experiment_id
+            replay_graph = client.get(f"/api/experiments/{exp_id}/replay/graph")
+            assert replay_graph.status_code == 200
+            replay_metrics = client.get(f"/api/experiments/{exp_id}/replay/metrics")
+            assert replay_metrics.status_code == 200
+            replay_remediation = client.get(f"/api/experiments/{exp_id}/replay/remediation")
+            assert replay_remediation.status_code == 200
+
+            assert replay_graph.json() == live_graph
+            assert replay_metrics.json() == live_metrics
+            assert replay_remediation.json() == live_remediation
+    finally:
+        asyncio.run(_cleanup(runner.experiment_id))
+
+
+def test_replay_analysis_endpoints_return_200_for_a_persisted_run():
+    async def setup() -> ExperimentRunner:
+        pool = await create_pool(TEST_SETTINGS)
+        try:
+            return await _persist_completed_run(pool, seed=4, node_count=25, p_same=0.4)
+        finally:
+            await pool.close()
+
+    runner = asyncio.run(setup())
+    try:
+        with TestClient(app) as client:
+            exp_id = runner.experiment_id
+            graph = client.get(f"/api/experiments/{exp_id}/replay/graph").json()
+            edge = graph["edges"][0]
+
+            resp = client.get(
+                f"/api/experiments/{exp_id}/replay/analysis/attack-paths",
+                params={"source": edge["source"], "target": edge["target"]},
+            )
+            assert resp.status_code == 200
+
+            resp = client.get(f"/api/experiments/{exp_id}/replay/analysis/blast-radius")
+            assert resp.status_code == 200
+            assert 0.0 <= resp.json()["fraction"] <= 1.0
+
+            resp = client.get(
+                f"/api/experiments/{exp_id}/replay/analysis/critical-nodes", params={"top_n": 2}
+            )
+            assert resp.status_code == 200
+            assert len(resp.json()["nodes"]) <= 2
+
+            node_id = graph["nodes"][0]["id"]
+            resp = client.get(
+                f"/api/experiments/{exp_id}/replay/analysis/provenance",
+                params={"node_id": node_id},
+            )
+            assert resp.status_code == 200
+            assert resp.json()["chain"][0] == node_id
+    finally:
+        asyncio.run(_cleanup(runner.experiment_id))
+
+
+def test_replay_endpoints_404_for_unknown_experiment():
+    with TestClient(app) as client:
+        fake_id = uuid.uuid4()
+        assert client.get(f"/api/experiments/{fake_id}/replay/graph").status_code == 404
+        assert client.get(f"/api/experiments/{fake_id}/replay/metrics").status_code == 404
+        assert client.get(f"/api/experiments/{fake_id}/replay/remediation").status_code == 404
+
+
+def test_replay_endpoints_409_when_experiment_never_finished():
+    async def setup() -> uuid.UUID:
+        pool = await create_pool(TEST_SETTINGS)
+        try:
+            exp_id = uuid.uuid4()
+            await pool.execute(
+                "INSERT INTO experiments (experiment_id, seed, config, app_version, "
+                "schema_version) VALUES ($1, $2, $3, 'test', 1)",
+                exp_id,
+                1,
+                json.dumps({"seed": 1, "node_count": 25}),
+            )
+            return exp_id
+        finally:
+            await pool.close()
+
+    exp_id = asyncio.run(setup())
+    try:
+        with TestClient(app) as client:
+            resp = client.get(f"/api/experiments/{exp_id}/replay/graph")
+            assert resp.status_code == 409
+    finally:
+        asyncio.run(_cleanup(exp_id))
+
+
+def test_replay_endpoints_409_for_real_provider_config():
+    # A real vLLM run can't actually complete without a reachable endpoint in
+    # this environment, so this test only exercises the config-level guard by
+    # inserting a finished-looking row directly, mirroring the prior test's
+    # approach, rather than trying to run one to completion.
+    async def insert_finished_vllm_row() -> uuid.UUID:
+        pool = await create_pool(TEST_SETTINGS)
+        try:
+            exp_id = uuid.uuid4()
+            await pool.execute(
+                "INSERT INTO experiments (experiment_id, seed, config, app_version, "
+                "schema_version, final_sim_tick, final_status) "
+                "VALUES ($1, $2, $3, 'test', 1, $4, 'finished')",
+                exp_id,
+                1,
+                json.dumps(
+                    {
+                        "seed": 1,
+                        "node_count": 25,
+                        "real_agent_count": 1,
+                        "model_provider": "vllm",
+                    }
+                ),
+                3,
+            )
+            return exp_id
+        finally:
+            await pool.close()
+
+    exp_id = asyncio.run(insert_finished_vllm_row())
+    try:
+        with TestClient(app) as client:
+            resp = client.get(f"/api/experiments/{exp_id}/replay/metrics")
+            assert resp.status_code == 409
+    finally:
+        asyncio.run(_cleanup(exp_id))

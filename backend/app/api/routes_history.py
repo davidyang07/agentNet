@@ -13,16 +13,34 @@ from uuid import UUID
 import asyncpg
 from fastapi import APIRouter, HTTPException, Query, Request
 
+from app.engine.replay import ReplayUnsupportedError, reconstruct_final_state
 from app.engine.topology import build_world
+from app.graph.analysis import attack_paths, blast_radius, critical_nodes, provenance
+from app.graph.builder import build_security_graph
+from app.graph.types import NodeType
+from app.metrics import compute as metrics
+from app.remediation.analyze import recommend
 from app.schemas.events import INCIDENT_EVENT_TYPES, Event
 from app.schemas.experiment import EdgeView, ExperimentConfig, NodeView
 from app.schemas.frames import SnapshotFrame
+from app.schemas.graph import (
+    AttackPathsResponse,
+    BlastRadiusResponse,
+    CriticalNodesResponse,
+    CriticalNodeView,
+    GraphEdgeView,
+    GraphNodeView,
+    ProvenanceResponse,
+    SecurityGraphView,
+)
 from app.schemas.history import (
     EventHistoryResponse,
     ExperimentDetail,
     ExperimentListItem,
     ExperimentListResponse,
 )
+from app.schemas.metrics import MetricsResponse
+from app.schemas.remediation import RecommendationView, RemediationResponse
 
 router = APIRouter(prefix="/api/experiments", tags=["history"])
 
@@ -248,4 +266,132 @@ async def get_replay_snapshot(experiment_id: UUID, request: Request) -> Snapshot
             for n in world.nodes.values()
         ],
         edges=[EdgeView(source=a, target=b) for a, b in world.edges],
+    )
+
+
+async def _load_replay_target(
+    pool: asyncpg.Pool, experiment_id: UUID
+) -> tuple[ExperimentConfig, int]:
+    row = await pool.fetchrow(
+        "SELECT config, final_sim_tick FROM experiments WHERE experiment_id = $1",
+        experiment_id,
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="experiment not found")
+    if row["final_sim_tick"] is None:
+        raise HTTPException(
+            status_code=409, detail="experiment has not finished; no final tick recorded yet"
+        )
+    return ExperimentConfig(**json.loads(row["config"])), row["final_sim_tick"]
+
+
+async def _reconstruct_for_replay(pool: asyncpg.Pool, experiment_id: UUID):
+    config, target_tick = await _load_replay_target(pool, experiment_id)
+    try:
+        world, events = reconstruct_final_state(config, target_tick)
+    except ReplayUnsupportedError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    graph = build_security_graph(world, config)
+    return world, config, graph, events
+
+
+@router.get("/{experiment_id}/replay/graph", response_model=SecurityGraphView)
+async def get_replay_graph(experiment_id: UUID, request: Request) -> SecurityGraphView:
+    pool = _get_pool(request)
+    _, _, graph, _ = await _reconstruct_for_replay(pool, experiment_id)
+    return SecurityGraphView(
+        nodes=[
+            GraphNodeView(
+                id=n.id, node_type=n.node_type, security_state=n.security_state, attrs=n.attrs
+            )
+            for n in graph.nodes
+        ],
+        edges=[
+            GraphEdgeView(source=e.source, target=e.target, edge_type=e.edge_type, attrs=e.attrs)
+            for e in graph.edges()
+        ],
+    )
+
+
+@router.get(
+    "/{experiment_id}/replay/analysis/attack-paths", response_model=AttackPathsResponse
+)
+async def get_replay_attack_paths(
+    experiment_id: UUID, request: Request, source: str, target: str
+) -> AttackPathsResponse:
+    pool = _get_pool(request)
+    _, _, graph, _ = await _reconstruct_for_replay(pool, experiment_id)
+    return AttackPathsResponse(paths=attack_paths(graph, source, target))
+
+
+@router.get(
+    "/{experiment_id}/replay/analysis/blast-radius", response_model=BlastRadiusResponse
+)
+async def get_replay_blast_radius(experiment_id: UUID, request: Request) -> BlastRadiusResponse:
+    pool = _get_pool(request)
+    _, _, graph, _ = await _reconstruct_for_replay(pool, experiment_id)
+    compromised = sorted(graph.compromised_ids())
+    reachable = sorted(blast_radius(graph))
+    total_agents = len(graph.nodes_of_type(NodeType.AGENT))
+    fraction = (len(reachable) / total_agents) if total_agents else 0.0
+    return BlastRadiusResponse(compromised=compromised, reachable=reachable, fraction=fraction)
+
+
+@router.get(
+    "/{experiment_id}/replay/analysis/critical-nodes", response_model=CriticalNodesResponse
+)
+async def get_replay_critical_nodes(
+    experiment_id: UUID, request: Request, top_n: int = 5
+) -> CriticalNodesResponse:
+    pool = _get_pool(request)
+    _, _, graph, _ = await _reconstruct_for_replay(pool, experiment_id)
+    ranked = critical_nodes(graph, top_n=top_n)
+    return CriticalNodesResponse(
+        nodes=[CriticalNodeView(id=node_id, betweenness=score) for node_id, score in ranked]
+    )
+
+
+@router.get(
+    "/{experiment_id}/replay/analysis/provenance", response_model=ProvenanceResponse
+)
+async def get_replay_provenance(
+    experiment_id: UUID, request: Request, node_id: str
+) -> ProvenanceResponse:
+    pool = _get_pool(request)
+    world, _, _, _ = await _reconstruct_for_replay(pool, experiment_id)
+    if node_id not in world.nodes:
+        raise HTTPException(status_code=404, detail="node not found in this experiment")
+    compromised_by = {n.id: n.compromised_by for n in world.nodes.values()}
+    return ProvenanceResponse(chain=provenance(compromised_by, node_id))
+
+
+@router.get("/{experiment_id}/replay/metrics", response_model=MetricsResponse)
+async def get_replay_metrics(experiment_id: UUID, request: Request) -> MetricsResponse:
+    pool = _get_pool(request)
+    world, _, graph, events = await _reconstruct_for_replay(pool, experiment_id)
+    return MetricsResponse(
+        compromise_fraction=metrics.compromise_fraction(world),
+        retained_utility=metrics.retained_utility(world),
+        blast_radius_fraction=metrics.blast_radius_fraction(graph),
+        privileged_exposure=metrics.privileged_exposure(graph),
+        security_plane_integrity=metrics.security_plane_integrity(graph),
+        attack_success_rate=metrics.attack_success_rate(events),
+        false_quarantine_rate=metrics.false_quarantine_rate(events),
+        detection_latency=metrics.detection_latency(world, events),
+        containment_latency=metrics.containment_latency(events),
+    )
+
+
+@router.get("/{experiment_id}/replay/remediation", response_model=RemediationResponse)
+async def get_replay_remediation(experiment_id: UUID, request: Request) -> RemediationResponse:
+    pool = _get_pool(request)
+    world, config, graph, _ = await _reconstruct_for_replay(pool, experiment_id)
+    fraction = metrics.compromise_fraction(world)
+    integrity = metrics.security_plane_integrity(graph)
+    recommendations = recommend(config, fraction, integrity)
+    return RemediationResponse(
+        recommendations=[
+            RecommendationView(description=r.description, config_diff=r.config_diff)
+            for r in recommendations
+        ]
     )
