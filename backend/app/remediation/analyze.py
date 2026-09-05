@@ -1,18 +1,21 @@
 """Deterministic, rule-based remediation engine (docs/PLAN.md §7).
 
 Every recommendation targets a config field with a *causally verified*
-effect on this session's implemented scenarios/detection:
-`detector_sensitivity` and `defense_enabled` are the only levers wired into
-app/security/detection.py's actual quarantine behavior today. Structural
-graph levers (sentinel placement, credential consolidation) are
-deliberately NOT recommended here -- they have no causal effect on any
-implemented scenario in this codebase yet (sentinel/security-control nodes
-are analysis-only, not wired into detection or any scenario's behavior),
-and recommending them would be an unverifiable, fabricated "fix" that
-re-running the experiment could not actually confirm. Each recommendation's
-`config_diff` is directly usable as a `POST /api/experiments` body field
-for re-testing -- scoring the fix reuses the existing comparison flow, no
-new re-test machinery.
+effect on this codebase's implemented scenarios/detection:
+`detector_sensitivity` and `defense_enabled` are wired into
+app/security/detection.py's quarantine behavior; `sentinel_count` is wired
+into the same module's compromised-sentinel detection-suppression
+(app/security/detection.py::_suppressed_by_compromised_sentinels,
+docs/PLAN.md §5) -- spreading monitoring across more sentinels shrinks the
+fraction of agents a single subverted sentinel can suppress, a claim
+covered by test_sentinel_compromise.py and re-verified for the
+recommendation itself in test_remediation.py. Other structural levers
+(credential consolidation) remain deliberately NOT recommended: they have
+no causal effect on any implemented scenario yet, and recommending them
+would be an unverifiable, fabricated "fix" that re-running the experiment
+could not actually confirm. Each recommendation's `config_diff` is directly
+usable as a `POST /api/experiments` body field for re-testing -- scoring
+the fix reuses the existing comparison flow, no new re-test machinery.
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ from app.schemas.experiment import ExperimentConfig
 
 HIGH_COMPROMISE_THRESHOLD = 0.3
 SENSITIVITY_INCREMENT = 0.2
+MAX_SENTINEL_COUNT = 5
 
 
 @dataclass
@@ -32,7 +36,25 @@ class Recommendation:
     config_diff: dict[str, Any] = field(default_factory=dict)
 
 
-def recommend(config: ExperimentConfig, compromise_fraction: float) -> list[Recommendation]:
+def recommend(
+    config: ExperimentConfig,
+    compromise_fraction: float,
+    security_plane_integrity: float = 1.0,
+) -> list[Recommendation]:
+    if security_plane_integrity < 1.0 and 0 < config.sentinel_count < MAX_SENTINEL_COUNT:
+        new_count = min(MAX_SENTINEL_COUNT, config.sentinel_count + 1)
+        return [
+            Recommendation(
+                description=(
+                    f"Security-plane integrity is {security_plane_integrity:.0%} -- at least "
+                    f"one sentinel is compromised. Raise sentinel_count from "
+                    f"{config.sentinel_count} to {new_count} to shrink the fraction of agents "
+                    "a single subverted sentinel's detection suppression can reach."
+                ),
+                config_diff={"sentinel_count": new_count},
+            )
+        ]
+
     if compromise_fraction <= HIGH_COMPROMISE_THRESHOLD:
         return []
 

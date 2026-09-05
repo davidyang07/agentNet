@@ -115,14 +115,18 @@ async def get_metrics(experiment_id: UUID) -> MetricsResponse:
         security_plane_integrity=metrics.security_plane_integrity(graph),
         attack_success_rate=metrics.attack_success_rate(events),
         false_quarantine_rate=metrics.false_quarantine_rate(events),
+        detection_latency=metrics.detection_latency(runner.state, events),
+        containment_latency=metrics.containment_latency(events),
     )
 
 
 @router.get("/{experiment_id}/remediation", response_model=RemediationResponse)
 async def get_remediation(experiment_id: UUID) -> RemediationResponse:
     runner = _runner_for(experiment_id)
+    graph = build_security_graph(runner.state, runner.config)
     fraction = metrics.compromise_fraction(runner.state)
-    recommendations = recommend(runner.config, fraction)
+    integrity = metrics.security_plane_integrity(graph)
+    recommendations = recommend(runner.config, fraction, integrity)
     return RemediationResponse(
         recommendations=[
             RecommendationView(description=r.description, config_diff=r.config_diff)

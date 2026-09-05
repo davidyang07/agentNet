@@ -29,6 +29,9 @@ def test_metrics_endpoint_returns_all_fields_with_sane_bounds():
             assert 0.0 <= body[key] <= 1.0, key
         assert body["privileged_exposure"] >= 0
         assert body["compromise_fraction"] > 0.0
+        for key in ("detection_latency", "containment_latency"):
+            assert key in body
+            assert body[key] is None or body[key] >= 0.0
 
 
 def test_metrics_endpoint_404_for_unknown_experiment():

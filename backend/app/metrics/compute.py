@@ -12,9 +12,14 @@ RING_SIZE, the same bound every other live-runner consumer already lives
 with); a persisted run's full log works identically once a history
 equivalent is wired in (docs/PLAN.md §9, not yet built this session).
 
-Detection/containment latency (docs/PLAN.md §6) need per-event tick
-correlation beyond what this pass implements and are deliberately left out
--- see docs/PLAN.md §9 remaining work rather than approximating them.
+Detection/containment latency (docs/PLAN.md §6) are event-log metrics too:
+the number of ticks between a node's tick_compromised and its first
+ANOMALY_DETECTED (detection latency), and between that detection and the
+node's first (legitimate) AGENT_QUARANTINED (containment latency). Both
+return None rather than 0.0 when no node has completed the measured
+transition -- unlike the fraction/rate metrics above, 0.0 would misreport
+"instant" as "no data," and every caller already must handle an optional
+value from an on-demand, possibly-empty event window.
 """
 
 from __future__ import annotations
@@ -101,3 +106,48 @@ def false_quarantine_rate(events: Sequence[Event]) -> float:
         return 0.0
     false_ones = sum(1 for e in quarantined if e.metadata.get("legitimate") is False)
     return false_ones / len(quarantined)
+
+
+def detection_latency(state: WorldState, events: Sequence[Event]) -> float | None:
+    """Mean ticks between a node's tick_compromised and its first
+    ANOMALY_DETECTED. None when no currently-compromised-or-recovered node
+    with a recorded tick_compromised has been detected yet."""
+    first_detected: dict[str, int] = {}
+    for e in events:
+        if e.event_type.value == "ANOMALY_DETECTED" and e.agent_id is not None:
+            first_detected.setdefault(e.agent_id, e.sim_tick)
+
+    latencies = [
+        first_detected[node_id] - node.tick_compromised
+        for node_id, node in state.nodes.items()
+        if node.tick_compromised is not None and node_id in first_detected
+    ]
+    if not latencies:
+        return None
+    return sum(latencies) / len(latencies)
+
+
+def containment_latency(events: Sequence[Event]) -> float | None:
+    """Mean ticks between a node's first ANOMALY_DETECTED and its first
+    legitimate AGENT_QUARANTINED (metadata.legitimate is not False --
+    excludes the false-quarantine attack, which by definition has no
+    preceding detection to measure a containment response against). None
+    when no node has completed that transition yet."""
+    first_detected: dict[str, int] = {}
+    first_quarantined: dict[str, int] = {}
+    for e in events:
+        if e.event_type.value == "ANOMALY_DETECTED" and e.agent_id is not None:
+            first_detected.setdefault(e.agent_id, e.sim_tick)
+        elif e.event_type.value == "AGENT_QUARANTINED" and e.agent_id is not None:
+            if e.metadata.get("legitimate") is False:
+                continue
+            first_quarantined.setdefault(e.agent_id, e.sim_tick)
+
+    latencies = [
+        first_quarantined[node_id] - first_detected[node_id]
+        for node_id in first_quarantined
+        if node_id in first_detected
+    ]
+    if not latencies:
+        return None
+    return sum(latencies) / len(latencies)

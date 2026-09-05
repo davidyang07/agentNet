@@ -7,6 +7,8 @@ from app.metrics.compute import (
     attack_success_rate,
     blast_radius_fraction,
     compromise_fraction,
+    containment_latency,
+    detection_latency,
     false_quarantine_rate,
     privileged_exposure,
     retained_utility,
@@ -15,10 +17,13 @@ from app.metrics.compute import (
 from app.schemas.events import Event, EventType
 
 
-def _event(event_type: EventType, **metadata) -> Event:
+def _event(
+    event_type: EventType, *, agent_id: str | None = None, sim_tick: int = 0, **metadata
+) -> Event:
     return Event(
-        sim_tick=0,
+        sim_tick=sim_tick,
         event_type=event_type,
+        agent_id=agent_id,
         event_id=uuid4(),
         seq=0,
         experiment_id=uuid4(),
@@ -132,3 +137,76 @@ def test_false_quarantine_rate():
 
 def test_false_quarantine_rate_zero_with_no_quarantines():
     assert false_quarantine_rate([_event(EventType.AGENT_CREATED)]) == 0.0
+
+
+def _node(agent_id: str, tick_compromised: int | None) -> AgentNode:
+    state = SecurityState.HEALTHY if tick_compromised is None else SecurityState.COMPROMISED
+    return AgentNode(
+        id=agent_id,
+        software_type="sw-a",
+        security_state=state,
+        neighbors=(),
+        tick_compromised=tick_compromised,
+    )
+
+
+def test_detection_latency_is_none_with_no_detections():
+    world = WorldState(tick=0, nodes={"agent-000": _node("agent-000", 3)}, edges=())
+    assert detection_latency(world, []) is None
+
+
+def test_detection_latency_averages_ticks_since_compromise():
+    world = WorldState(
+        tick=0,
+        nodes={"agent-000": _node("agent-000", 3), "agent-001": _node("agent-001", 5)},
+        edges=(),
+    )
+    events = [
+        _event(EventType.ANOMALY_DETECTED, agent_id="agent-000", sim_tick=5),
+        _event(EventType.ANOMALY_DETECTED, agent_id="agent-001", sim_tick=8),
+    ]
+    # (5-3) and (8-5) -> mean 2.5
+    assert detection_latency(world, events) == 2.5
+
+
+def test_detection_latency_only_first_detection_counts():
+    world = WorldState(tick=0, nodes={"agent-000": _node("agent-000", 3)}, edges=())
+    events = [
+        _event(EventType.ANOMALY_DETECTED, agent_id="agent-000", sim_tick=5),
+        _event(EventType.ANOMALY_DETECTED, agent_id="agent-000", sim_tick=9),
+    ]
+    assert detection_latency(world, events) == 2.0
+
+
+def test_detection_latency_ignores_nodes_never_compromised():
+    world = WorldState(tick=0, nodes={"agent-000": _node("agent-000", None)}, edges=())
+    events = [_event(EventType.ANOMALY_DETECTED, agent_id="agent-000", sim_tick=5)]
+    assert detection_latency(world, events) is None
+
+
+def test_containment_latency_is_none_with_no_quarantines():
+    events = [_event(EventType.ANOMALY_DETECTED, agent_id="agent-000", sim_tick=3)]
+    assert containment_latency(events) is None
+
+
+def test_containment_latency_averages_ticks_from_detection_to_quarantine():
+    events = [
+        _event(EventType.ANOMALY_DETECTED, agent_id="agent-000", sim_tick=3),
+        _event(EventType.AGENT_QUARANTINED, agent_id="agent-000", sim_tick=4),
+        _event(EventType.ANOMALY_DETECTED, agent_id="agent-001", sim_tick=3),
+        _event(EventType.AGENT_QUARANTINED, agent_id="agent-001", sim_tick=6),
+    ]
+    # (4-3) and (6-3) -> mean 2.0
+    assert containment_latency(events) == 2.0
+
+
+def test_containment_latency_excludes_false_quarantines():
+    events = [
+        _event(EventType.AGENT_QUARANTINED, agent_id="agent-000", sim_tick=4, legitimate=False),
+    ]
+    assert containment_latency(events) is None
+
+
+def test_containment_latency_requires_a_preceding_detection():
+    events = [_event(EventType.AGENT_QUARANTINED, agent_id="agent-000", sim_tick=4)]
+    assert containment_latency(events) is None

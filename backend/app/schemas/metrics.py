@@ -9,3 +9,5 @@ class MetricsResponse(BaseModel):
     security_plane_integrity: float
     attack_success_rate: float
     false_quarantine_rate: float
+    detection_latency: float | None = None
+    containment_latency: float | None = None

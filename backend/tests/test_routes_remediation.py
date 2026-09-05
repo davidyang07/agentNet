@@ -66,3 +66,24 @@ def test_applying_the_recommendation_measurably_improves_compromise_fraction():
         fixed_metrics = client.get(f"/api/experiments/{fixed_id}/metrics").json()
 
         assert fixed_metrics["compromise_fraction"] < baseline_metrics["compromise_fraction"]
+
+
+def test_remediation_recommends_raising_sentinel_count_when_one_is_compromised():
+    with TestClient(app) as client:
+        exp_id = _start_experiment(
+            client,
+            sentinel_count=1,
+            active_scenarios=["propagation", "sentinel_compromise"],
+            sentinel_compromise_rate=1.0,
+            defense_enabled=True,
+            detector_sensitivity=1.0,
+        )["experiment_id"]
+        _finish(client, exp_id)
+
+        graph_resp = client.get(f"/api/experiments/{exp_id}/graph").json()
+        sentinels = [n for n in graph_resp["nodes"] if n["node_type"] == "sentinel"]
+        assert any(n["security_state"] == "compromised" for n in sentinels)
+
+        recs = client.get(f"/api/experiments/{exp_id}/remediation").json()["recommendations"]
+        assert recs
+        assert recs[0]["config_diff"] == {"sentinel_count": 2}
