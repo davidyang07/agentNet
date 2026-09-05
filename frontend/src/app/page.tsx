@@ -10,6 +10,7 @@ import { ConfigForm } from "@/components/ConfigForm";
 import { ControlBar } from "@/components/ControlBar";
 import { EventStream } from "@/components/EventStream";
 import { MetricsPanel } from "@/components/MetricsPanel";
+import { SecurityInsightsPanel } from "@/components/SecurityInsightsPanel";
 import {
   createExperiment,
   getExperiment,
@@ -95,6 +96,8 @@ function ExperimentView({
         <section className="min-h-[260px] flex-1 overflow-hidden">
           <NetworkGraph state={state} onNodeClick={setSelectedAgentId} />
         </section>
+
+        <SecurityInsightsPanel experimentId={experimentId} />
       </div>
 
       <AgentDetailDrawer

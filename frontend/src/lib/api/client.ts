@@ -11,6 +11,7 @@ export type SecurityGraphView = components["schemas"]["SecurityGraphView"];
 export type AttackPathsResponse = components["schemas"]["AttackPathsResponse"];
 export type BlastRadiusResponse = components["schemas"]["BlastRadiusResponse"];
 export type CriticalNodesResponse = components["schemas"]["CriticalNodesResponse"];
+export type CriticalNodeView = components["schemas"]["CriticalNodeView"];
 export type ProvenanceResponse = components["schemas"]["ProvenanceResponse"];
 export type MetricsResponse = components["schemas"]["MetricsResponse"];
 export type RemediationResponse = components["schemas"]["RemediationResponse"];
