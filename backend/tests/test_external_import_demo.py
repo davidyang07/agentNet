@@ -51,3 +51,29 @@ def test_imported_topology_runs_an_adversarial_scenario_end_to_end():
     assert 0.0 <= compromise_fraction(world) <= 1.0
     assert any(n.id.startswith("tool-") for n in graph.nodes)
     assert 0.0 <= security_plane_integrity(graph) <= 1.0
+
+
+def test_imported_topology_matches_the_committed_result_artifact():
+    """Pins the real measured numbers in backend/.artifacts/external_import/
+    result.json -- regenerate that artifact (`make import-demo`) and update
+    this test together if a deliberate engine/scenario change legitimately
+    moves these numbers; a silent drift here means the importer or the
+    scenario composition broke, not that the pin is stale."""
+    topology = load_topology_json(TOPOLOGY_PATH)
+    config = ExperimentConfig(
+        seed=42,
+        node_count=25,
+        sentinel_count=1,
+        sentinel_compromise_rate=0.3,
+        active_scenarios=["propagation", "sentinel_compromise"],
+        defense_enabled=True,
+    )
+    world, _ = build_world_from_agents(
+        topology.agents, {tuple(e) for e in topology.edges}, config
+    )
+    while not is_finished(world, config):
+        world, _ = advance(world, config)
+    graph = build_security_graph(world, config)
+
+    assert compromise_fraction(world) == 1.0
+    assert security_plane_integrity(graph) == 0.8

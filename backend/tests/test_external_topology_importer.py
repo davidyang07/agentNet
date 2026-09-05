@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from app.engine.topology import build_world_from_agents
 from app.graph.builder import build_security_graph
@@ -67,3 +68,31 @@ def test_tag_sentinel_agents_sets_attrs(sample_topology_path: Path):
 
     node = next(n for n in graph.nodes if n.id == "sentinel_agent")
     assert node.attrs.get("imported_role") == "sentinel"
+
+
+def test_load_topology_json_raises_for_missing_file(tmp_path: Path):
+    with pytest.raises(FileNotFoundError):
+        load_topology_json(tmp_path / "does_not_exist.json")
+
+
+def test_load_topology_json_raises_for_malformed_json(tmp_path: Path):
+    path = tmp_path / "malformed.json"
+    path.write_text("{not valid json")
+    with pytest.raises(json.JSONDecodeError):
+        load_topology_json(path)
+
+
+def test_load_topology_json_raises_for_missing_required_field(tmp_path: Path):
+    path = tmp_path / "missing_agents.json"
+    path.write_text(json.dumps({"edges": []}))
+    with pytest.raises(ValidationError):
+        load_topology_json(path)
+
+
+def test_load_topology_json_raises_for_edge_referencing_unknown_agent_shape(tmp_path: Path):
+    # edges must be pairs -- a malformed triple should fail validation, not
+    # silently truncate.
+    path = tmp_path / "bad_edge_shape.json"
+    path.write_text(json.dumps({"agents": ["a", "b"], "edges": [["a", "b", "c"]]}))
+    with pytest.raises(ValidationError):
+        load_topology_json(path)
