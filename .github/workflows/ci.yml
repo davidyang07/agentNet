@@ -79,6 +79,26 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+  # Priority 1/productization of the benchmark-suite work: a fast pass/fail
+  # gate (defense comparison + golden demo, not the full 14-scenario matrix
+  # or the 2,500-agent scale run -- those stay a manual `make benchmark`)
+  # proving the defense and remediation mechanisms actually work, not just
+  # that the code runs. See README's "Canonical benchmark suite" section.
+  agentshield-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install backend
+        run: |
+          python3 -m venv backend/.venv
+          backend/.venv/bin/pip install -e "backend[dev]"
+      - name: agentshield test
+        working-directory: backend
+        run: .venv/bin/python scripts/agentshield_test.py
+
   # docs/PLAN.md §2.5/§8: every new endpoint flows through the OpenAPI ->
   # schema.d.ts typegen pipeline automatically, and is supposed to be
   # caught by a "make types && git diff --exit-code" drift check -- this
