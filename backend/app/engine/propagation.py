@@ -87,7 +87,12 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
             tick_compromised=state.tick,
         )
 
-    new_state = WorldState(tick=state.tick + 1, nodes=new_nodes, edges=state.edges)
+    new_state = WorldState(
+        tick=state.tick + 1,
+        nodes=new_nodes,
+        edges=state.edges,
+        compromised_graph_nodes=state.compromised_graph_nodes,
+    )
     return new_state, drafts
 
 
