@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import {
   getCriticalNodes,
   getMetrics,
+  getProvenance,
   getRemediation,
   getSecurityGraph,
   type CriticalNodeView,
@@ -32,6 +33,14 @@ export function formatConfigDiff(diff: Record<string, unknown>): string {
   const entries = Object.entries(diff);
   if (entries.length === 0) return "(no change)";
   return entries.map(([key, value]) => `${key} → ${JSON.stringify(value)}`).join(", ");
+}
+
+// The causal-trace ("provenance") viewer's formatting logic -- kept pure and
+// unit-tested like this file's other format* helpers, per this codebase's
+// established no-jsdom, no-component-rendering-test-setup convention.
+export function formatProvenanceChain(chain: string[]): string {
+  if (chain.length === 0) return "(no provenance chain)";
+  return chain.join(" → ");
 }
 
 export type NonAgentNodeTypeSummary = {
@@ -75,6 +84,9 @@ export function SecurityInsightsPanel({ experimentId }: { experimentId: string }
   const [criticalNodes, setCriticalNodes] = useState<CriticalNodeView[]>([]);
   const [remediation, setRemediation] = useState<RemediationResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [provenanceNodeId, setProvenanceNodeId] = useState("");
+  const [provenanceChain, setProvenanceChain] = useState<string[] | null>(null);
+  const [provenanceError, setProvenanceError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -112,6 +124,19 @@ export function SecurityInsightsPanel({ experimentId }: { experimentId: string }
   }, [experimentId]);
 
   const nonAgentSummary = graph ? summarizeNonAgentNodes(graph) : [];
+
+  const lookupProvenance = () => {
+    if (!provenanceNodeId.trim()) return;
+    getProvenance(experimentId, provenanceNodeId.trim())
+      .then((resp) => {
+        setProvenanceChain(resp.chain);
+        setProvenanceError(null);
+      })
+      .catch((err) => {
+        setProvenanceChain(null);
+        setProvenanceError(err instanceof Error ? err.message : String(err));
+      });
+  };
 
   return (
     <aside className="w-72 shrink-0 overflow-y-auto border-l border-slate-800 p-4 text-sm">
@@ -168,6 +193,31 @@ export function SecurityInsightsPanel({ experimentId }: { experimentId: string }
             ))}
           </ul>
         </>
+      )}
+
+      <h3 className="mb-1 mt-4 font-medium text-slate-300">Causal trace</h3>
+      <div className="flex gap-1">
+        <input
+          type="text"
+          value={provenanceNodeId}
+          onChange={(e) => setProvenanceNodeId(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && lookupProvenance()}
+          placeholder="node id"
+          className="min-w-0 flex-1 rounded-md border border-slate-700 bg-transparent px-2 py-1 text-xs text-slate-300"
+        />
+        <button
+          type="button"
+          onClick={lookupProvenance}
+          className="rounded-md border border-slate-700 px-2 py-1 text-xs hover:bg-slate-800"
+        >
+          Trace
+        </button>
+      </div>
+      {provenanceError && <p className="mt-1 text-xs text-red-400">{provenanceError}</p>}
+      {provenanceChain !== null && (
+        <p className="mt-1 break-words font-mono text-xs text-slate-400">
+          {formatProvenanceChain(provenanceChain)}
+        </p>
       )}
 
       <h3 className="mb-1 mt-4 font-medium text-slate-300">Remediation</h3>

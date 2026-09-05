@@ -5,6 +5,7 @@ import {
   formatConfigDiff,
   formatLatency,
   formatPercent,
+  formatProvenanceChain,
   summarizeNonAgentNodes,
 } from "./SecurityInsightsPanel";
 
@@ -42,6 +43,18 @@ describe("formatConfigDiff", () => {
     expect(formatConfigDiff({ defense_enabled: true, detector_sensitivity: 0.4 })).toBe(
       "defense_enabled → true, detector_sensitivity → 0.4",
     );
+  });
+});
+
+describe("formatProvenanceChain", () => {
+  it("joins a chain with arrows", () => {
+    expect(formatProvenanceChain(["agent-000", "agent-004", "agent-012"])).toBe(
+      "agent-000 → agent-004 → agent-012",
+    );
+  });
+
+  it("returns a placeholder for an empty chain", () => {
+    expect(formatProvenanceChain([])).toBe("(no provenance chain)");
   });
 });
 
