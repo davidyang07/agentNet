@@ -1,4 +1,4 @@
-.PHONY: dev test lint types verify-determinism migrate benchmark golden-demo import-demo agentshield-test
+.PHONY: dev test lint types verify-determinism migrate benchmark benchmark-audit golden-demo import-demo agentshield-test
 
 dev:
 	docker compose up --build
@@ -40,6 +40,13 @@ migrate:
 # Writes backend/.artifacts/benchmark/{results.json,report.md}.
 benchmark:
 	cd backend && .venv/bin/python scripts/run_benchmark.py
+
+# Priority 2 of this session's brief: sweeps every attack-scenario/defense-
+# variant preset for a remediation opportunity and ranks the results by
+# measured retained_utility improvement. Writes
+# backend/.artifacts/benchmark/{audit.json,audit.md}.
+benchmark-audit:
+	cd backend && .venv/bin/python scripts/run_benchmark_audit.py
 
 # The golden demo scenario (Priority 2): one config whose event log narrates
 # indirect prompt injection -> propagation -> initial quarantine -> adaptive
