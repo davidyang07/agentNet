@@ -102,10 +102,13 @@ this is a short, honest summary of what's implemented right now:
   trace, for ingestion by any OpenTelemetry-compatible observability backend.
 
 **Not yet built:** typed-node rendering inside the network graph visualization itself (still the
-dashboard's one delicate, unmodified hero visual); LangGraph/MCP integration (deliberately not
-attempted — see `docs/PLAN.md` §9 for why); graph-structural remediation beyond `sentinel_count`
-(e.g. credential consolidation — no causal hook for it exists yet); a staging deployment environment
-(out of scope for a local-first project). See `docs/PLAN.md` §9 for the precise list.
+dashboard's one delicate, unmodified hero visual — no browser-verification tooling has been
+available in any session so far); MCP integration (deliberately not attempted; LangGraph topology
+import *is* implemented — see below); graph-structural remediation beyond `sentinel_count` (e.g.
+credential consolidation — no causal hook for it exists yet); a staging deployment environment
+(out of scope for a local-first project); history/replay equivalents of the metrics/graph/analysis
+endpoints (so the comparison view can show security-plane metrics for a historical run, not just a
+live one). See `docs/PLAN.md` §9/§10 for the precise list.
 
 ## Getting started
 
@@ -259,7 +262,11 @@ cd backend
   defense comparison plus the golden demo) — the `agentshield test` productization entry point;
   wired into CI as its own job.
 
-`docs/PLAN.md` records real measured numbers from an actual run of each of these.
+`docs/PLAN.md` §10 records real measured numbers from an actual run of each of these — e.g., on the
+fixed defense-comparison attack, `defense_off` yields `retained_utility=0.0` vs.
+`defense_high_sensitivity`'s `0.96`; the golden demo's remediation improves
+`security_plane_integrity` from `0.80` to `0.83` on re-run; the scale-run preset completes 2,500
+agents in under a second.
 
 ## Verification
 

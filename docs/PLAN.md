@@ -467,10 +467,12 @@ requirements.
 ### Explicitly remaining (accurate as of the last commit this session)
 1. `NetworkGraph.tsx` typed-node rendering (the one remaining piece of priority 8) — still needs a
    real browser/visual-verification pass no session so far has had, and remains the dashboard's
-   highest-risk surface to change blind.
-2. LangGraph/MCP integration, if ever wanted — deliberately not attempted (see priority 9 above);
-   would need explicit product direction on what either should concretely mean here before any code
-   is written.
+   highest-risk surface to change blind. This session again had no browser/screenshot tool
+   available (confirmed via `ToolSearch`), so this was deliberately left untouched rather than
+   changed blind — see priority 13 below for what frontend work was done instead.
+2. MCP integration, if ever wanted — deliberately not attempted; would need explicit product
+   direction on what it should concretely mean here before any code is written. (LangGraph
+   integration is now done, scoped to topology import — see priority 12.)
 3. A dedicated staging environment (rest of priority 10) — CI itself is now solid; a staging
    deploy target was never in scope for a local-first, no-paid-credentials project.
 4. The graph-structural remediation lever originally sketched in §7 (credential consolidation)
@@ -479,6 +481,126 @@ requirements.
 5. This session again had no local Postgres/Docker access, so persistence/history/migration tests
    were not re-run (untouched by this session's changes; last verified under the first session's
    environment, and CI already covers them on every push via a real Postgres service container).
+6. A real Qwen/vLLM endpoint was not reachable this session — the benchmark suite, golden demo, and
+   `agentshield test` all ran (and are documented below) against the deterministic mock provider
+   only. Priority 14 documents the exact manual command to validate against a real model.
+
+---
+
+## 10. Product validation (this session): benchmark suite, golden demo, external integration
+
+Continuing from a clean, green state (all of §9's items above), this session's work targets
+**product validation**: proving the platform can evaluate a real multi-agent topology end-to-end
+and produce reproducible, non-fabricated benchmark evidence. Every number below is copied verbatim
+from an actual run of the commands listed (`backend/.artifacts/{benchmark,golden_demo,
+external_import}/`), not invented.
+
+**A real bug was found and fixed en route:** `app/engine/propagation.py::step`,
+`app/security/detection.py::step`'s quarantine branch, and
+`app/scenarios/adaptive_attacker_scenario.py::step` all constructed a fresh `WorldState` without
+carrying forward `compromised_graph_nodes`, silently resetting any sentinel/credential/
+security-control compromise to empty every tick they ran. Since propagation/detection run every
+tick in the default pipeline, this broke `sentinel_compromise`'s and `byzantine_collusion`'s
+documented "stays compromised" persistence whenever composed with propagation or the adaptive
+attacker — exactly §5's own worked examples, and exactly what the golden demo below needs. No
+existing test caught it: the prior session's runner-integration test only asserted "finished" and
+"deterministic," never accumulation across ticks. Fixed by threading `compromised_graph_nodes`
+through all three `WorldState` constructions; zero regressions (full suite +
+`verify_determinism.py` both pass unmodified — the fix only changes behavior once a nonzero
+`sentinel_compromise_rate`/`byzantine_collusion_rate` is combined with propagation or
+`adaptive_attacker` across multiple ticks, a combination no prior test exercised).
+
+**Priority 11 — canonical benchmark suite (done).** `app/benchmark/` (`config.py`, `matrix.py`,
+`runner.py`, `report.py`) + `backend/scripts/run_benchmark.py` / `make benchmark`. 14 attack-scenario
+presets (propagation at three virulence/density levels, both with and without defense, the
+deterministic adaptive attacker at two strategy biases, false quarantine, sentinel compromise,
+attestation replay, Byzantine collusion, a combined four-vector run, real-agent lateral prompt
+injection via the mock provider, and a 2,500-agent scale run), 7 defense-posture variants of one
+fixed attack (off, three detector-sensitivity levels, three sentinel counts), and a before/after
+remediation comparison — all deterministic, zero real provider calls, computed via the existing
+`app/metrics/compute.py` functions unchanged. `BenchmarkConfig(ExperimentConfig)` (flagged
+deviation from `docs/SPEC.md` §4's `node_count ∈ [25, 100]` bound) widens `node_count` to 3000 for
+the scale-run preset **only** — the live, API-facing `ExperimentConfig` (and therefore
+`NetworkGraph.tsx`) keeps its `[25, 100]` bound completely unchanged. Real measured numbers from
+`backend/.artifacts/benchmark/report.md` (seed 42): `scale_run_2500_agents` completes 2,500 agents
+in 18 ticks / well under a second; on the fixed defense-comparison attack, `defense_off` yields
+`retained_utility=0.0` vs. `defense_high_sensitivity`'s `0.96`; `sentinel_compromise_attack`
+(1 sentinel) shows `security_plane_integrity=0.67` after both a compromised agent and — thanks to
+the persistence fix above — a subverted sentinel; the remediation case shows
+`security_plane_integrity` 0.8 → 1.0 and `retained_utility` 0.0 → 0.96 after applying the
+recommended `sentinel_count` increase and re-running. 26 new tests.
+
+**Priority 12 — golden demo scenario (done).** `app/benchmark/golden_demo.py` +
+`backend/scripts/run_golden_demo.py` / `make golden-demo`. One `ExperimentConfig`
+(`active_scenarios=["adaptive_attacker", "prompt_injection", "sentinel_compromise",
+"attestation"]`, 10 real (mock-provider) agents, 1 sentinel, seed 42) whose real event log narrates
+all ten brief beats: indirect prompt injection via a real LLM-backed lateral attempt →
+propagation → an initial legitimate quarantine → the adaptive attacker's deterministic
+aggressive/stealthy strategy switch → a sentinel subverted mid-run (`POLICY_VIOLATION`
+`sentinel_subverted`) → that sentinel publishing a false threat signature every subsequent tick
+(threat-memory poisoning / false report) → a replayed attestation nonce accepted → the existing
+remediation engine flagging the `security_plane_integrity` gap and recommending `sentinel_count`
+1→2 → a re-run with the fix applied showing a real, reproducible improvement:
+`security_plane_integrity` 0.80 → 0.83, `retained_utility` 0.05 → 0.10. `sentinel_compromise_rate`
+was tuned empirically (0.08) so the baseline reliably subverts its one sentinel within `max_ticks`
+while the remediated run's second sentinel doesn't also get subverted first — at higher rates both
+eventually flip, a real but different, less demonstrable claim. 3 new tests, including a full
+narrative-beat-presence assertion against the real event log (not a hand-written transcript).
+
+**Priority 13 — real external (LangGraph) integration (done, scoped to topology import).**
+`examples/langgraph_research_agents/` (a genuinely separate small Python project — real
+`langgraph`/`langchain-core`, never added to `backend/pyproject.toml`, so the backend gains no new
+runtime dependency): a `StateGraph` (`research_agent → web_search_tool → summarizer_agent →
+sentinel_agent`) whose `export_topology.py` calls the real compiled graph's `get_graph()` API to
+produce a committed `topology.json`. Backend side: `app/engine/topology.py::build_world_from_agents`
+(extracted from `build_world`, byte-for-byte unchanged output — verified by the existing
+`test_topology.py` passing unmodified) builds a `WorldState` from an explicit agent id/edge set
+instead of a `barabasi_albert_graph` draw; `app/importers/external_topology.py` parses
+`topology.json` and layers the *real* tool bindings on top of `build_security_graph`'s output as
+genuine (non-synthetic) `CAN_ACCESS` edges, tagging the sentinel agent's role in `attrs` for
+display. `backend/scripts/run_external_import_demo.py` / `make import-demo` runs propagation +
+sentinel compromise against the imported 4-agent topology end to end — real measured result:
+`compromise_fraction=1.0`, `security_plane_integrity=0.8`, and the same `sentinel_count`
+remediation recommendation the golden demo produces. **Scoped deliberately**: tool/credential/
+resource/sentinel-*count* synthetic attachment still comes from `ExperimentConfig` exactly as for
+any AgentNet-native experiment — only the agent identity/communication topology and the specific
+tool-ownership edges are real imports, not a full MCP-style live protocol bridge (that remains
+open per item 2 above). 7 new tests.
+
+**Priority 14 — real Qwen/vLLM validation path (documented, unexercised this session).** No new
+gateway-selection code was needed: `app/benchmark/runner.py`'s async path reuses
+`app/gateway/factory.py::build_gateway` (the same function the live API already uses), so
+`ExperimentConfig(model_provider="vllm")` routes through `VLLMProvider` with zero new logic.
+`backend/scripts/run_golden_demo.py --model-provider vllm` is the entry point; exact setup command
+is in README's "Real-model benchmark/golden-demo validation" section. No reachable vLLM endpoint
+existed this session, so this path is implemented and unit-tested (provider-override wiring only)
+but not run against a real model.
+
+**Priority 15 — product UX (done, scoped to a new panel; `NetworkGraph.tsx` untouched).**
+`SecurityInsightsPanel.tsx` gained a causal-trace (provenance) viewer — a node-id input calling the
+already-existing but previously-unused `GET .../analysis/provenance` / `getProvenance()` client
+function, rendering the compromise-chain result. No changes to `NetworkGraph.tsx` (item 1 above) —
+still no browser-verification tooling available. Verified via eslint/tsc/vitest (12 tests in this
+file)/build and a dev-server smoke test (`200` on `/`), not an actual rendered-in-a-browser check.
+
+**Productization — `agentshield test` (done).** `app/benchmark/cli.py::evaluate()` +
+`backend/scripts/agentshield_test.py` / `make agentshield-test`: a fast (~1s) pass/fail gate over
+two concrete, causally-grounded claims (higher detector sensitivity retains at least as much
+utility as no defense; the golden demo's remediation improves `security_plane_integrity`) —
+deliberately excludes the full 14-scenario matrix and the 2,500-agent scale run (those stay a
+manual `make benchmark`). Wired into CI as a new, additive `agentshield-test` job
+(`.github/workflows/ci.yml`) alongside the existing `backend`/`frontend`/`schema-drift` jobs, none
+of which were modified.
+
+### Next recommended milestone
+History/replay equivalents of the `/metrics`, `/graph`, and `/analysis/*` endpoints (§2.5's live
+path was implemented first; a persisted-run equivalent was flagged as future work then and still
+is), so the frontend's existing comparison view (`frontend/src/lib/comparison/`) can show
+before/after security-plane metrics for a historical remediation re-test — today that comparison
+only surfaces stream-derived counts (total/healthy/compromised/quarantined), not the richer
+`MetricsResponse` fields this session's benchmark work relies on. That, plus an actual browser pass
+on `NetworkGraph.tsx` typed-node rendering and a real Qwen/vLLM validation run once a GPU endpoint
+is available, are the three highest-value remaining items.
 
 ### Closed this session: async scenario registry gating (§3)
 Previously flagged here as a "known simplification": `run_async_scenarios` now gates by
