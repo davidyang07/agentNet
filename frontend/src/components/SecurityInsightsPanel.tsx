@@ -7,6 +7,11 @@ import {
   getMetrics,
   getProvenance,
   getRemediation,
+  getReplayCriticalNodes,
+  getReplayMetrics,
+  getReplayProvenance,
+  getReplayRemediation,
+  getReplaySecurityGraph,
   getSecurityGraph,
   type CriticalNodeView,
   type MetricsResponse,
@@ -78,7 +83,13 @@ function MetricRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function SecurityInsightsPanel({ experimentId }: { experimentId: string }) {
+export function SecurityInsightsPanel({
+  experimentId,
+  mode = "live",
+}: {
+  experimentId: string;
+  mode?: "live" | "replay";
+}) {
   const [metrics, setMetrics] = useState<MetricsResponse | null>(null);
   const [graph, setGraph] = useState<SecurityGraphView | null>(null);
   const [criticalNodes, setCriticalNodes] = useState<CriticalNodeView[]>([]);
@@ -92,13 +103,23 @@ export function SecurityInsightsPanel({ experimentId }: { experimentId: string }
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
 
+    const fetchOnce = () =>
+      mode === "live"
+        ? Promise.all([
+            getMetrics(experimentId),
+            getSecurityGraph(experimentId),
+            getCriticalNodes(experimentId, 3),
+            getRemediation(experimentId),
+          ])
+        : Promise.all([
+            getReplayMetrics(experimentId),
+            getReplaySecurityGraph(experimentId),
+            getReplayCriticalNodes(experimentId, 3),
+            getReplayRemediation(experimentId),
+          ]);
+
     const poll = () => {
-      Promise.all([
-        getMetrics(experimentId),
-        getSecurityGraph(experimentId),
-        getCriticalNodes(experimentId, 3),
-        getRemediation(experimentId),
-      ])
+      fetchOnce()
         .then(([metricsResp, graphResp, criticalResp, remediationResp]) => {
           if (cancelled) return;
           setMetrics(metricsResp);
@@ -112,7 +133,9 @@ export function SecurityInsightsPanel({ experimentId }: { experimentId: string }
           setError(err instanceof Error ? err.message : String(err));
         })
         .finally(() => {
-          if (!cancelled) timer = setTimeout(poll, POLL_INTERVAL_MS);
+          // A replayed run's reconstructed state is static -- polling again
+          // would just refetch the exact same answer forever.
+          if (!cancelled && mode === "live") timer = setTimeout(poll, POLL_INTERVAL_MS);
         });
     };
     poll();
@@ -121,13 +144,16 @@ export function SecurityInsightsPanel({ experimentId }: { experimentId: string }
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [experimentId]);
+  }, [experimentId, mode]);
 
   const nonAgentSummary = graph ? summarizeNonAgentNodes(graph) : [];
 
   const lookupProvenance = () => {
     if (!provenanceNodeId.trim()) return;
-    getProvenance(experimentId, provenanceNodeId.trim())
+    (mode === "live"
+      ? getProvenance(experimentId, provenanceNodeId.trim())
+      : getReplayProvenance(experimentId, provenanceNodeId.trim())
+    )
       .then((resp) => {
         setProvenanceChain(resp.chain);
         setProvenanceError(null);

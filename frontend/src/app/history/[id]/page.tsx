@@ -8,6 +8,7 @@ import { AgentDetailDrawer } from "@/components/AgentDetailDrawer";
 import { EventStream } from "@/components/EventStream";
 import { MetricsPanel } from "@/components/MetricsPanel";
 import { ReplayControlBar } from "@/components/ReplayControlBar";
+import { SecurityInsightsPanel } from "@/components/SecurityInsightsPanel";
 import { initialReplayControlState, replayControlReducer } from "@/lib/replay/controlReducer";
 import { useReplayStream } from "@/lib/replay/useReplayStream";
 
@@ -65,6 +66,7 @@ function ReplayContent({ experimentId }: { experimentId: string }) {
         <section className="min-h-[260px] flex-1 overflow-hidden">
           <NetworkGraph state={state} onNodeClick={setSelectedAgentId} />
         </section>
+        <SecurityInsightsPanel experimentId={experimentId} mode="replay" />
       </div>
 
       <AgentDetailDrawer
