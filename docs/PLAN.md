@@ -387,55 +387,76 @@ deterministic/testable). Registered as `"adaptive_attacker"`, opt-in, owns the t
 `propagation.step` (mutually exclusive with it in `active_scenarios`, not combinable). 10 tests
 including two driving a full experiment through `ExperimentRunner`.
 
-**Priority 4 — Byzantine/security-plane attacks (partial).** Only **false quarantine** is
-implemented, as an opt-in `false_quarantine_rate` extension to the existing, unmodified
-`app/security/detection.py::step` (default 0.0 = strict no-op). **Not implemented:** sentinel
-compromise, threat-memory poisoning, attestation replay, Byzantine collusion — none of §5's other
-four attacks have any code. Sentinel/`SECURITY_CONTROL` graph nodes exist (priority 1) but are
-purely structural/analysis-only; nothing in the codebase can compromise them yet.
+**Priority 4 — Byzantine/security-plane attacks (done).** **False quarantine** (prior session) plus,
+this follow-up session, all four remaining §5 attacks: `app/scenarios/sentinel_compromise_scenario.py`
+(a `SENTINEL` monitoring a compromised agent can itself become `COMPROMISED`, `POLICY_VIOLATION`
+violation_type `"sentinel_subverted"`, then publishes false `THREAT_SIGNATURE_PUBLISHED` every
+subsequent tick — threat-memory poisoning), `app/scenarios/attestation_scenario.py` (a compromised
+agent can present a stale nonce — `ATTESTATION_VERIFIED` metadata.replayed=true — using the
+simulation tick itself as the monotonic nonce, no new persisted high-water-mark needed), and
+`app/scenarios/byzantine_collusion_scenario.py` (two compromised agents jointly exceed credential
+scope on a `CREDENTIAL` neither holds, `POLICY_VIOLATION` violation_type
+`"credential_scope_exceeded"`, marking the credential itself `COMPROMISED`). `WorldState` gained
+`compromised_graph_nodes: frozenset[str]` as the compromise record for non-agent graph nodes;
+`app/graph/builder.py` reads it uniformly. `app/security/detection.py::step` now consults compromised
+sentinels' `MONITORS` edges and suppresses `ANOMALY_DETECTED` for the agents they watch — closing the
+"nothing can compromise them yet" gap this section used to flag. All three new scenarios are
+composable (none owns the tick increment) and opt-in (each new rate field defaults to 0.0). 44 new
+tests, including a full-runner integration test running all three alongside propagation.
 
-**Priority 5 — metrics (partial).** `app/metrics/compute.py` + `GET /.../metrics`:
-`compromise_fraction`, `retained_utility`, `blast_radius_fraction`, `privileged_exposure`,
-`security_plane_integrity`, `attack_success_rate`, `false_quarantine_rate` — all implemented and
-tested. **Not implemented:** detection latency and containment latency (§6) — both need per-event
-tick correlation (first `ANOMALY_DETECTED`/`AGENT_QUARANTINED` tick minus `tick_compromised`) that
-this pass deliberately didn't approximate rather than ship an unverified definition.
+**Priority 5 — metrics (done).** `compromise_fraction`, `retained_utility`, `blast_radius_fraction`,
+`privileged_exposure`, `security_plane_integrity`, `attack_success_rate`, `false_quarantine_rate`
+(prior session), plus, this follow-up session, `detection_latency`/`containment_latency` (mean ticks
+`tick_compromised`→first `ANOMALY_DETECTED`, and that detection→first *legitimate*
+`AGENT_QUARANTINED`; both return `None` rather than `0.0` when no node has completed the transition,
+since `0.0` would misreport "no data" as "instant"). Wired into `GET /.../metrics` as two new optional
+fields.
 
 **Priority 6 — causal replay/observability (done, small delta).** This was already substantially
 covered by the pre-existing Phase 1.5 event-log persistence/replay/comparison infrastructure. The
 one gap — reconstructing a single node's compromise chain — is closed by
 `GET /.../analysis/provenance`, reusing priority 1's `analysis.provenance` unchanged.
 
-**Priority 7 — remediation engine (done, narrower than originally sketched).**
-`app/remediation/analyze.py::recommend` only recommends `detector_sensitivity` and
-`defense_enabled` — the two config levers with a *causally verified* effect on
-`app/security/detection.py`'s actual behavior. §7's original sketch (sentinel placement, credential
-consolidation) is **not implemented**: those levers have no effect on any scenario or defense logic
-in this codebase today, so recommending them would be an unverifiable, fabricated "fix." This was
-checked, not assumed: `test_routes_remediation.py::test_applying_the_recommendation_measurably_improves_compromise_fraction`
-proves a real recommendation, applied to a fresh experiment, actually improves the targeted metric.
+**Priority 7 — remediation engine (done).** `detector_sensitivity` and `defense_enabled` (prior
+session) plus, this follow-up session, `sentinel_count`: when `security_plane_integrity < 1.0` (a
+sentinel is compromised) and `sentinel_count` hasn't hit the 5-node cap, `recommend` suggests raising
+it by one. This is a genuinely *causally verified* lever, not the "credential consolidation"/
+"sentinel placement" idea originally sketched in §7 and previously ruled out as unverifiable — priority
+4's detection-suppression wiring is exactly what makes it verifiable now: spreading monitoring across
+more sentinels shrinks the fraction of agents a single subverted sentinel's suppression can reach,
+proven directly via `app/security/detection.py::step` in `test_remediation.py`, and demonstrated
+end-to-end against a live running server (single sentinel → zero detections → recommendation to add a
+second one). Structural credential-consolidation levers remain **not implemented** — still no causal
+hook for them in this codebase.
 
-**Priority 8 — frontend integration (partial, data layer only).** `frontend/src/lib/api/client.ts`
-gained typed fetch wrappers for all seven new endpoints, with unit tests. **Not implemented:** any
-new visual component (typed-node rendering by `NodeType`, an attack-path/blast-radius panel, a
-remediation panel) — this session has no way to drive a real browser to verify new UI renders
+**Priority 8 — frontend integration (still partial, data layer only).** Unchanged this follow-up
+session beyond the required OpenAPI type-sync (`frontend/src/lib/api/schema.d.ts` and every
+`ExperimentConfig`-literal test fixture updated for the three new config fields). **Still not
+implemented:** any new visual component (typed-node rendering by `NodeType`, an attack-path/
+blast-radius panel, a remediation panel, or surfacing the backend `MetricsResponse` at all — the
+existing `MetricsPanel.tsx` renders only client-derived event-stream counts, a separate, older
+metric set). This session again had no way to drive a real browser to verify new UI renders
 correctly, and shipping unverified changes to the dashboard's hero visual (`NetworkGraph.tsx`,
-explicitly called out as a delicate first-class surface in `docs/BRIEF.md` §8) was judged worse
-than not shipping them.
+explicitly called out as a delicate first-class surface in `docs/BRIEF.md` §8) was judged worse than
+not shipping them.
 
 ### Explicitly remaining (accurate as of the last commit this session; next in priority order)
-1. Sentinel compromise, threat-memory poisoning, attestation replay, Byzantine collusion (§5).
-2. Detection latency / containment latency metrics (§6).
-3. Graph-structural remediation rules (§7) — blocked on (1): they need sentinel/credential nodes to
-   actually participate in some scenario's mechanics before a recommendation about them is
-   verifiable.
-4. Frontend visual components (§9 priority 8 above) — needs a real browser/visual-verification pass
-   this session didn't have.
-5. LangGraph/MCP/OpenTelemetry adapters (priority 9) — no work started; genuinely out of scope
-   until 1–4 above are solid, per the priority order in the originating instruction, and per
-   `docs/BRIEF.md`'s explicit "not a generic agent framework, don't compete with LangGraph."
-6. CI/staging validation beyond the existing `make test`/`make lint` gates (priority 10) — every
-   change this session already runs through those gates; a dedicated staging environment or
-   additional CI stages were not built.
+1. Frontend visual components (priority 8 above) — needs a real browser/visual-verification pass
+   this session didn't have. The backend API surface for all of it (graph, analysis, metrics,
+   remediation) is complete and typed through to `frontend/src/lib/api/client.ts`.
+2. LangGraph/MCP/OpenTelemetry adapters (priority 9) — no work started. Priorities 1–7 are now solid
+   (all of §5's attacks, all of §6's metrics, and a causally-verified remediation lever exist), so
+   this is next in priority order, but remains bounded by `docs/BRIEF.md`'s explicit "not a generic
+   agent framework, don't compete with LangGraph" — scope any adapter work narrowly (telemetry
+   export, not orchestration).
+3. CI/staging validation beyond the existing `make test`/`make lint` gates (priority 10) — every
+   change across both sessions runs through those gates locally; a dedicated staging environment or
+   additional CI stages were not built. This session additionally had no local Postgres/Docker
+   access, so persistence/history/migration tests were not re-run (they were not touched by this
+   session's changes, and passed under the prior session's environment).
+4. Two known simplifications carried over unchanged from the prior session, neither touched here:
+   the async scenario registry still isn't gated by `active_scenarios` (§3), and the graph-structural
+   remediation lever originally sketched in §7 (credential consolidation) remains unimplemented for
+   want of a causal hook.
 
 Treat the git log and test suite as ground truth over this section if they ever disagree.

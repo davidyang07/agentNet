@@ -2,11 +2,12 @@
 
 **AgentNet is a Multi-Agent Adversarial Resilience Platform.** It models interconnected agents,
 tools/MCP servers, credentials, resources, and security controls as a typed security graph; runs
-reproducible adversarial scenarios (a deterministic adaptive attacker, and a first
-security-plane/Byzantine attack — see "Security graph, scenarios, metrics, remediation" below for
-exactly what's implemented so far vs. planned); measures compromise propagation and defense
-resilience; and recommends and re-tests fixes. See `docs/PLAN.md` for the current architecture,
-domain model, and roadmap, including the precise as-built status.
+reproducible adversarial scenarios (a deterministic adaptive attacker, plus false quarantine,
+sentinel compromise, threat-memory poisoning, attestation replay, and Byzantine collusion —
+see "Security graph, scenarios, metrics, remediation" below for exactly what's implemented so far
+vs. planned); measures compromise propagation and defense resilience; and recommends and re-tests
+fixes. See `docs/PLAN.md` for the current architecture, domain model, and roadmap, including the
+precise as-built status.
 
 Users construct isolated networks of simulated autonomous agents, run controlled adversarial
 scenarios, watch compromise propagate in real time, inspect fine-grained security telemetry, and
@@ -79,21 +80,27 @@ this is a short, honest summary of what's implemented right now:
   probabilistic attacker, default, unchanged) and `"adaptive_attacker"` (deterministic
   observe→choose→attack→adapt — switches between an aggressive highest-degree-neighbor strategy
   and a stealthier lowest-degree one based on the observed quarantine rate).
-- **`false_quarantine_rate`** config field: an opt-in security-plane attack where a subverted
-  quarantine authority falsely quarantines healthy agents (defaults to `0.0`, a strict no-op).
+- **Byzantine/security-plane attacks**, each an opt-in scenario or rate field defaulting to a
+  strict no-op: `false_quarantine_rate` (a subverted quarantine authority falsely quarantines
+  healthy agents), `"sentinel_compromise"` (a sentinel monitoring a compromised agent can itself be
+  subverted, then poisons shared threat memory with false signatures, and suppresses
+  `ANOMALY_DETECTED` for everyone it watches), `"attestation"` (a compromised agent can replay a
+  stale attestation nonce), and `"byzantine_collusion"` (two compromised agents jointly exceed
+  credential access scope neither could alone).
 - **`GET /api/experiments/{id}/metrics`** — compromise fraction, retained utility, blast-radius
   fraction, privileged exposure, security-plane integrity, attack success rate, false-quarantine
-  rate.
+  rate, detection latency, containment latency.
 - **`GET /api/experiments/{id}/remediation`** — a deterministic, rule-based recommendation (raise
-  `detector_sensitivity`, or enable `defense_enabled`) whenever compromise is high; re-testing it is
-  just starting a new experiment with the recommended config and comparing metrics — reusing the
-  comparison feature below with no new machinery.
+  `detector_sensitivity`, enable `defense_enabled`, or raise `sentinel_count` when a sentinel is
+  compromised) whenever the relevant metric degrades; re-testing it is just starting a new
+  experiment with the recommended config and comparing metrics — reusing the comparison feature
+  below with no new machinery.
 
-**Not yet built:** sentinel compromise, threat-memory poisoning, attestation replay, Byzantine
-collusion; detection/containment-latency metrics; graph-structural remediation (e.g. sentinel
-placement); any new frontend visualization for the graph/metrics/remediation endpoints above (the
-typed API client exists in `frontend/src/lib/api/client.ts`, but no UI consumes it yet); LangGraph/
-MCP/OpenTelemetry adapters. See `docs/PLAN.md` §9 for the precise list and why each was deferred.
+**Not yet built:** any new frontend visualization for the graph/metrics/remediation endpoints above
+(the typed API client exists in `frontend/src/lib/api/client.ts`, but no UI consumes it yet);
+LangGraph/MCP/OpenTelemetry adapters; graph-structural remediation beyond `sentinel_count` (e.g.
+credential consolidation — no causal hook for it exists yet). See `docs/PLAN.md` §9 for the precise
+list and why each was deferred.
 
 ## Getting started
 
