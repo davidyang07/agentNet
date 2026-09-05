@@ -47,6 +47,8 @@ class GoldenDemoResult:
 
 def _narrate(run: BenchmarkRun) -> list[str]:
     lines: list[str] = []
+    seen_false_signature_from: set[str] = set()
+    replayed_attestation_count = 0
     for event in run.events:
         etype = event.event_type.value
         if etype == "COMPROMISE_SUCCEEDED" and event.metadata.get("real_agent"):
@@ -77,14 +79,25 @@ def _narrate(run: BenchmarkRun) -> list[str]:
                 "plane itself"
             )
         elif etype == "THREAT_SIGNATURE_PUBLISHED" and event.metadata.get("legitimate") is False:
-            lines.append(
-                f"tick {event.sim_tick}: subverted sentinel {event.agent_id} published a false "
-                "threat signature (false report / trust manipulation)"
-            )
+            if event.agent_id not in seen_false_signature_from:
+                seen_false_signature_from.add(event.agent_id)
+                lines.append(
+                    f"tick {event.sim_tick}: subverted sentinel {event.agent_id} published a "
+                    "false threat signature (false report / trust manipulation) -- and keeps "
+                    "doing so every subsequent tick, poisoning shared threat memory"
+                )
         elif etype == "ATTESTATION_VERIFIED" and event.metadata.get("replayed"):
-            lines.append(
-                f"tick {event.sim_tick}: a stale attestation nonce was replayed and accepted"
-            )
+            replayed_attestation_count += 1
+            if replayed_attestation_count == 1:
+                lines.append(
+                    f"tick {event.sim_tick}: a stale attestation nonce was replayed and accepted"
+                )
+
+    if replayed_attestation_count > 1:
+        lines.append(
+            f"...{replayed_attestation_count} stale attestation nonces were replayed and "
+            "accepted in total over the run"
+        )
 
     lines.append(
         "attacker strategy: the adaptive attacker recomputed its strategy every tick from the "
