@@ -6,7 +6,14 @@ import httpx
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import routes_experiments, routes_graph, routes_history, routes_schema, ws
+from app.api import (
+    routes_experiments,
+    routes_graph,
+    routes_history,
+    routes_schema,
+    routes_telemetry,
+    ws,
+)
 from app.config import get_settings
 from app.db import check_postgres_reachable, create_pool
 from app.persistence.migrate import run_migrations
@@ -64,6 +71,7 @@ app.include_router(routes_experiments.router)
 app.include_router(routes_graph.router)
 app.include_router(routes_history.router)
 app.include_router(routes_schema.router)
+app.include_router(routes_telemetry.router)
 app.include_router(ws.router)
 
 
