@@ -95,12 +95,17 @@ this is a short, honest summary of what's implemented right now:
   compromised) whenever the relevant metric degrades; re-testing it is just starting a new
   experiment with the recommended config and comparing metrics — reusing the comparison feature
   below with no new machinery.
+- **`SecurityInsightsPanel`** — a dashboard sidebar surfacing all of the above (metrics, a non-agent
+  node-type summary, critical nodes, remediation recommendations) without touching the network
+  graph visualization itself.
+- **`GET /api/experiments/{id}/otel-trace`** — the experiment's event log exported as an OTLP/JSON
+  trace, for ingestion by any OpenTelemetry-compatible observability backend.
 
-**Not yet built:** any new frontend visualization for the graph/metrics/remediation endpoints above
-(the typed API client exists in `frontend/src/lib/api/client.ts`, but no UI consumes it yet);
-LangGraph/MCP/OpenTelemetry adapters; graph-structural remediation beyond `sentinel_count` (e.g.
-credential consolidation — no causal hook for it exists yet). See `docs/PLAN.md` §9 for the precise
-list and why each was deferred.
+**Not yet built:** typed-node rendering inside the network graph visualization itself (still the
+dashboard's one delicate, unmodified hero visual); LangGraph/MCP integration (deliberately not
+attempted — see `docs/PLAN.md` §9 for why); graph-structural remediation beyond `sentinel_count`
+(e.g. credential consolidation — no causal hook for it exists yet); a staging deployment environment
+(out of scope for a local-first project). See `docs/PLAN.md` §9 for the precise list.
 
 ## Getting started
 

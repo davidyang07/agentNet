@@ -429,34 +429,59 @@ end-to-end against a live running server (single sentinel → zero detections �
 second one). Structural credential-consolidation levers remain **not implemented** — still no causal
 hook for them in this codebase.
 
-**Priority 8 — frontend integration (still partial, data layer only).** Unchanged this follow-up
-session beyond the required OpenAPI type-sync (`frontend/src/lib/api/schema.d.ts` and every
-`ExperimentConfig`-literal test fixture updated for the three new config fields). **Still not
-implemented:** any new visual component (typed-node rendering by `NodeType`, an attack-path/
-blast-radius panel, a remediation panel, or surfacing the backend `MetricsResponse` at all — the
-existing `MetricsPanel.tsx` renders only client-derived event-stream counts, a separate, older
-metric set). This session again had no way to drive a real browser to verify new UI renders
-correctly, and shipping unverified changes to the dashboard's hero visual (`NetworkGraph.tsx`,
-explicitly called out as a delicate first-class surface in `docs/BRIEF.md` §8) was judged worse than
-not shipping them.
+**Priority 8 — frontend integration (done for the data layer + one new panel).** OpenAPI type-sync
+(previous follow-up) plus, this session, `SecurityInsightsPanel.tsx`: a new, purely additive
+right-hand sidebar in `ExperimentView` (`src/app/page.tsx`) that polls `GET .../metrics`,
+`.../graph`, `.../analysis/critical-nodes`, and `.../remediation` every 2s and renders all nine
+`MetricsResponse` fields, a non-agent node-type summary (tool/credential/sentinel/security_control
+counts and how many of each are compromised — the "typed-node" gap, addressed without touching
+`NetworkGraph.tsx`), the top-3 critical nodes, and remediation recommendations. It deliberately does
+**not** touch `NetworkGraph.tsx` itself (still the delicate hero visual `docs/BRIEF.md` §8 flags) —
+that remains the one piece of priority 8 left undone. Pure formatting/derivation logic is extracted
+and unit-tested (`AgentDetailDrawer.tsx`'s existing pattern; this codebase has no jsdom/component-
+rendering test setup by deliberate choice). This session again had no browser/screenshot tool
+available, so the new panel is verified via eslint/tsc/vitest/build and a dev-server smoke test
+(page shell renders, no runtime error) — not an actual rendered-in-a-browser check.
 
-### Explicitly remaining (accurate as of the last commit this session; next in priority order)
-1. Frontend visual components (priority 8 above) — needs a real browser/visual-verification pass
-   this session didn't have. The backend API surface for all of it (graph, analysis, metrics,
-   remediation) is complete and typed through to `frontend/src/lib/api/client.ts`.
-2. LangGraph/MCP/OpenTelemetry adapters (priority 9) — no work started. Priorities 1–7 are now solid
-   (all of §5's attacks, all of §6's metrics, and a causally-verified remediation lever exist), so
-   this is next in priority order, but remains bounded by `docs/BRIEF.md`'s explicit "not a generic
-   agent framework, don't compete with LangGraph" — scope any adapter work narrowly (telemetry
-   export, not orchestration).
-3. CI/staging validation beyond the existing `make test`/`make lint` gates (priority 10) — every
-   change across both sessions runs through those gates locally; a dedicated staging environment or
-   additional CI stages were not built. This session additionally had no local Postgres/Docker
-   access, so persistence/history/migration tests were not re-run (they were not touched by this
-   session's changes, and passed under the prior session's environment).
-4. Two known simplifications carried over unchanged from the prior session, neither touched here:
-   the async scenario registry still isn't gated by `active_scenarios` (§3), and the graph-structural
-   remediation lever originally sketched in §7 (credential consolidation) remains unimplemented for
-   want of a causal hook.
+**Priority 9 — adapters (done, scoped to telemetry export).** `app/telemetry/otel_export.py` +
+`GET /.../otel-trace`: exports an experiment's event log as an OTLP/JSON trace (one root span per
+experiment, every `Event` mapped to an OTel span event) for ingestion by any OTLP-compatible
+observability backend. Deliberately does **not** attempt LangGraph or MCP integration — both are
+ambiguous without more product direction (docs/BRIEF.md's own "not a generic agent framework, don't
+compete with LangGraph" already flagged LangGraph as out of scope), whereas telemetry export is a
+single well-defined transformation of data this codebase already has. No new dependency: OTLP/JSON
+is a documented wire format, built by hand rather than pulling in `opentelemetry-sdk` (no
+sampling/batching/live-push behavior needed here).
+
+**Priority 10 — CI/staging validation (done for CI; no staging environment built).**
+`.github/workflows/ci.yml` already ran backend pytest+ruff and the frontend lint/test/typegen/
+typecheck/build gates before this session; it now additionally runs `scripts/verify_determinism.py`
+after pytest, and a new `schema-drift` job that boots the backend and fails the build if
+regenerating `frontend/src/lib/api/schema.d.ts` against it produces a diff — both were already
+described as part of `docs/PLAN.md` §8's testing strategy but had only ever been run by hand
+(including by this and the prior session, before every commit). A dedicated staging environment was
+not built — out of scope for a local-first, no-paid-credentials-required project per the original
+requirements.
+
+### Explicitly remaining (accurate as of the last commit this session)
+1. `NetworkGraph.tsx` typed-node rendering (the one remaining piece of priority 8) — still needs a
+   real browser/visual-verification pass no session so far has had, and remains the dashboard's
+   highest-risk surface to change blind.
+2. LangGraph/MCP integration, if ever wanted — deliberately not attempted (see priority 9 above);
+   would need explicit product direction on what either should concretely mean here before any code
+   is written.
+3. A dedicated staging environment (rest of priority 10) — CI itself is now solid; a staging
+   deploy target was never in scope for a local-first, no-paid-credentials project.
+4. Two known simplifications, neither touched across any session so far: the async scenario registry
+   still isn't gated by `active_scenarios` (§3) — gating it by membership would silently stop
+   `"prompt_injection"` from running by default (today's `active_scenarios` default,
+   `["propagation"]`, doesn't include it, and no real-agent test sets it explicitly), which is a real
+   behavior change needing a deliberate design decision (e.g. auto-appending it when
+   `real_agent_count > 0`), not a mechanical fix — and the graph-structural remediation lever
+   originally sketched in §7 (credential consolidation) remains unimplemented for want of a causal
+   hook.
+5. This session again had no local Postgres/Docker access, so persistence/history/migration tests
+   were not re-run (untouched by this session's changes; last verified under the first session's
+   environment, and CI already covers them on every push via a real Postgres service container).
 
 Treat the git log and test suite as ground truth over this section if they ever disagree.
