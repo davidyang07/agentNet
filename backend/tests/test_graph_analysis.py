@@ -1,5 +1,11 @@
 from app.engine.state import SecurityState
-from app.graph.analysis import attack_paths, blast_radius, critical_nodes, provenance
+from app.graph.analysis import (
+    MAX_PATH_HOPS,
+    attack_paths,
+    blast_radius,
+    critical_nodes,
+    provenance,
+)
 from app.graph.security_graph import SecurityGraph
 from app.graph.types import EdgeType, GraphEdge, GraphNode, NodeType
 
@@ -36,6 +42,24 @@ def test_attack_paths_empty_when_source_or_target_missing():
 def test_attack_paths_respects_max_paths_cap():
     graph = _diamond()
     assert len(attack_paths(graph, "a", "d", max_paths=1)) == 1
+
+
+def test_attack_paths_stops_at_the_hop_bound():
+    # A straight chain of MAX_PATH_HOPS + 1 hops: the only path between the
+    # ends is one hop too long, so nothing is returned. The bound exists
+    # because all_simple_paths is a DFS with no depth limit of its own --
+    # without it, a dense mesh can burn unbounded CPU inside one request.
+    graph = SecurityGraph()
+    chain = [f"n{i}" for i in range(MAX_PATH_HOPS + 2)]
+    for node_id in chain:
+        _agent(graph, node_id)
+    for source, target in zip(chain, chain[1:], strict=False):
+        graph.add_edge(
+            GraphEdge(source=source, target=target, edge_type=EdgeType.COMMUNICATES_WITH)
+        )
+
+    assert attack_paths(graph, chain[0], chain[MAX_PATH_HOPS]) == [chain[: MAX_PATH_HOPS + 1]]
+    assert attack_paths(graph, chain[0], chain[-1]) == []
 
 
 def test_attack_paths_ignores_non_propagation_edges():

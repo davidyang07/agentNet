@@ -11,18 +11,28 @@ import networkx as nx
 
 from app.graph.security_graph import PROPAGATION_EDGE_TYPES, SecurityGraph
 
+# Longest path this enumeration will consider, in hops. `max_paths` alone
+# bounds the *output* but not the *search*: nx.all_simple_paths is a DFS, so on
+# a dense mesh it can explore an astronomically large subtree before it happens
+# to reach the target even once. That is unbounded CPU inside a request, so the
+# depth is bounded too. Six hops is well past the point where a longer lateral
+# chain tells an operator anything new, and comfortably covers
+# agent -> ... -> agent -> credential -> resource.
+MAX_PATH_HOPS = 6
+
 
 def attack_paths(
     graph: SecurityGraph, source: str, target: str, *, max_paths: int = 10
 ) -> list[list[str]]:
-    """Simple (no repeated node) paths from source to target across
-    propagation-capable edges, in the order networkx enumerates them,
-    capped at max_paths so a dense graph can't return an unbounded list."""
+    """Simple (no repeated node) paths of at most MAX_PATH_HOPS hops from
+    source to target across propagation-capable edges, in the order networkx
+    enumerates them, capped at max_paths so a dense graph can't return an
+    unbounded list."""
     view = graph.subgraph_view(PROPAGATION_EDGE_TYPES)
     if source not in view or target not in view:
         return []
     paths: list[list[str]] = []
-    for path in nx.all_simple_paths(view, source, target):
+    for path in nx.all_simple_paths(view, source, target, cutoff=MAX_PATH_HOPS):
         paths.append(path)
         if len(paths) >= max_paths:
             break
