@@ -15,8 +15,6 @@ import time
 from dataclasses import dataclass
 from uuid import uuid4
 
-import httpx
-
 from app.config import get_settings
 from app.engine.propagation import is_finished
 from app.engine.simulate import simulate
@@ -24,7 +22,7 @@ from app.engine.state import WorldState
 from app.engine.tick import advance
 from app.engine.topology import build_world
 from app.events.emitter import EventEmitter
-from app.gateway.factory import build_gateway
+from app.gateway.factory import build_gateway, build_http_client
 from app.graph.builder import build_security_graph
 from app.graph.security_graph import SecurityGraph
 from app.metrics import compute as metrics
@@ -91,7 +89,7 @@ def run_headless(name: str, config: ExperimentConfig) -> BenchmarkRun:
 
 async def _run_headless_async(name: str, config: ExperimentConfig) -> BenchmarkRun:
     start = time.monotonic()
-    async with httpx.AsyncClient() as http_client:
+    async with build_http_client() as http_client:
         gateway = build_gateway(config, get_settings(), http_client)
         assert gateway is not None  # every async preset sets real_agent_count > 0
 

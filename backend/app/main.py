@@ -2,7 +2,6 @@ import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-import httpx
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -16,6 +15,7 @@ from app.api import (
 )
 from app.config import get_settings
 from app.db import check_postgres_reachable, create_pool
+from app.gateway.factory import build_http_client
 from app.persistence.migrate import run_migrations
 from app.persistence.registry import writer_registry
 
@@ -30,7 +30,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # experiment's ModelGateway keeps its own semaphore/budget state
     # (docs/PHASE_2_PLAN.md §3). Construction can't fail (no eager
     # connection), unlike the Postgres pool.
-    app.state.http_client = httpx.AsyncClient()
+    app.state.http_client = build_http_client()
     # Persistence is additive and must never block the app from serving live
     # (in-memory) experiments: a Postgres outage at startup degrades to
     # app.state.pg_pool = None rather than failing app startup (see

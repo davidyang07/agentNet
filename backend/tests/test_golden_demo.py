@@ -114,3 +114,16 @@ def test_summary_reports_how_many_repeats_it_collapsed():
         "tick 2: compromise propagated to agent-001 (+2 more this run)",
         "tick 5: agent-004 quarantined by initial defense",
     ]
+
+
+def test_model_name_override_reaches_the_config():
+    """model_provider="vllm" alone left model_name at the "qwen-mock" default,
+    which a real vLLM server rejects with a 404 -- the documented
+    --model-provider vllm invocation could not work without this."""
+    result = run_golden_demo(model_provider="mock", model_name="Qwen/Qwen2.5-7B-Instruct")
+    assert result.baseline.config.model_name == "Qwen/Qwen2.5-7B-Instruct"
+
+
+def test_model_name_defaults_are_left_untouched_when_not_passed():
+    result = run_golden_demo(model_provider="mock")
+    assert result.baseline.config.model_name == "qwen-mock"

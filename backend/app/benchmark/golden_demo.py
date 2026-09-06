@@ -2,7 +2,7 @@
 real event log narrates all ten brief beats -- indirect prompt injection,
 propagation, initial quarantine, an adaptive attacker strategy switch, a
 sentinel-compromise attack on the security plane, a false threat-memory
-report, AgentNet identifying the resulting security_plane_integrity gap via
+report, AgentShield identifying the resulting security_plane_integrity gap via
 the existing remediation engine, applying the fix, and re-running to show
 measurable improvement. No new scenario logic -- pure config selection over
 app/scenarios/registry.py's existing scenarios, narrated by walking the
@@ -156,8 +156,17 @@ def summarize_golden_demo_narrative(narrative: list[str]) -> list[str]:
     return summary
 
 
-def run_golden_demo(model_provider: str = "mock") -> GoldenDemoResult:
-    config = GOLDEN_DEMO_CONFIG.model_copy(update={"model_provider": model_provider})
+def run_golden_demo(
+    model_provider: str = "mock", model_name: str | None = None
+) -> GoldenDemoResult:
+    """`model_name` must name a model the configured vLLM server actually
+    serves; it is sent verbatim as the OpenAI `model` field. Without it the
+    config keeps the "qwen-mock" default, which a real server rejects with a
+    404, so model_provider="vllm" was unusable on its own."""
+    overrides: dict[str, str] = {"model_provider": model_provider}
+    if model_name is not None:
+        overrides["model_name"] = model_name
+    config = GOLDEN_DEMO_CONFIG.model_copy(update=overrides)
     baseline = run_headless_async("golden_demo_baseline", config)
     narrative = _narrate(baseline)
 
