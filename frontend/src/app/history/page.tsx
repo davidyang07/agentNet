@@ -3,13 +3,31 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { PageHeader } from "@/components/shell/AppShell";
+import { Badge, ConfigChip } from "@/components/ui/Badge";
+import { Button, ButtonLink, SegmentedControl } from "@/components/ui/Button";
+import { Panel } from "@/components/ui/Panel";
+import { Mono, TableWrap, Td, Th, Tr } from "@/components/ui/Table";
+import { EmptyState, ErrorState, Skeleton } from "@/components/ui/States";
 import { listExperiments, type ExperimentListItem } from "@/lib/api/client";
+import { formatTimestamp, shortId } from "@/lib/format";
+import { scenarioMeta } from "@/lib/vocabulary";
 
 type StatusFilter = "all" | "finished" | "stopped" | "incomplete";
 type DefenseFilter = "all" | "true" | "false";
 
-const BUTTON_CLASS =
-  "rounded-md border border-slate-700 px-3 py-1 text-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
+const STATUS_OPTIONS = [
+  { value: "all" as const, label: "All" },
+  { value: "finished" as const, label: "Completed" },
+  { value: "stopped" as const, label: "Stopped" },
+  { value: "incomplete" as const, label: "Incomplete" },
+];
+
+const DEFENSE_OPTIONS = [
+  { value: "all" as const, label: "Any defense" },
+  { value: "true" as const, label: "Defended" },
+  { value: "false" as const, label: "Undefended" },
+];
 
 function toListParams(status: StatusFilter, defenseEnabled: DefenseFilter) {
   return {
@@ -19,10 +37,9 @@ function toListParams(status: StatusFilter, defenseEnabled: DefenseFilter) {
 }
 
 // Keyed by `${status}-${defenseEnabled}` in the parent so a filter change
-// remounts this fresh -- mirrors ExperimentView's remount-by-key convention
-// (app/page.tsx) and, like useReplayStream, keeps the mount effect's only
-// setState calls inside the fetch's resolution callbacks rather than
-// synchronously at the top (react-hooks/set-state-in-effect).
+// remounts this fresh -- mirrors the remount-by-key convention used for the
+// live view, and keeps the mount effect's only setState calls inside the
+// fetch's resolution callbacks (react-hooks/set-state-in-effect).
 function HistoryList({
   status,
   defenseEnabled,
@@ -66,7 +83,10 @@ function HistoryList({
     if (!nextCursor) return;
     setLoading(true);
     try {
-      const resp = await listExperiments({ ...toListParams(status, defenseEnabled), cursor: nextCursor });
+      const resp = await listExperiments({
+        ...toListParams(status, defenseEnabled),
+        cursor: nextCursor,
+      });
       setItems((prev) => [...prev, ...resp.items]);
       setNextCursor(resp.next_cursor);
     } catch (err) {
@@ -77,79 +97,136 @@ function HistoryList({
   }
 
   if (error) {
-    return <p className="px-4 py-2 text-sm text-red-400">{error}</p>;
+    return <ErrorState className="m-4" title="Could not load run history" detail={error} />;
+  }
+
+  if (loading && items.length === 0) {
+    return (
+      <div className="flex flex-col gap-2 p-4">
+        {Array.from({ length: 6 }, (_, i) => (
+          <Skeleton key={i} className="h-9 w-full" />
+        ))}
+      </div>
+    );
+  }
+
+  if (items.length === 0) {
+    return (
+      <EmptyState
+        title="No persisted runs match"
+        description="Every assessment is persisted event by event as it runs. Launch one, or widen the filters above."
+        action={
+          <ButtonLink href="/" size="sm" variant="primary">
+            Launch an assessment
+          </ButtonLink>
+        }
+      />
+    );
   }
 
   return (
-    <div className="flex-1 overflow-y-auto">
-      <table className="w-full text-left text-sm">
-        <thead className="sticky top-0 bg-slate-950 text-slate-400">
-          <tr className="border-b border-slate-800">
-            <th className="w-8 px-4 py-2" />
-            <th className="px-4 py-2">Created</th>
-            <th className="px-4 py-2">Seed</th>
-            <th className="px-4 py-2">Nodes</th>
-            <th className="px-4 py-2">Defense</th>
-            <th className="px-4 py-2">Status</th>
-            <th className="px-4 py-2">Integrity</th>
-            <th className="px-4 py-2" />
+    <>
+      <TableWrap>
+        <thead>
+          <tr>
+            <Th className="w-9" aria-label="Select for comparison" />
+            <Th>Run</Th>
+            <Th>Started</Th>
+            <Th className="text-right">Seed</Th>
+            <Th className="text-right">Agents</Th>
+            <Th>Attack</Th>
+            <Th>Defense</Th>
+            <Th>Outcome</Th>
+            <Th>Log integrity</Th>
+            <Th className="w-20" />
           </tr>
         </thead>
         <tbody>
-          {items.map((item) => (
-            <tr key={item.experiment_id} className="border-b border-slate-900">
-              <td className="px-4 py-2">
-                <input
-                  type="checkbox"
-                  checked={selected.includes(item.experiment_id)}
-                  onChange={() => onToggleSelect(item.experiment_id)}
-                  aria-label={`Select ${item.experiment_id} for comparison`}
-                />
-              </td>
-              <td className="whitespace-nowrap px-4 py-2 font-mono text-xs text-slate-400">
-                {new Date(item.created_at).toLocaleString()}
-              </td>
-              <td className="px-4 py-2 font-mono">{item.seed}</td>
-              <td className="px-4 py-2 font-mono">{item.config.node_count}</td>
-              <td className="px-4 py-2 font-mono">{item.config.defense_enabled ? "on" : "off"}</td>
-              <td className="px-4 py-2 font-mono">{item.final_status ?? "running/unknown"}</td>
-              <td className="px-4 py-2">
-                {item.is_complete === true ? (
-                  <span className="text-emerald-400">complete</span>
-                ) : (
-                  <span className="text-amber-400">incomplete</span>
-                )}
-              </td>
-              <td className="px-4 py-2">
-                <Link
-                  href={`/history/${item.experiment_id}`}
-                  className="text-slate-300 underline hover:text-slate-100"
-                >
-                  Replay
-                </Link>
-              </td>
-            </tr>
-          ))}
+          {items.map((item) => {
+            const isSelected = selected.includes(item.experiment_id);
+            const scenarios = item.config.active_scenarios ?? [];
+            return (
+              <Tr key={item.experiment_id} selected={isSelected}>
+                <Td>
+                  <input
+                    type="checkbox"
+                    className="accent-accent"
+                    checked={isSelected}
+                    onChange={() => onToggleSelect(item.experiment_id)}
+                    aria-label={`Select ${item.experiment_id} for comparison`}
+                  />
+                </Td>
+                <Td>
+                  <Mono>{shortId(item.experiment_id)}</Mono>
+                </Td>
+                <Td className="whitespace-nowrap">{formatTimestamp(item.created_at)}</Td>
+                <Td className="text-right font-mono text-fg">{item.seed}</Td>
+                <Td className="text-right font-mono text-fg">{item.config.node_count}</Td>
+                <Td>
+                  <span className="flex flex-wrap gap-1">
+                    {scenarios.length === 0 ? (
+                      <span className="text-fg-subtle">—</span>
+                    ) : (
+                      scenarios.slice(0, 2).map((scenario) => (
+                        <Badge key={scenario} severity="neutral">
+                          {scenarioMeta(scenario).label}
+                        </Badge>
+                      ))
+                    )}
+                    {scenarios.length > 2 && (
+                      <span className="text-2xs text-fg-subtle">+{scenarios.length - 2}</span>
+                    )}
+                  </span>
+                </Td>
+                <Td>
+                  {item.config.defense_enabled ? (
+                    <Badge severity="ok">On</Badge>
+                  ) : (
+                    <Badge severity="warn">Off</Badge>
+                  )}
+                </Td>
+                <Td className="whitespace-nowrap">
+                  {item.final_status ?? <span className="text-fg-subtle">in flight</span>}
+                  {item.final_sim_tick !== null && (
+                    <span className="ml-1.5 font-mono text-2xs text-fg-subtle">
+                      t{item.final_sim_tick}
+                    </span>
+                  )}
+                </Td>
+                <Td>
+                  {item.is_complete === true ? (
+                    <Badge severity="ok">Complete</Badge>
+                  ) : (
+                    <Badge
+                      severity="warn"
+                      title="A gap was detected in this run's persisted event log, or it was never finalized"
+                    >
+                      Incomplete
+                    </Badge>
+                  )}
+                </Td>
+                <Td className="text-right">
+                  <Link
+                    href={`/history/${item.experiment_id}`}
+                    className="text-2xs font-medium text-accent transition-colors hover:text-accent-hover"
+                  >
+                    Replay →
+                  </Link>
+                </Td>
+              </Tr>
+            );
+          })}
         </tbody>
-      </table>
-
-      {items.length === 0 && !loading && (
-        <p className="px-4 py-6 text-sm text-slate-500">No persisted experiments yet.</p>
-      )}
+      </TableWrap>
 
       {nextCursor && (
-        <div className="px-4 py-3">
-          <button
-            type="button"
-            className={BUTTON_CLASS}
-            onClick={() => void loadMore()}
-            disabled={loading}
-          >
+        <div className="border-t border-line px-4 py-3">
+          <Button size="sm" onClick={() => void loadMore()} disabled={loading}>
             {loading ? "Loading…" : "Load more"}
-          </button>
+          </Button>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -169,58 +246,63 @@ export default function HistoryPage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
-      <header className="flex shrink-0 items-center justify-between border-b border-slate-800 px-4 py-3">
-        <h1 className="text-lg font-semibold">AgentNet — History</h1>
-        <Link href="/" className="text-sm text-slate-400 hover:text-slate-200">
-          ← Back to live
-        </Link>
-      </header>
-
-      <div className="flex shrink-0 items-center gap-3 border-b border-slate-800 px-4 py-2 text-sm">
-        <label className="flex items-center gap-1 text-slate-400">
-          Status
-          <select
-            className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200"
-            value={status}
-            onChange={(e) => setStatus(e.target.value as StatusFilter)}
-          >
-            <option value="all">all</option>
-            <option value="finished">finished</option>
-            <option value="stopped">stopped</option>
-            <option value="incomplete">incomplete</option>
-          </select>
-        </label>
-        <label className="flex items-center gap-1 text-slate-400">
-          Defense
-          <select
-            className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200"
-            value={defenseEnabled}
-            onChange={(e) => setDefenseEnabled(e.target.value as DefenseFilter)}
-          >
-            <option value="all">all</option>
-            <option value="true">on</option>
-            <option value="false">off</option>
-          </select>
-        </label>
-
-        {selected.length === 2 && (
-          <Link
-            href={`/history/compare?a=${selected[0]}&b=${selected[1]}`}
-            className={`ml-auto ${BUTTON_CLASS}`}
-          >
-            Compare selected (2)
-          </Link>
-        )}
-      </div>
-
-      <HistoryList
-        key={`${status}-${defenseEnabled}`}
-        status={status}
-        defenseEnabled={defenseEnabled}
-        selected={selected}
-        onToggleSelect={toggleSelect}
+    <div className="flex flex-col">
+      <PageHeader
+        eyebrow="Archive"
+        title="Runs"
+        description="Every assessment is persisted event by event while it runs. Replay any of them deterministically, or select two to compare."
+        actions={
+          selected.length === 2 ? (
+            <ButtonLink
+              variant="primary"
+              href={`/history/compare?a=${selected[0]}&b=${selected[1]}`}
+            >
+              Compare selected
+            </ButtonLink>
+          ) : (
+            <span className="text-2xs text-fg-subtle">
+              Select two runs to compare {selected.length === 1 && "(1 selected)"}
+            </span>
+          )
+        }
       />
-    </main>
+
+      <div className="p-4 lg:p-5">
+        <Panel flush>
+          <div className="flex flex-wrap items-center gap-3 border-b border-line px-3 py-2">
+            <SegmentedControl
+              ariaLabel="Filter by outcome"
+              value={status}
+              onChange={setStatus}
+              options={STATUS_OPTIONS}
+            />
+            <SegmentedControl
+              ariaLabel="Filter by defense posture"
+              value={defenseEnabled}
+              onChange={setDefenseEnabled}
+              options={DEFENSE_OPTIONS}
+            />
+            {selected.length > 0 && (
+              <div className="ml-auto flex items-center gap-1.5">
+                {selected.map((id, index) => (
+                  <ConfigChip key={id} label={index === 0 ? "A" : "B"} value={shortId(id)} />
+                ))}
+                <Button size="sm" variant="ghost" onClick={() => setSelected([])}>
+                  Clear
+                </Button>
+              </div>
+            )}
+          </div>
+
+          <HistoryList
+            key={`${status}-${defenseEnabled}`}
+            status={status}
+            defenseEnabled={defenseEnabled}
+            selected={selected}
+            onToggleSelect={toggleSelect}
+          />
+        </Panel>
+      </div>
+    </div>
   );
 }

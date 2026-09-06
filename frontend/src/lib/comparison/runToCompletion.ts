@@ -121,7 +121,7 @@ export async function runExperimentToCompletion(
   ws.close();
   // The rich MetricsResponse (security-plane/remediation-relevant fields)
   // is fetched over REST rather than derived from selectMetrics(graphState)
-  // -- the same live /metrics endpoint SecurityInsightsPanel already polls
+  // -- the same live /metrics endpoint the dashboard's insights already poll
   // -- so a live comparison arm and a historical one (loadHistoricalArm.ts)
   // report the exact same metric shape (docs/PLAN.md §9's "Next
   // recommended milestone"). Fetched before stopExperiment so the runner

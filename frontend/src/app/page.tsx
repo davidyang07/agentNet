@@ -1,298 +1,334 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 
-import { AgentDetailDrawer } from "@/components/AgentDetailDrawer";
-import { ComparisonView } from "@/components/ComparisonView";
-import { ConfigForm } from "@/components/ConfigForm";
-import { ControlBar } from "@/components/ControlBar";
-import { EventStream } from "@/components/EventStream";
-import { MetricsPanel } from "@/components/MetricsPanel";
-import { SecurityInsightsPanel } from "@/components/SecurityInsightsPanel";
+import { EventFeed } from "@/components/activity/EventFeed";
+import { FindingsList } from "@/components/insights/FindingsList";
 import {
-  createExperiment,
-  getExperiment,
-  pauseExperiment,
-  resumeExperiment,
-  setSpeed,
-  stopExperiment,
-  type ExperimentConfig,
-} from "@/lib/api/client";
-import { canPause, canReset, canResume, canSetSpeed, canStart, controlReducer, initialControlState, type ControlAction } from "@/lib/controls/reducer";
-import { useExperimentStream } from "@/lib/stream/useExperimentStream";
+  AttackSurfacePanel,
+  CriticalNodesPanel,
+  FleetBreakdown,
+  ObservedCountersPanel,
+} from "@/components/insights/Panels";
+import { OutbreakChart, OutbreakLegend } from "@/components/insights/OutbreakChart";
+import { PostureTiles } from "@/components/insights/SecurityMetrics";
+import { WorkflowTracker, type Stage } from "@/components/insights/WorkflowTracker";
+import { RunConfigurator } from "@/components/run/RunConfigurator";
+import { PageHeader } from "@/components/shell/AppShell";
+import { Badge } from "@/components/ui/Badge";
+import { Button, ButtonLink } from "@/components/ui/Button";
+import { BrandMark } from "@/components/ui/icons";
+import { Panel, PanelHeader } from "@/components/ui/Panel";
+import { Disclaimer, ErrorState, Spinner, StatListSkeleton } from "@/components/ui/States";
+import { useExperiment } from "@/lib/experiment/ExperimentProvider";
+import { DEFAULT_CONFIG } from "@/lib/experiment/presets";
+import { shortId } from "@/lib/format";
+import { useSecurityInsights } from "@/lib/security/useSecurityInsights";
+import { selectMetrics } from "@/lib/stream/reducer";
+import { liveLogGapHint } from "@/lib/stream/sessionScope";
+import { useOutbreakSeries } from "@/lib/stream/useOutbreakSeries";
+import { scenarioMeta } from "@/lib/vocabulary";
 
-// While a run is "running", the WS stream never surfaces a status change on
-// its own (SnapshotFrame.status is sent only once, on connect/reconnect;
-// EventFrame carries no status field) — so natural completion (reaching
-// max_ticks, or full containment) is otherwise invisible to a connected
-// client. Poll GET /{id} to close that gap (docs/M1_F5_PLAN.md §4).
-const STATUS_POLL_INTERVAL_MS = 1000;
+export default function OverviewPage() {
+  const { control, stream, canStart, start, hydrating } = useExperiment();
+  const insights = useSecurityInsights(control.experimentId);
+  const series = useOutbreakSeries(stream);
+  const streamMetrics = useMemo(() => selectMetrics(stream), [stream]);
+  const [configuring, setConfiguring] = useState(false);
 
-// Sigma touches WebGL2RenderingContext at module load — it can only ever
-// run in the browser, so it must be excluded from server-side rendering.
-const NetworkGraph = dynamic(
-  () => import("@/components/NetworkGraph").then((mod) => mod.NetworkGraph),
-  { ssr: false },
-);
+  if (hydrating) {
+    return (
+      <div className="flex h-full items-center justify-center gap-2 text-xs text-fg-muted">
+        <Spinner /> Restoring session…
+      </div>
+    );
+  }
 
-// Keyed by experimentId in the parent so a Reset (a brand new experimentId)
-// remounts this fresh — GraphState resets for free, no explicit setState
-// needed to clear the previous run's nodes/edges/event log.
-function ExperimentView({
-  experimentId,
-  activeConfig,
-}: {
-  experimentId: string;
-  activeConfig: ExperimentConfig;
-}) {
-  const { state, schemaError } = useExperimentStream(experimentId);
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-  const selectedNode = selectedAgentId ? state.nodes.get(selectedAgentId) ?? null : null;
-  const incidents = selectedAgentId ? state.incidentsByAgent.get(selectedAgentId) ?? [] : [];
+  const config = control.activeConfig;
+  const hasRun = Boolean(control.experimentId && config);
+  const showConfigurator = !hasRun || configuring;
+
+  const stages = buildStages({
+    hasRun,
+    observedEvents: stream.recentEvents.length,
+    compromised: streamMetrics.compromised,
+    hasMetrics: insights.metrics !== null,
+    findings: insights.remediation?.recommendations.length ?? 0,
+  });
 
   return (
-    <>
-      {schemaError && (
-        <div className="shrink-0 border-b border-red-900 bg-red-950 px-4 py-2 text-sm text-red-300">
-          {schemaError}
-        </div>
+    <div className="flex flex-col">
+      {hasRun ? (
+        <PageHeader
+          eyebrow="Assessment overview"
+          title="Security posture"
+          description={
+            <>
+              Live posture for run{" "}
+              <span className="font-mono text-fg-muted">{shortId(control.experimentId!)}</span>.
+              Every number below is computed from this run&apos;s deterministic event log.
+            </>
+          }
+          actions={
+            <>
+              {config && (
+                <div className="hidden flex-wrap gap-1 md:flex">
+                  {(config.active_scenarios ?? []).map((scenario) => (
+                    <Badge key={scenario} severity="neutral">
+                      {scenarioMeta(scenario).label}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              <Button
+                onClick={() => setConfiguring((v) => !v)}
+                disabled={!canStart && !configuring}
+                title={
+                  canStart
+                    ? "Configure and launch a new assessment"
+                    : "Finish or stop the current run first"
+                }
+              >
+                {configuring ? "Hide configuration" : "New assessment"}
+              </Button>
+            </>
+          }
+        />
+      ) : (
+        <LaunchHero />
       )}
 
-      <div className="flex flex-1 overflow-visible">
-        <aside className="w-64 shrink-0 overflow-y-auto border-r border-slate-800 p-4 text-sm">
-          <h2 className="mb-2 font-medium text-slate-300">Experiment</h2>
-          <dl className="space-y-1 text-slate-400">
-            <div className="flex justify-between">
-              <dt>seed</dt>
-              <dd className="font-mono">{activeConfig.seed}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt>node_count</dt>
-              <dd className="font-mono">{activeConfig.node_count}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt>edge_density</dt>
-              <dd className="font-mono">{activeConfig.edge_density}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt>p_same</dt>
-              <dd className="font-mono">{activeConfig.p_same}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt>p_cross</dt>
-              <dd className="font-mono">{activeConfig.p_cross}</dd>
-            </div>
-            <div className="flex justify-between border-t border-slate-800 pt-1">
-              <dt>tick</dt>
-              <dd className="font-mono">{state.tick}</dd>
-            </div>
-          </dl>
-        </aside>
-
-        <MetricsPanel state={state} />
-
-        <section className="min-h-[260px] flex-1 overflow-hidden">
-          <NetworkGraph state={state} onNodeClick={setSelectedAgentId} />
+      <div className="flex flex-col gap-4 p-4 lg:p-5">
+        <section>
+          <h2 className="eyebrow mb-2">Assessment workflow</h2>
+          <WorkflowTracker stages={stages} />
         </section>
 
-        <SecurityInsightsPanel experimentId={experimentId} />
+        {showConfigurator && (
+          <RunConfigurator
+            disabled={!canStart}
+            initialConfig={config ?? DEFAULT_CONFIG}
+            onStart={(next) => {
+              setConfiguring(false);
+              start(next);
+            }}
+          />
+        )}
+
+        {hasRun && (
+          <>
+            {insights.error && (
+              <ErrorState title="Could not load derived security data" detail={insights.error} />
+            )}
+
+            {insights.metrics ? (
+              <PostureTiles metrics={insights.metrics} />
+            ) : (
+              <Panel>
+                <StatListSkeleton rows={2} />
+              </Panel>
+            )}
+
+            <div className="grid gap-4 xl:grid-cols-3">
+              <Panel className="xl:col-span-2" flush>
+                <PanelHeader
+                  bordered
+                  title="Outbreak progression"
+                  description="Agents held by the attacker, and agents the defense has contained, per simulated tick."
+                  actions={<OutbreakLegend />}
+                />
+                <div className="h-56 p-2">
+                  <OutbreakChart
+                    series={series}
+                    maxTicks={config?.max_ticks ?? 200}
+                    emptyDescription={
+                      liveLogGapHint(control.status, series.length > 0) ??
+                      "The outbreak curve builds as the simulation ticks."
+                    }
+                  />
+                </div>
+              </Panel>
+
+              <Panel>
+                <PanelHeader title="Fleet" description="Current split across security states." />
+                <FleetBreakdown metrics={streamMetrics} />
+                <div className="mt-4 border-t border-line pt-3">
+                  <ObservedCountersPanel metrics={streamMetrics} />
+                </div>
+              </Panel>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-3">
+              <Panel>
+                <PanelHeader
+                  title="Attack surface"
+                  description="Typed non-agent nodes and how many have fallen."
+                  actions={
+                    <Link
+                      href="/topology"
+                      className="text-2xs font-medium text-accent hover:text-accent-hover"
+                    >
+                      Open topology →
+                    </Link>
+                  }
+                />
+                <AttackSurfacePanel graph={insights.graph} />
+              </Panel>
+
+              <Panel>
+                <PanelHeader
+                  title="Choke points"
+                  description="Highest betweenness centrality — containing these disconnects the most."
+                />
+                <CriticalNodesPanel nodes={insights.criticalNodes} graph={insights.graph} />
+              </Panel>
+
+              <Panel flush>
+                <PanelHeader
+                  bordered
+                  title="Recent activity"
+                  actions={
+                    <Link
+                      href="/activity"
+                      className="text-2xs font-medium text-accent hover:text-accent-hover"
+                    >
+                      Full log →
+                    </Link>
+                  }
+                />
+                <div className="h-64">
+                  <EventFeed
+                    events={stream.recentEvents.slice(-40)}
+                    emptyTitle={
+                      liveLogGapHint(control.status, stream.recentEvents.length > 0)
+                        ? "No events in this session"
+                        : "No events yet"
+                    }
+                    emptyHint={liveLogGapHint(control.status, stream.recentEvents.length > 0)}
+                  />
+                </div>
+              </Panel>
+            </div>
+
+            <Panel>
+              <PanelHeader
+                title="Remediation findings"
+                description="Deterministic, rule-based recommendations derived from this run's graph and metrics."
+                actions={
+                  <ButtonLink href="/remediation" size="sm">
+                    Validate fixes
+                  </ButtonLink>
+                }
+              />
+              {insights.remediation ? (
+                <FindingsList
+                  recommendations={insights.remediation.recommendations}
+                  baseConfig={config ?? null}
+                />
+              ) : (
+                <StatListSkeleton rows={2} />
+              )}
+            </Panel>
+
+            <Disclaimer>
+              Simulation results only — reproducible from{" "}
+              <span className="font-mono">(seed, config)</span>, but not real-world security
+              evidence about any deployed system.
+            </Disclaimer>
+          </>
+        )}
       </div>
-
-      <AgentDetailDrawer
-        node={selectedNode}
-        edges={state.edges}
-        incidents={incidents}
-        onClose={() => setSelectedAgentId(null)}
-      />
-
-      <footer className="h-56 shrink-0 border-t border-slate-800">
-        <EventStream events={state.recentEvents} />
-      </footer>
-    </>
+    </div>
   );
 }
 
-export default function Home() {
-  const [state, dispatch] = useReducer(controlReducer, initialControlState);
-  const stateRef = useRef(state);
-  const nextOperationId = useRef(1);
-
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
-
-  const apply = useCallback((action: ControlAction) => {
-    const next = controlReducer(stateRef.current, action);
-    if (next === stateRef.current) return false;
-    stateRef.current = next;
-    dispatch(action);
-    return true;
-  }, []);
-
-  const handleStart = useCallback((config: ExperimentConfig) => {
-    if (!canStart(stateRef.current)) return;
-    const operationId = nextOperationId.current++;
-    if (!apply({ type: "start_requested", operationId })) return;
-    createExperiment(config)
-      .then((summary) => {
-        apply({
-          type: "start_succeeded",
-          operationId,
-          experimentId: summary.experiment_id,
-          status: summary.status,
-          config: summary.config,
-        });
-      })
-      .catch((err) => {
-        apply({ type: "start_failed", operationId, error: err instanceof Error ? err.message : String(err) });
-      });
-  }, [apply]);
-
-  const handlePause = useCallback(() => {
-    if (!canPause(stateRef.current) || !stateRef.current.experimentId) return;
-    const id = stateRef.current.experimentId;
-    const operationId = nextOperationId.current++;
-    if (!apply({ type: "pause_requested", operationId })) return;
-    pauseExperiment(id)
-      .then((summary) => apply({ type: "pause_succeeded", operationId, status: summary.status }))
-      .catch((err) => {
-        apply({ type: "pause_failed", operationId, error: err instanceof Error ? err.message : String(err) });
-      });
-  }, [apply]);
-
-  const handleResume = useCallback(() => {
-    if (!canResume(stateRef.current) || !stateRef.current.experimentId) return;
-    const id = stateRef.current.experimentId;
-    const operationId = nextOperationId.current++;
-    if (!apply({ type: "resume_requested", operationId })) return;
-    resumeExperiment(id)
-      .then((summary) => apply({ type: "resume_succeeded", operationId, status: summary.status }))
-      .catch((err) => {
-        apply({ type: "resume_failed", operationId, error: err instanceof Error ? err.message : String(err) });
-      });
-  }, [apply]);
-
-  const handleSpeedChange = useCallback(
-    (multiplier: number) => {
-      if (!canSetSpeed(stateRef.current) || !stateRef.current.experimentId) return;
-      const id = stateRef.current.experimentId;
-      const operationId = nextOperationId.current++;
-      if (!apply({ type: "speed_requested", operationId })) return;
-      setSpeed(id, multiplier)
-        .then(() => apply({ type: "speed_succeeded", operationId, speed: multiplier }))
-        .catch((err) => {
-          apply({ type: "speed_failed", operationId, error: err instanceof Error ? err.message : String(err) });
-        });
-    },
-    [apply],
-  );
-
-  // Reset ordering (docs/M1_F5_PLAN.md §5): await stopping the old
-  // experiment (idempotent / 404-tolerant — either way it's gone), only
-  // then create the new one, and only then swap the active experimentId/
-  // status — so there is never a moment with two experiments simultaneously
-  // active in local state, and a create failure after a successful stop is
-  // reported as "stopped", not silently left pointing at a dead run.
-  const handleReset = useCallback(async () => {
-    if (!canReset(stateRef.current) || !stateRef.current.experimentId) return;
-    const oldId = stateRef.current.experimentId;
-    const configToRerun = stateRef.current.activeConfig;
-    if (!configToRerun) return;
-    const operationId = nextOperationId.current++;
-    if (!apply({ type: "reset_requested", operationId })) return;
-
-    try {
-      await stopExperiment(oldId);
-    } catch (err) {
-      // A 404 means the old experiment is already gone (evicted) — that's
-      // the desired end state, not a failure, so fall through to create.
-      // Anything else means the old run's stop status is unknown: abort
-      // without touching state, so it's cleanly retryable.
-      if (!(err instanceof Error && err.message.includes("404"))) {
-        apply({ type: "reset_failed", operationId, error: err instanceof Error ? err.message : String(err) });
-        return;
-      }
-    }
-
-    // The old run is now confirmed stopped-or-gone. A failure from here on
-    // must not leave local state claiming the old run is still "running".
-    try {
-      const summary = await createExperiment(configToRerun);
-      apply({
-        type: "reset_create_succeeded",
-        operationId,
-        experimentId: summary.experiment_id,
-        status: summary.status,
-        config: summary.config,
-      });
-    } catch (err) {
-      apply({
-        type: "reset_stop_succeeded_create_failed",
-        operationId,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }, [apply]);
-
-  // Closes the REST/WS status gap for natural completion (docs/M1_F5_PLAN.md §4).
-  useEffect(() => {
-    if (state.status !== "running" || state.pending !== null || !state.experimentId) return;
-    const id = state.experimentId;
-    const revision = state.revision;
-    const controller = new AbortController();
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const poll = () => {
-      getExperiment(id, controller.signal)
-        .then((summary) => apply({ type: "status_synced", experimentId: id, revision, status: summary.status }))
-        .catch(() => {
-          // Transient network hiccup — next tick retries. A genuine 404
-          // (evicted out from under us) is left for the user's next
-          // control action to surface, rather than guessing here.
-        })
-        .finally(() => {
-          if (!cancelled) timer = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
-        });
-    };
-    timer = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [apply, state.status, state.pending, state.experimentId, state.revision]);
-
+function LaunchHero() {
   return (
-    <main className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
-      <header className="flex shrink-0 flex-col gap-3 border-b border-slate-800 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h1 className="text-lg font-semibold">AgentNet</h1>
-            <Link href="/history" className="text-sm text-slate-400 hover:text-slate-200">
-              History
-            </Link>
-          </div>
-          <ControlBar
-            state={state}
-            onPause={handlePause}
-            onResume={handleResume}
-            onReset={handleReset}
-            onSpeedChange={handleSpeedChange}
-          />
-        </div>
-        <ConfigForm disabled={!canStart(state)} onStart={handleStart} />
-        <ComparisonView baseConfig={state.activeConfig} />
-      </header>
-
-      {state.experimentId && (
-        <ExperimentView
-          key={state.experimentId}
-          experimentId={state.experimentId}
-          activeConfig={state.activeConfig!}
-        />
-      )}
-    </main>
+    <header className="border-b border-line px-5 py-6 lg:px-6 lg:py-7">
+      <div className="max-w-3xl">
+        <span className="mb-3 inline-flex items-center gap-2 rounded-full border border-line bg-raised px-2.5 py-1 text-2xs text-fg-muted">
+          <BrandMark className="size-3.5 text-accent" />
+          Multi-agent adversarial resilience platform
+        </span>
+        <h1 className="text-2xl font-semibold tracking-tight text-fg">
+          Find out how far one compromised agent gets.
+        </h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-fg-muted">
+          Model an agent system as a typed security graph — agents, tools, credentials, resources
+          and the sentinels watching them — then run adversarial scenarios against it. Watch
+          compromise propagate tick by tick, trace any incident back to patient zero, measure
+          security against the utility it costs, and validate that a proposed fix actually changes
+          the outcome.
+        </p>
+        <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-2xs text-fg-subtle">
+          <li>Deterministic — same seed, same run, every time</li>
+          <li>Event-sourced — every claim traces to a recorded event</li>
+          <li>Six attack scenarios, from lateral spread to sentinel subversion</li>
+        </ul>
+      </div>
+    </header>
   );
+}
+
+function buildStages({
+  hasRun,
+  observedEvents,
+  compromised,
+  hasMetrics,
+  findings,
+}: {
+  hasRun: boolean;
+  observedEvents: number;
+  compromised: number;
+  hasMetrics: boolean;
+  findings: number;
+}): Stage[] {
+  const stage = (done: boolean, active: boolean) =>
+    done ? ("done" as const) : active ? ("active" as const) : ("pending" as const);
+
+  return [
+    {
+      id: "map",
+      label: "Map",
+      description: "Model the agent system as a typed security graph.",
+      href: "/topology",
+      state: stage(hasRun, !hasRun),
+    },
+    {
+      id: "attack",
+      label: "Attack",
+      description: "Run adversarial scenarios against it.",
+      href: "/",
+      state: stage(hasRun && observedEvents > 0, hasRun && observedEvents === 0),
+    },
+    {
+      id: "observe",
+      label: "Observe",
+      description: "Watch compromise and containment propagate.",
+      href: "/activity",
+      state: stage(compromised > 0 || observedEvents > 20, observedEvents > 0),
+    },
+    {
+      id: "measure",
+      label: "Measure",
+      description: "Score security against retained utility.",
+      href: "/metrics",
+      state: stage(hasMetrics, hasRun),
+    },
+    {
+      id: "remediate",
+      label: "Remediate",
+      description: "Get a config change that would have changed the outcome.",
+      href: "/remediation",
+      state: stage(findings > 0, hasMetrics),
+    },
+    {
+      id: "retest",
+      label: "Re-test",
+      description: "Re-run with the fix applied and compare the numbers.",
+      href: "/remediation",
+      state: stage(false, findings > 0),
+    },
+  ];
 }

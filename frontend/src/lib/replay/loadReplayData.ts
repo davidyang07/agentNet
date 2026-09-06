@@ -29,7 +29,10 @@ export type ReplayData = {
  * the seeded patient-zero compromise the snapshot already reflects is never
  * re-delivered through the event branch (docs/PHASE_1_5_PLAN.md §7).
  */
-export async function loadReplayData(experimentId: string): Promise<ReplayData> {
+export async function loadReplayData(
+  experimentId: string,
+  onProgress?: (loaded: number) => void,
+): Promise<ReplayData> {
   const detail = await getExperimentDetail(experimentId);
   const snapshot = await fetchReplaySnapshot(experimentId);
   const initialState = reduce(initialGraphState, snapshot as StreamFrame);
@@ -39,6 +42,7 @@ export async function loadReplayData(experimentId: string): Promise<ReplayData> 
   for (;;) {
     const page = await fetchEventHistory(experimentId, sinceSeq, EVENT_PAGE_LIMIT);
     events.push(...page.events);
+    onProgress?.(events.length);
     if (page.next_seq === null) break;
     sinceSeq = page.next_seq;
   }

@@ -4,14 +4,23 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 
+import { ArmStatusCard } from "@/components/insights/ArmStatusCard";
+import { MetricsDeltaTable } from "@/components/insights/MetricsComparison";
+import { PageHeader } from "@/components/shell/AppShell";
+import { Badge, ConfigChip } from "@/components/ui/Badge";
+import { Panel, PanelHeader } from "@/components/ui/Panel";
+import { Disclaimer, EmptyState, Spinner, WarningBanner } from "@/components/ui/States";
 import { getExperimentDetail, type ExperimentDetail } from "@/lib/api/client";
-import { ArmPanel } from "@/components/ComparisonView";
 import { useComparison } from "@/lib/comparison/useComparison";
+import { shortId } from "@/lib/format";
+import { configLabel } from "@/lib/vocabulary";
 
 type DetailState =
   | { status: "loading" }
   | { status: "error"; error: string }
   | { status: "loaded"; detail: ExperimentDetail };
+
+const SUMMARY_FIELDS = ["seed", "node_count", "detector_sensitivity", "max_ticks"] as const;
 
 // Only ever sets state inside the fetch's resolution callbacks (never
 // synchronously at the top of the effect), matching useReplayStream's
@@ -27,7 +36,8 @@ function useExperimentDetailState(id: string | null): DetailState {
         if (!cancelled) setState({ status: "loaded", detail });
       },
       (err: unknown) => {
-        if (!cancelled) setState({ status: "error", error: err instanceof Error ? err.message : String(err) });
+        if (!cancelled)
+          setState({ status: "error", error: err instanceof Error ? err.message : String(err) });
       },
     );
     return () => {
@@ -38,47 +48,36 @@ function useExperimentDetailState(id: string | null): DetailState {
   return state;
 }
 
-// Displays the persisted config/seed/defense settings for each arm --
-// arbitrary historical pairs are allowed (docs/PHASE_1_5_PLAN.md §10), so
-// this is what lets a viewer judge whether the pair is a methodologically
-// fair comparison rather than assuming "same config, defense flipped".
-function ConfigSummary({ id, state }: { id: string; state: DetailState }) {
+/**
+ * The persisted config for one arm. Arbitrary historical pairs are allowed, so
+ * this is what lets a reader judge whether the pair is a fair comparison at
+ * all, rather than assuming "same config, defense flipped".
+ */
+function ArmConfigSummary({ id, state }: { id: string; state: DetailState }) {
   if (state.status === "loading") {
-    return <p className="mb-2 text-xs text-slate-500">Loading config…</p>;
+    return (
+      <span className="flex items-center gap-1.5 text-2xs text-fg-subtle">
+        <Spinner /> Loading configuration…
+      </span>
+    );
   }
   if (state.status === "error") {
-    return <p className="mb-2 text-xs text-red-400">{state.error}</p>;
+    return <span className="text-2xs text-critical">{state.error}</span>;
   }
   const { detail } = state;
   return (
-    <dl className="mb-2 space-y-0.5 border-b border-slate-800 pb-2 text-xs text-slate-500">
-      <div className="flex justify-between">
-        <dt>id</dt>
-        <dd className="font-mono">{id.slice(0, 8)}</dd>
-      </div>
-      <div className="flex justify-between">
-        <dt>seed</dt>
-        <dd className="font-mono">{detail.seed}</dd>
-      </div>
-      <div className="flex justify-between">
-        <dt>node_count</dt>
-        <dd className="font-mono">{detail.config.node_count}</dd>
-      </div>
-      <div className="flex justify-between">
-        <dt>defense_enabled</dt>
-        <dd className="font-mono">{detail.config.defense_enabled ? "true" : "false"}</dd>
-      </div>
-      <div className="flex justify-between">
-        <dt>status</dt>
-        <dd className="font-mono">{detail.final_status ?? "unknown"}</dd>
-      </div>
-      <div className="flex justify-between">
-        <dt>integrity</dt>
-        <dd className={detail.is_complete === true ? "text-emerald-400" : "text-amber-400"}>
-          {detail.is_complete === true ? "complete" : "incomplete"}
-        </dd>
-      </div>
-    </dl>
+    <div className="flex flex-wrap items-center gap-1.5">
+      <ConfigChip label="run" value={shortId(id)} />
+      {SUMMARY_FIELDS.map((field) => (
+        <ConfigChip key={field} label={configLabel(field)} value={String(detail.config[field])} />
+      ))}
+      <Badge severity={detail.config.defense_enabled ? "ok" : "warn"}>
+        Defense {detail.config.defense_enabled ? "on" : "off"}
+      </Badge>
+      <Badge severity={detail.is_complete === true ? "ok" : "warn"}>
+        {detail.is_complete === true ? "Complete log" : "Incomplete log"}
+      </Badge>
+    </div>
   );
 }
 
@@ -101,49 +100,85 @@ function CompareContent() {
 
   if (!idA || !idB) {
     return (
-      <p className="p-4 text-sm text-slate-400">
-        Select two experiments from{" "}
-        <Link href="/history" className="underline hover:text-slate-200">
-          the history list
-        </Link>{" "}
-        to compare.
-      </p>
+      <EmptyState
+        className="h-full"
+        title="Pick two runs to compare"
+        description={
+          <>
+            Select two rows on{" "}
+            <Link href="/history" className="text-accent hover:text-accent-hover">
+              the runs list
+            </Link>{" "}
+            and choose Compare selected.
+          </>
+        }
+      />
     );
   }
 
+  const differsBeyondDefense =
+    detailA.status === "loaded" &&
+    detailB.status === "loaded" &&
+    (detailA.detail.seed !== detailB.detail.seed ||
+      detailA.detail.config.node_count !== detailB.detail.config.node_count ||
+      detailA.detail.config.max_ticks !== detailB.detail.config.max_ticks);
+
   return (
-    <>
-      <p className="px-4 py-2 text-xs text-slate-500">
-        Simulation results only — not real-world security evidence. These two runs may differ in
-        more than defense_enabled (seed, topology, other config) — compare the settings above
-        before drawing conclusions from the metrics below.
-      </p>
-      <div className="flex gap-3 p-4">
-        <div className="flex-1">
-          <ConfigSummary id={idA} state={detailA} />
-          <ArmPanel label="Arm A" arm={armA} />
-        </div>
-        <div className="flex-1">
-          <ConfigSummary id={idB} state={detailB} />
-          <ArmPanel label="Arm B" arm={armB} />
-        </div>
+    <div className="flex flex-col gap-4 p-4 lg:p-5">
+      {differsBeyondDefense && (
+        <WarningBanner>
+          These two runs differ in more than their defense setting — seed, size or run length is
+          not held constant. Any difference below is therefore not attributable to the defense
+          alone. Use <Link href="/defenses" className="underline">Defense comparison</Link> for a
+          single-variable test.
+        </WarningBanner>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <ArmStatusCard label="Arm A" arm={armA} hint={<ArmConfigSummary id={idA} state={detailA} />} />
+        <ArmStatusCard label="Arm B" arm={armB} hint={<ArmConfigSummary id={idB} state={detailB} />} />
       </div>
-    </>
+
+      <Panel flush>
+        <PanelHeader bordered title="Outcome" description="Change is measured from Arm A to Arm B." />
+        <MetricsDeltaTable
+          before={armA.status === "done" ? (armA.metrics ?? null) : null}
+          after={armB.status === "done" ? (armB.metrics ?? null) : null}
+          beforeLabel="Arm A"
+          afterLabel="Arm B"
+        />
+      </Panel>
+
+      <Disclaimer>
+        Simulation results only — not real-world security evidence. Both arms are folded through
+        the same metrics pipeline the live view uses.
+      </Disclaimer>
+    </div>
   );
 }
 
 export default function ComparePage() {
   return (
-    <main className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
-      <header className="flex shrink-0 items-center justify-between border-b border-slate-800 px-4 py-3">
-        <h1 className="text-lg font-semibold">AgentNet — Compare</h1>
-        <Link href="/history" className="text-sm text-slate-400 hover:text-slate-200">
-          ← Back to history
-        </Link>
-      </header>
-      <Suspense fallback={<p className="p-4 text-sm text-slate-400">Loading…</p>}>
+    <div className="flex flex-col">
+      <PageHeader
+        eyebrow="Archive"
+        title="Compare runs"
+        description="Two persisted runs, scored on identical metrics. Check the configuration of each before drawing a conclusion from the difference."
+        actions={
+          <Link href="/history" className="text-xs text-fg-muted transition-colors hover:text-fg">
+            ← All runs
+          </Link>
+        }
+      />
+      <Suspense
+        fallback={
+          <div className="flex items-center gap-2 p-5 text-xs text-fg-muted">
+            <Spinner /> Loading…
+          </div>
+        }
+      >
         <CompareContent />
       </Suspense>
-    </main>
+    </div>
   );
 }

@@ -16,6 +16,9 @@ const MAX_SPEED = 8.0;
 export type ReplayStreamResult = {
   state: GraphState;
   loading: boolean;
+  /** Events fetched so far — a long run's log takes several paged requests,
+   * and an indefinite spinner reads as a hang. */
+  loadedEvents: number;
   error: string | null;
   incomplete: boolean;
   totalEvents: number;
@@ -42,6 +45,7 @@ export function useReplayStream(
 ): ReplayStreamResult {
   const [state, setState] = useState<GraphState>(initialGraphState);
   const [loading, setLoading] = useState(true);
+  const [loadedEvents, setLoadedEvents] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [incomplete, setIncomplete] = useState(false);
   const [playedCount, setPlayedCount] = useState(0);
@@ -55,7 +59,9 @@ export function useReplayStream(
     if (!experimentId) return;
     let cancelled = false;
 
-    loadReplayData(experimentId).then(
+    loadReplayData(experimentId, (loaded) => {
+      if (!cancelled) setLoadedEvents(loaded);
+    }).then(
       (data) => {
         if (cancelled) return;
         snapshotStateRef.current = data.initialState;
@@ -107,5 +113,5 @@ export function useReplayStream(
     setState(next);
   }
 
-  return { state, loading, error, incomplete, totalEvents, playedCount, seek };
+  return { state, loading, loadedEvents, error, incomplete, totalEvents, playedCount, seek };
 }
