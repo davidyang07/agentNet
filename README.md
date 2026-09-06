@@ -11,9 +11,6 @@ notably [AEGIS](https://github.com/gaiarobotics/aegis) (Agent Embedding Guard & 
 Michael Barnathan's work on prompt worms in multi-agent spaces. AgentShield is the other half of that
 picture: the environment where such defenses can be attacked, measured, and compared.
 
-Architecture and domain model: `docs/PLAN.md`. Product context: `docs/BRIEF.md`. Core mechanism
-spec (event schema, derived-keyed RNG, fixed-tick engine, snapshot/delta protocol): `docs/SPEC.md`.
-
 ## The console
 
 One operator console organised around the assessment workflow — **Map → Attack → Observe →
