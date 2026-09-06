@@ -1,8 +1,8 @@
 """Exports graph_app's compiled LangGraph topology to topology.json, the
-schema AgentNet's backend/app/importers/external_topology.py reads. Run this
+schema AgentShield's backend/app/importers/external_topology.py reads. Run this
 with LangGraph actually installed (`pip install -r requirements.txt`)
 whenever graph_app.py's structure changes; topology.json is committed so
-AgentNet's tests/scripts never need LangGraph installed to consume it.
+AgentShield's tests/scripts never need LangGraph installed to consume it.
 """
 
 import json

@@ -1364,7 +1364,7 @@ def render_audit_markdown(report: dict[str, Any]) -> str:
         "security_plane_integrity_before",
         "security_plane_integrity_after",
     ]
-    lines = ["# AgentNet Remediation Audit", ""]
+    lines = ["# AgentShield Remediation Audit", ""]
     lines.append(
         f"{len(report['candidates'])} of the benchmark matrix's presets triggered a "
         "remediation recommendation; ranked by measured retained_utility improvement."
@@ -1874,7 +1874,7 @@ from app.benchmark.golden_demo import run_golden_demo, summarize_golden_demo_nar
     result = run_golden_demo(model_provider=args.model_provider)
     key_beats = summarize_golden_demo_narrative(result.narrative)
 
-    lines = ["# AgentNet Golden Demo", "", "## Key beats", ""]
+    lines = ["# AgentShield Golden Demo", "", "## Key beats", ""]
     lines.extend(key_beats)
     lines.extend(["", "## Full narrative", ""])
     lines.extend(result.narrative)

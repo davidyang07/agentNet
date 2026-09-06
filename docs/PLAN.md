@@ -1,4 +1,4 @@
-# AgentNet → Multi-Agent Adversarial Resilience Platform — Authoritative Plan
+# AgentShield → Multi-Agent Adversarial Resilience Platform — Authoritative Plan
 
 > **This document supersedes** `docs/PHASE0_PLAN.md`, `docs/M1_PLAN.md`, `docs/M1_F3_PLAN.md`,
 > `docs/M1_F5_PLAN.md`, `docs/PHASE_1_5_PLAN.md`, and `docs/PHASE_2_PLAN.md` (removed — their
@@ -11,19 +11,18 @@
 > **this document governs product direction and architecture going forward.** `CLAUDE.md` has been
 > updated to point here for that split.
 >
-> **Naming note (flagged deviation):** the instruction that produced this plan referred to the
-> repository as "AgentShield." The actual repository, package, and product name throughout the
-> codebase, database, CI, and docs is **AgentNet**. Renaming would touch dozens of unrelated files
-> (package name, Docker images, CI, every doc) for no functional benefit and isn't in the explicit
-> requirements list, so this plan **keeps the name AgentNet** and treats "AgentShield" as the
-> instruction's working title for the *positioning* (Multi-Agent Adversarial Resilience Platform),
-> not a rename mandate. Flagging this per `CLAUDE.md`'s "surface material deviations" rule.
+> **Naming note:** this plan originally kept the legacy name "AgentNet" and treated "AgentShield"
+> as a working title for the *positioning* only. That has since been reversed: the product name in
+> the docs, READMEs, and source comments is now **AgentShield**. The rename was deliberately limited
+> to that user-facing naming — the lowercase `agentnet` identifiers (Postgres user/password/database
+> names, the OTel service name and `agentnet.*` span-attribute prefix, and the `agentnet-backend`
+> package name) are unchanged, so no database, CI, or telemetry consumer is affected.
 
 ---
 
 ## 1. Why this pivot, and why it's a pivot and not a rewrite
 
-AgentNet today (Phases 0–2, all shipped) is a **deterministic, event-sourced simulation of
+AgentShield today (Phases 0–2, all shipped) is a **deterministic, event-sourced simulation of
 compromise propagation** over a homogeneous graph: one node type (`AgentNode`), one edge type
 (undirected "neighbor"), one attack (probabilistic same/cross-software infection, optionally
 mediated by a real LLM doing lateral prompt injection), one defense (a generic anomaly
@@ -563,7 +562,7 @@ sentinel compromise against the imported 4-agent topology end to end — real me
 `compromise_fraction=1.0`, `security_plane_integrity=0.8`, and the same `sentinel_count`
 remediation recommendation the golden demo produces. **Scoped deliberately**: tool/credential/
 resource/sentinel-*count* synthetic attachment still comes from `ExperimentConfig` exactly as for
-any AgentNet-native experiment — only the agent identity/communication topology and the specific
+any AgentShield-native experiment — only the agent identity/communication topology and the specific
 tool-ownership edges are real imports, not a full MCP-style live protocol bridge (that remains
 open per item 2 above). 7 new tests.
 

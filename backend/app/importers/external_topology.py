@@ -1,5 +1,5 @@
 """Imports an externally-authored multi-agent topology (e.g. the LangGraph
-sample in examples/langgraph_research_agents/) into AgentNet's WorldState/
+sample in examples/langgraph_research_agents/) into AgentShield's WorldState/
 SecurityGraph shape. This is the "topology import" leg of the real external
 integration priority: agent identity and communication edges come straight
 from the real app's actual graph structure (via

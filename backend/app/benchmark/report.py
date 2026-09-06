@@ -71,7 +71,7 @@ DEFENSE_COLUMNS = ["name", "attack_success_rate", "retained_utility", "compromis
 
 
 def render_markdown(report: dict[str, Any]) -> str:
-    lines = ["# AgentNet Canonical Benchmark Report", ""]
+    lines = ["# AgentShield Canonical Benchmark Report", ""]
     lines.append(
         f"{len(report['attack_scenarios'])} attack scenarios, "
         f"{len(report['defense_comparison'])} defense configurations."

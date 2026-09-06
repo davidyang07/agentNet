@@ -1,4 +1,4 @@
-# AgentNet — Milestone 0 Specification
+# AgentShield — Milestone 0 Specification
 
 > **Scope:** the §4 vertical slice only. This document is subordinate to `docs/BRIEF.md`; where they conflict, the brief wins on intent and this document wins on mechanism.
 >

@@ -5,7 +5,7 @@ Scoped narrowly per docs/PLAN.md §9's own ruling on this priority --
 LangGraph/MCP integration (what would either even mean concretely without
 more product direction) and to stay clear of docs/BRIEF.md's explicit "not
 a generic agent framework, don't compete with LangGraph." This exports
-AgentNet's existing event log as an OTLP/JSON trace
+AgentShield's existing event log as an OTLP/JSON trace
 (https://opentelemetry.io/docs/specs/otlp/#json-protobuf-encoding) so any
 OTLP-compatible observability backend (Jaeger, Tempo, Honeycomb, ...) can
 ingest an experiment's causal history for external analysis.
@@ -16,7 +16,7 @@ is no SDK-specific behavior (sampling, batching, live push export) this
 needs, per CLAUDE.md's smallest-dependency-set preference.
 
 One root span per experiment (covering its full recorded event window),
-with every AgentNet Event mapped to an OTel *span event* -- a native
+with every AgentShield Event mapped to an OTel *span event* -- a native
 OpenTelemetry concept for a discrete, timestamped occurrence within a span
 -- rather than inventing a per-event child span, which would misrepresent
 events as having duration they don't have.

@@ -1,6 +1,6 @@
-# AgentNet — Project Brief
+# AgentShield — Project Brief
 
-> **What this is:** the source-of-truth product and architecture context for AgentNet.
+> **What this is:** the source-of-truth product and architecture context for AgentShield.
 >
 > **How to use it:** read this before making architectural or product decisions. Do **not** load it into every session — it is referenced deliberately (`@docs/BRIEF.md`), not auto-loaded. Durable per-turn rules live in `CLAUDE.md`.
 >
@@ -18,7 +18,7 @@
 
 ## 1. Definition
 
-**AgentNet is a multi-agent AI security simulation, observability, and defense platform.**
+**AgentShield is a multi-agent AI security simulation, observability, and defense platform.**
 
 Users construct isolated networks of autonomous agents, run controlled adversarial scenarios, watch compromise propagate in real time, inspect fine-grained security telemetry, and test automated containment.
 
@@ -26,7 +26,7 @@ Mental model:
 
 > Cyber range + Datadog/CrowdStrike-style observability + automated defense, for AI-agent networks.
 
-**AgentNet is a usable product first and a research platform second.** The research questions matter, but the project must be impressive and useful even if no hypothesis produces a notable result.
+**AgentShield is a usable product first and a research platform second.** The research questions matter, but the project must be impressive and useful even if no hypothesis produces a notable result.
 
 The core workflow, which every phase serves:
 
@@ -42,11 +42,11 @@ AI systems are moving from `User → LLM → Response` toward interconnected aut
 
 Traditional AI security asks: *can this agent be manipulated?*
 
-AgentNet asks the systems question: **if one agent becomes compromised or behaviorally abnormal, what happens to the rest of the ecosystem?**
+AgentShield asks the systems question: **if one agent becomes compromised or behaviorally abnormal, what happens to the rest of the ecosystem?**
 
-A compromised agent may influence other agents, misuse shared tools, poison memory, abuse credentials, propagate malicious instructions, exploit shared software, and cause cascading failure. AgentNet makes those system-level failure modes observable, testable, reproducible, and defensible.
+A compromised agent may influence other agents, misuse shared tools, poison memory, abuse credentials, propagate malicious instructions, exploit shared software, and cause cascading failure. AgentShield makes those system-level failure modes observable, testable, reproducible, and defensible.
 
-**Research context.** Michael Barnathan's work on systemic AI-agent security is an inspiration — recursive autonomous compromise, inference availability as a propagation resource, software monoculture, epidemiological modeling, behavioral trajectory monitoring, collective defense. AgentNet is *not* an implementation of those papers. It is the platform that can experimentally test those ideas and others.
+**Research context.** Michael Barnathan's work on systemic AI-agent security is an inspiration — recursive autonomous compromise, inference availability as a propagation resource, software monoculture, epidemiological modeling, behavioral trajectory monitoring, collective defense. AgentShield is *not* an implementation of those papers. It is the platform that can experimentally test those ideas and others.
 
 ---
 
@@ -108,7 +108,7 @@ Propagation rule is conceptually: same software type → higher probability; dif
 
 **Success condition:** a user can start a scenario, watch compromise propagate, watch quarantine contain it, inspect agents and events, pause, reset, and rerun deterministically with the same seed.
 
-### What AgentNet is NOT
+### What AgentShield is NOT
 
 - **Not a generic agent framework.** Don't compete with LangGraph.
 - **Not a tracing product.** Not a shallow LangSmith clone.
@@ -247,7 +247,7 @@ These are non-negotiable and belong in `CLAUDE.md` in compressed form.
 
 ## 10. Safety constraints
 
-AgentNet is for **controlled, sandboxed agent-security experimentation**. It must not become a real-world autonomous compromise tool.
+AgentShield is for **controlled, sandboxed agent-security experimentation**. It must not become a real-world autonomous compromise tool.
 
 - Synthetic vulnerabilities and synthetic credentials only
 - Restricted internet egress; constrained tool surface; isolated code execution
@@ -321,11 +321,11 @@ MVP needs only: total, healthy, compromised, quarantined, new compromises, total
 
 ## 15. Positioning
 
-**AgentNet is the product** — a platform for simulating, observing, evaluating, and defending networks of autonomous AI agents.
+**AgentShield is the product** — a platform for simulating, observing, evaluating, and defending networks of autonomous AI agents.
 
 **RAC-HeteroBench is a flagship study performed using it** — an empirical investigation of how implementation diversity, inference availability, network topology, and defense strategy influence compromise propagation.
 
-If the research hypothesis turns out uninteresting, AgentNet remains a meaningful engineering project. That separation is intentional and should be preserved.
+If the research hypothesis turns out uninteresting, AgentShield remains a meaningful engineering project. That separation is intentional and should be preserved.
 
 Research questions the platform should eventually support:
 

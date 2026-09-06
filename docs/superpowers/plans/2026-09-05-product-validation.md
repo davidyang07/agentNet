@@ -4,7 +4,7 @@
 > executed inline, in the same session that wrote it, phase by phase, committing after each
 > phase). Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Prove AgentNet can evaluate a real multi-agent topology end-to-end — import → adversarial
+**Goal:** Prove AgentShield can evaluate a real multi-agent topology end-to-end — import → adversarial
 scenario → adaptive attacker → security-plane attack → defense → causal trace → remediation →
 re-test → measurable improvement — and produce reproducible, non-fabricated benchmark evidence for
 the resume/product story.
@@ -49,7 +49,7 @@ conversation that produced this plan; not a separate file).
   contract) is untouched — its bound stays `[25, 100]`, so live experiments and the existing
   browser-facing graph are provably unaffected. This is the same kind of documented,
   narrowly-scoped deviation `docs/PLAN.md`'s header already sets precedent for (the
-  AgentShield/AgentNet naming note).
+  AgentShield naming note).
 
 ---
 
@@ -995,7 +995,7 @@ DEFENSE_COLUMNS = ["name", "attack_success_rate", "retained_utility", "compromis
 
 
 def render_markdown(report: dict[str, Any]) -> str:
-    lines = ["# AgentNet Canonical Benchmark Report", ""]
+    lines = ["# AgentShield Canonical Benchmark Report", ""]
     lines.append(f"{len(report['attack_scenarios'])} attack scenarios, "
                  f"{len(report['defense_comparison'])} defense configurations.")
     lines.append("")
@@ -1178,7 +1178,7 @@ def test_golden_demo_shows_measurable_resilience_improvement():
 real event log narrates all ten brief beats -- indirect prompt injection,
 propagation, initial quarantine, an adaptive attacker strategy switch, a
 sentinel-compromise attack on the security plane, a false threat-memory
-report, AgentNet identifying the resulting security_plane_integrity gap via
+report, AgentShield identifying the resulting security_plane_integrity gap via
 the existing remediation engine, applying the fix, and re-running to show
 measurable improvement. No new scenario logic -- pure config selection over
 app/scenarios/registry.py's existing scenarios, narrated by walking the
@@ -1319,7 +1319,7 @@ def main() -> int:
     ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
     result = run_golden_demo(model_provider=args.model_provider)
 
-    lines = ["# AgentNet Golden Demo", ""]
+    lines = ["# AgentShield Golden Demo", ""]
     lines.extend(result.narrative)
     (ARTIFACTS_DIR / "report.md").write_text("\n".join(lines))
 
@@ -1387,7 +1387,7 @@ langchain-core>=0.3,<0.4
 """A small, real LangGraph multi-agent app: a ResearchAgent that calls a
 WebSearchTool, hands its findings to a SummarizerAgent, which reports to a
 SentinelAgent that oversees the pipeline. This is the external application
-AgentNet imports and adversarially evaluates -- see export_topology.py."""
+AgentShield imports and adversarially evaluates -- see export_topology.py."""
 
 from typing import TypedDict
 
@@ -1447,9 +1447,9 @@ if __name__ == "__main__":
 
 ```python
 """Exports graph_app's compiled LangGraph topology to topology.json, the
-schema AgentNet's app/importers/external_topology.py reads. Run this with
+schema AgentShield's app/importers/external_topology.py reads. Run this with
 LangGraph actually installed (`pip install -r requirements.txt`) whenever
-graph_app.py's structure changes; topology.json is committed so AgentNet's
+graph_app.py's structure changes; topology.json is committed so AgentShield's
 tests/scripts never need LangGraph installed to consume it."""
 
 import json
@@ -1616,7 +1616,7 @@ one above if they differ.
 ```python
 # backend/app/importers/external_topology.py
 """Imports an externally-authored multi-agent topology (e.g. the LangGraph
-sample in examples/langgraph_research_agents/) into AgentNet's WorldState/
+sample in examples/langgraph_research_agents/) into AgentShield's WorldState/
 SecurityGraph shape. This is the "topology import" leg of the real external
 integration priority: agent identity and communication edges come straight
 from the real app's actual graph structure (via build_world_from_agents,

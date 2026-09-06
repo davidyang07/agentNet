@@ -1,7 +1,7 @@
 """A small, real LangGraph multi-agent app: a ResearchAgent that calls a
 WebSearchTool, hands its findings to a SummarizerAgent, which reports to a
 SentinelAgent that oversees the pipeline. This is the external application
-AgentNet imports and adversarially evaluates -- see export_topology.py and
+AgentShield imports and adversarially evaluates -- see export_topology.py and
 backend/app/importers/external_topology.py.
 """
 
@@ -48,7 +48,7 @@ def build_graph():
     return graph.compile()
 
 
-# Tool ownership and sentinel role are AgentNet-specific concepts LangGraph's
+# Tool ownership and sentinel role are AgentShield-specific concepts LangGraph's
 # own graph structure doesn't natively encode (a tool node is just another
 # node; there's no first-class "monitors" relationship) -- tracked here,
 # alongside the graph definition, since this file is this app's source of

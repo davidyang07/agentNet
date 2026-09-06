@@ -150,7 +150,7 @@ def render_audit_markdown(report: dict[str, Any]) -> str:
     ranked = sorted(report["candidates"], key=lambda c: -c["retained_utility_delta"])
     regressions = [c for c in ranked if c["retained_utility_delta"] < 0]
 
-    lines = ["# AgentNet Remediation Audit", ""]
+    lines = ["# AgentShield Remediation Audit", ""]
     if coverage:
         lines.append(
             f"Swept {coverage['configs_swept']} configurations: "
