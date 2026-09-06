@@ -720,11 +720,112 @@ new scope" boundary this pass was given, and still not something to change blind
 consistent with §9 item 1.
 
 ### Remaining after this session
-1. An actual browser pass on `NetworkGraph.tsx` typed-node rendering — still the one open item from
-   §9/§10, deferred in every session so far.
+1. ~~An actual browser pass on `NetworkGraph.tsx` typed-node rendering.~~ **Closed in §12 below.**
 2. A real Qwen/vLLM validation run once a GPU endpoint is available — `backend/scripts/
    run_golden_demo.py --model-provider vllm` (see README's "Real-model benchmark/golden-demo
    validation" section for the exact setup). Not exercised this session either — no reachable vLLM
    endpoint.
 
 Treat the git log and test suite as ground truth over this section if they ever disagree.
+
+## 12. Frontend redesign: a routed operator console (browser-verified)
+
+The one item deferred by every prior session — typed-node graph rendering, and frontend work
+generally — is closed here. Chrome automation *and* a running Compose stack were both available,
+so every screen below was driven and looked at in a real browser, not inferred from passing tests.
+
+### Information architecture
+
+The single-page dashboard (a header holding the config form, the comparison panel and the
+transport controls; a four-column body; a footer log) became a **routed workspace**: a persistent
+rail, a run-context bar, and one screen per step of Map → Attack → Observe → Measure → Remediate →
+Re-test (`/`, `/topology`, `/activity`, `/metrics`, `/defenses`, `/remediation`, plus `/history*`).
+`lib/experiment/ExperimentProvider.tsx` lifts the control reducer and the live WebSocket above the
+app shell, so navigation never interrupts a run; the stream is still remounted by
+`key={experimentId}`, preserving the remount-by-key convention the old page relied on. The active
+run id is kept in `sessionStorage` and re-verified against `GET /{id}` on load, so a refresh does
+not lose the run (and a 404 lands cleanly on the launch screen).
+
+### Design system
+
+`src/app/globals.css` now defines the token set (surface ramp, hairlines, foreground ramp, one
+accent, a six-step severity scale, radii, a dense type scale). Two rules make the density readable
+and are enforced by construction: **colour means severity or security state and nothing else**, and
+**the accent is interaction only**. `src/lib/severity.ts` is the single place meaning maps to
+colour; `src/lib/vocabulary.ts` is the single place a backend enum maps to human copy (event types
+with metadata-aware severity, node types, edge layers, scenarios, config-field labels). Machine
+names stay visible next to human labels wherever reproducibility matters. Shared primitives live in
+`src/components/ui/`.
+
+### Graph (SPEC §4 preserved)
+
+`NetworkGraph.tsx` became `components/graph/TopologyGraph.tsx`, still Sigma over Graphology, still
+built once and mutated with `setNodeAttribute` — never rebuilt per frame, never React Flow. What
+changed:
+
+- **Typed nodes render.** Sigma draws WebGL discs coloured by security state; a 2D overlay canvas
+  draws the shape ring that says what *kind* of node it is (square = tool, diamond = credential,
+  hexagon = resource, triangle = sentinel, shield = security control), plus labels, selection halo
+  and the numbered attack path. That split is what makes typed nodes possible with no custom WebGL
+  program and no new dependency. Labels are placed radially and collision-checked against both
+  other labels and every node, so a crowded ring degrades by dropping the least important label
+  rather than by covering a node with an opaque chip.
+- **Layout is deterministic and two-stage** (`lib/graph/layout.ts`). Stage 1 runs ForceAtlas2 over
+  the *agent mesh alone*; stage 2 places typed nodes on per-plane rings ordered by the mean
+  direction of the agents they attach to. One force pass over the whole typed graph reads badly —
+  `control-quarantine` alone has an edge to every agent and collapses the mesh around it. Initial
+  positions come from a golden-angle spiral rather than `Math.random()`, which also fixes a real
+  bug: the old layout differed between two runs of the same seed, contrary to SPEC §4's "positions
+  stable across reruns of the same seed".
+- **Investigation surfaces that had no UI at all** are now reachable: attack-path tracing between
+  any two nodes (`/analysis/attack-paths`, previously unused by the frontend), blast-radius focus
+  (`/analysis/blast-radius`, likewise), edge-layer toggles, and a node inspector whose causal trace
+  fetches on selection instead of asking the operator to type a node id into a text box.
+
+### Bugs found and fixed en route
+
+- **The graph never rendered in dev.** Sigma was created in one effect and killed in another; under
+  React StrictMode's mount → cleanup → mount, the cleanup killed the instance while the guarded
+  build effect refused to rebuild, so the canvas stayed empty. Build and teardown now live in one
+  effect keyed on structure.
+- **`/analysis/attack-paths` could hang the backend.** `nx.all_simple_paths` is an uncapped DFS;
+  `max_paths` bounded the output but not the search, so a dense 60-agent mesh could burn unbounded
+  CPU inside one request — and the route is `async def`, so that blocked the whole event loop
+  (observed: the server stopped answering `/health`). `app/graph/analysis.py` now passes
+  `cutoff=MAX_PATH_HOPS` (6). This is the only backend change in this work; the OpenAPI schema is
+  byte-identical (verified by regenerating `schema.d.ts`), and a new test pins the bound.
+- **`/analysis/blast-radius`'s `fraction` can exceed 100%** — it divides reachable nodes of *every*
+  type by the *agent* count. Rather than change the response, the UI reports reach as a share of
+  the whole graph and leaves the agent-scoped figure to `/metrics`.
+- **A finished run reconnected to after a reload showed "no events yet".** Correct behaviour (the
+  stream only carries what arrived over this connection) but misleading copy; it now explains the
+  gap and links to the run's replay, which does have the complete log.
+
+### Capability coverage
+
+Nothing was removed. Every previous capability has a home
+(configure/start/pause/resume/reset/speed, graph, agent detail, incident timeline, metrics, event
+stream, security insights, comparison, history, replay, historical comparison), and the
+configurator now also exposes config the UI previously could not reach at all: `active_scenarios`
+and the tool/credential/resource/sentinel counts plus their per-scenario rates — i.e. the entire
+typed security graph and all six attack scenarios were unreachable from the old form. Remediation
+gained the missing half of its loop: a recommendation's `config_diff` can now be re-tested in
+place, running baseline and patched configs to completion and comparing them.
+
+The pure helpers the old components exported (`deriveNeighbors`, `describeCompromisedBy`,
+`formatPercent`, `formatLatency`, `formatConfigDiff`, `formatProvenanceChain`,
+`summarizeNonAgentNodes`) moved to `lib/format.ts` and `lib/security/summary.ts` with their tests
+carried over assertion-for-assertion; the suite grew from 128 to 159 frontend tests.
+
+### Verification
+
+`npm run lint`, `npx next typegen && npx tsc --noEmit`, `npm test` (159 passed), `npm run build`
+(clean, 12 routes), backend `ruff check` + `pytest` (375 passed, against a real Postgres),
+`scripts/verify_determinism.py` (PASS, 330 events identical), and a schema-drift check
+(regenerated `schema.d.ts` identical). Every screen was additionally exercised in a real browser at
+1536×735 — launch, live run, topology + inspector + attack path, activity, metrics, defense
+comparison, remediation validate-fix, runs list, replay playback, historical compare — with no
+horizontal overflow anywhere. **Not verified:** narrow-viewport rendering was built to breakpoints
+(rail collapses below `lg`, inspector overlays below `xl`, grids collapse, tables scroll in their
+own containers) but could not be *looked at* — the browser window in this environment refused to
+resize below the desktop width.

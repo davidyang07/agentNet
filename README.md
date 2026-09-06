@@ -38,15 +38,60 @@ population of real LLM-backed agents alongside the simulated population, and a g
 prompt-injection scenario verified by deterministic string matching, not an LLM judge) are all
 implemented.
 
+## The console
+
+The frontend is a single operator console organised around the assessment workflow —
+**Map → Attack → Observe → Measure → Remediate → Re-test** — with one screen per step and a
+persistent run-context bar that keeps the live WebSocket connected as you move between them.
+
+| Screen | What it answers |
+|---|---|
+| **Overview** (`/`) | Configure and launch an assessment; then, how bad is it? Posture KPIs, outbreak curve, fleet split, attack surface, choke points, findings. |
+| **Topology** (`/topology`) | What does this system look like, and what can the attacker reach? The typed security graph, edge-layer toggles, blast-radius focus, attack-path tracing, and a node inspector with a causal trace back to patient zero. |
+| **Activity** (`/activity`) | What just happened? Every emitted event, filterable by attack / defense / security-plane / model, with critical events pulled out. |
+| **Metrics** (`/metrics`) | What did it cost? Every metric with the definition the backend computes it from, plus the run's provenance. |
+| **Defenses** (`/defenses`) | Did the defense help? A single-variable A/B (identical config, `defense_enabled` flipped) scored as an explicit delta. |
+| **Remediation** (`/remediation`) | What should change, and did it work? Findings as before → after config diffs, each re-testable in place. |
+| **Runs** (`/history`) | Everything ever run: a filterable table, deterministic replay, and comparison of any two persisted runs. |
+
+![Overview — posture KPIs, outbreak progression, workflow tracker](docs/screenshots/overview.jpg)
+
+*Overview: the workflow tracker, four posture KPIs, and the live outbreak curve.*
+
+![Topology — typed security graph with a node inspector](docs/screenshots/topology.jpg)
+
+*Topology: colour is security state, shape and size are node type. Selecting a node traces its
+compromise chain back to patient zero and lists what it can reach.*
+
+![Activity — filterable live event log](docs/screenshots/activity.jpg)
+
+*Activity: the live event log, with severity derived from event type **and** metadata — a replayed
+attestation reads as critical, a verified one does not.*
+
+![Remediation — a finding and its validated before/after](docs/screenshots/remediation.jpg)
+
+*Remediation: each finding is a before → after configuration diff, and **Validate fix** runs the
+baseline and the patched config to completion and reports the per-metric delta — including when a
+fix makes something else worse.*
+
+Visual conventions the console holds to everywhere: colour is reserved for security state and
+finding severity (never decoration), node **type** is carried by shape and size so a compromised
+sentinel and a compromised agent stay distinguishable, and every simulated result carries the
+caveat that it is not real-world security evidence.
+
 ## Architecture at a glance
 
 - **`backend/`** — FastAPI + a pure, synchronous, deterministic simulation engine
   (`app/engine/`), a security/quarantine engine (`app/security/`), an async orchestrator that
   drives the tick loop and owns pause/resume/speed (`app/orchestrator/`), and a normalized event
   system that streams over WebSocket (`app/events/`, `app/api/ws.py`).
-- **`frontend/`** — Next.js + TypeScript. A Sigma.js/Graphology network graph as the hero visual,
+- **`frontend/`** — Next.js + TypeScript, structured as a routed workspace: an `ExperimentProvider`
+  above the app shell owns the control state and the live WebSocket, so navigating between screens
+  never interrupts a running assessment. A Sigma.js/Graphology network graph is the hero visual,
   driven entirely by a pure reducer (`src/lib/stream/reducer.ts`) that replays the event stream —
-  the frontend never simulates anything itself.
+  the frontend never simulates anything itself. Design tokens live in `src/app/globals.css`, the
+  severity/state vocabulary in `src/lib/severity.ts` and `src/lib/vocabulary.ts`, and shared
+  primitives in `src/components/ui/`.
 - **`docker-compose.yml`** — Postgres runs in Compose with a healthcheck and a named volume
   (`pg_data`), so experiment history survives `docker compose down && up`. A `PostgresWriter`
   subscribes to the same live event stream the WebSocket transport does and persists it to two
@@ -144,55 +189,73 @@ npm run dev
 
 Open `http://localhost:3000`.
 
-## Running the M1 workflow
+## Running an assessment
 
-1. Open `http://localhost:3000`. The left panel is a real configuration form (node count, edge
-   density, software diversity, propagation probabilities, detector sensitivity, defense
-   on/off, initial-compromise strategy) — backend `Field(...)` bounds are the source of truth;
-   the form mirrors them for UX only.
-2. Click **Start**. The graph renders every node, with exactly one node red (the seeded initial
-   compromise) at tick 0.
-3. Watch compromise spread along edges — same-software neighbors infect faster than
-   cross-software ones, per the configured `p_same`/`p_cross`. If defense is enabled, red nodes
-   turn blue as quarantine catches them; the right-hand metrics panel updates live (total,
-   healthy, compromised, quarantined, new compromises, total exposure, outbreak duration).
-4. Click any node for its detail drawer: status, software type, neighbors, who compromised it
-   and when, quarantine status, and an incident timeline of everything observed for that agent
-   in this session.
-5. Use **Pause**/**Resume** to freeze and continue the run exactly where it left off, and
-   **Speed** to change pacing without changing the outcome — determinism is unaffected by both.
-6. **Reset** stops the current run and starts a fresh one with the exact same configuration and
-   seed — the propagation/quarantine sequence should match the prior run.
-7. Once a run has finished or been reset, editing the form and clicking **Start** again launches
-   a brand-new, independently configured experiment (no page refresh required).
-8. **Comparison** (collapsed by default — click to expand) reruns the current configuration twice
-   — once with defense on, once off, both from the same seed — and shows the resulting metrics
-   side by side. This is two ordinary independent experiments, not a special dual-run mode.
+1. Open `http://localhost:3000`. With no run active, the Overview screen is the launch surface:
+   four presets (baseline propagation, undefended control, security-plane assault, adaptive
+   attacker) seed a full configuration, and every field underneath is an `ExperimentConfig` key
+   sent verbatim to `POST /api/experiments` — the machine name is printed under each label so a
+   run stays reproducible from the UI alone. Backend `Field(...)` bounds are the source of truth;
+   the inputs mirror them for convenience and the backend re-validates everything.
+2. Choose the **attack scenarios** to run. Selecting one that owns the tick increment
+   (`propagation` / `adaptive_attacker`) deselects its counterpart, and selecting a scenario that
+   needs a security plane or credentials warns you if the corresponding count is still zero rather
+   than letting it silently no-op.
+3. Click **Launch assessment**. The run-context bar at the top takes over: status, run id, tick
+   progress against `max_ticks`, seed/agents/defense chips, and Pause / Resume / Re-run / speed.
+   Those controls follow you across every screen, because they act on the run, not the view.
+4. **Topology** renders the typed security graph. Colour is security state and shape/size are node
+   type, so tools, credentials, resources, sentinels and security controls stay distinguishable
+   from agents even when all of them turn red. Toggle the communication / access / oversight edge
+   layers to isolate a relationship kind, press **Blast radius** to dim everything the attacker
+   cannot currently reach, and trace a concrete attack path between any two nodes.
+5. Click any node for the inspector: state, stack, who compromised it and when, the causal trace
+   back to patient zero, everything it can reach (with the edge type that grants it), and the
+   security-relevant events observed for it this session.
+6. **Activity** is the full event log, filterable by attack / defense / security-plane / model and
+   by agent id, with critical events pulled into their own panel. Severity comes from the event
+   type *and* its metadata: a replayed attestation and an illegitimate quarantine read as attacks,
+   not routine.
+7. **Metrics** shows every metric alongside the definition the backend computes it from, plus the
+   exact configuration the numbers came from — security is only meaningful against the utility it
+   costs, so compromise fraction and retained utility sit side by side.
+8. **Defenses** reruns the current configuration twice — once with defense on, once off, same seed
+   — and reports the difference as an explicit per-metric delta rather than two tables to subtract
+   by eye. This is two ordinary independent experiments, not a special dual-run mode.
+9. **Remediation** lists the engine's findings as before → after configuration diffs. **Validate
+   fix** runs the current config and the patched config to completion and compares them on every
+   metric, which closes the Remediate → Re-test loop without leaving the app.
+10. **Re-run** repeats the current configuration and seed exactly; the propagation/quarantine
+    sequence should match the previous run. Once a run has finished or been stopped, **New
+    assessment** reopens the configurator for a differently-configured run — no page refresh
+    needed. The active run is remembered per browser tab, so a reload puts you back where you were
+    (unless the backend has since evicted it, in which case you land back on the launch screen).
 
 ## History, replay, and durable comparison (Phase 1.5)
 
 Every experiment run (live or otherwise) is persisted as it happens, event by event, to Postgres
 — nothing about the live simulation changes to make this possible.
 
-1. Click **History** (top-left of the live view) to open `/history`: a paginated, filterable list
+1. Open **Runs** in the rail (`/history`): a paginated, filterable list
    of every persisted experiment, with an **Integrity** column showing whether that run's event
    log is provably complete. A run that crashed mid-simulation, or hit a transient DB write
    failure, is marked **incomplete** — visibly, not silently presented as trustworthy — even if it
    otherwise finished or was stopped cleanly.
-2. Click **Replay** on any row to open `/history/[id]`: the exact same graph/metrics/event-stream/
-   agent-detail components the live view uses, but driven entirely client-side from the persisted
-   event log (one fetch, then play/pause/speed/scrub with zero further network calls). An
-   incomplete run shows a banner and simply stops where the recorded log ends.
-3. Select two rows' checkboxes on the history list and click **Compare selected** to open
-   `/history/compare`: both runs' full event logs are folded through the same reducer/metrics
-   logic used everywhere else in the app, side by side, with each arm's seed/config/defense/
-   integrity shown above its metrics (arbitrary historical pairs are allowed — the UI lets you
-   judge whether a given pair is a methodologically fair comparison, rather than assuming it).
+2. Click **Replay** on any row to open `/history/[id]`: the same topology/inspector/event-log
+   surfaces the live view uses, driven entirely client-side from the persisted event log (one
+   fetch, then play/pause/speed/scrub with zero further network calls), with the run's
+   reconstructed final metrics shown as a strip above the graph. An incomplete run shows a banner
+   and simply stops where the recorded log ends.
+3. Select two rows' checkboxes and click **Compare selected** to open `/history/compare`: both
+   runs are scored on identical metrics and reported as a delta, with each arm's
+   seed/config/defense/integrity shown above the table. Arbitrary historical pairs are allowed, so
+   the UI warns when the two runs differ in more than their defense setting rather than letting a
+   difference be read as attributable to the defense.
 
 ## Real (LLM-backed) agents (Phase 2)
 
 By default (`real_agent_count: 0`), nothing changes — every node is simulated, exactly as in M0/M1/
-Phase 1.5. Setting `real_agent_count` (1–20, in the config form or the `POST /api/experiments`
+Phase 1.5. Setting `real_agent_count` (1–20, in the run configurator or the `POST /api/experiments`
 body) designates that many of the highest-degree nodes as real, LLM-backed agents. Each holds a
 synthetic `CONFIDENTIAL_TOKEN` it's instructed never to reveal; when a compromised real agent has a
 healthy real neighbor, it sends a fixed prompt-injection message attempting to extract that
