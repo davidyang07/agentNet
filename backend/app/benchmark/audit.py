@@ -45,21 +45,34 @@ class AuditCandidate:
         )
 
 
-def _candidate_configs() -> dict[str, ExperimentConfig]:
-    """The 14 attack scenarios plus the 7 defense-posture variants of the
-    fixed defense-comparison attack -- every config app/benchmark/matrix.py
-    already defines, excluding the 2,500-agent scale run (its own presence
-    in ATTACK_SCENARIOS as a BenchmarkConfig, not ExperimentConfig, is
-    intentionally excluded here: recommend() takes an ExperimentConfig, and
-    the scale run already measures compromise_fraction=0.0/spi=1.0 -- no
-    recommendation would fire for it regardless)."""
-    configs: dict[str, ExperimentConfig] = {
+def _attack_configs() -> dict[str, ExperimentConfig]:
+    """All 14 attack scenarios app/benchmark/matrix.py defines. The
+    isinstance filter admits the 2,500-agent scale run too -- BenchmarkConfig
+    is an ExperimentConfig subclass (app/benchmark/config.py), so recommend()
+    and model_copy() both accept it -- and only guards against a future
+    non-ExperimentConfig entry being added to ATTACK_SCENARIOS."""
+    return {
         name: config
         for name, config in ATTACK_SCENARIOS.items()
         if isinstance(config, ExperimentConfig)
     }
+
+
+def _candidate_configs() -> dict[str, ExperimentConfig]:
+    """The full attack-scenario x defense-posture sweep: every attack
+    scenario on its own, every defense variant of the fixed
+    defense-comparison attack on its own, and -- the actual cross product --
+    every attack scenario re-run under every one of the 7 defense postures
+    (`{attack}__{defense}`). The standalone presets are kept alongside the
+    cross product so each scenario's own tuned defense parameters stay
+    directly comparable to the 7 uniform postures imposed on top of it."""
+    attacks = _attack_configs()
+    configs: dict[str, ExperimentConfig] = dict(attacks)
     for name, overrides in DEFENSE_VARIANTS.items():
         configs[f"defense_variant_{name}"] = DEFENSE_BASE_ATTACK.model_copy(update=overrides)
+    for attack_name, attack in attacks.items():
+        for defense_name, overrides in DEFENSE_VARIANTS.items():
+            configs[f"{attack_name}__{defense_name}"] = attack.model_copy(update=overrides)
     return configs
 
 
@@ -100,10 +113,24 @@ def _candidate_summary(c: AuditCandidate) -> dict[str, Any]:
     }
 
 
+def audit_coverage() -> dict[str, int]:
+    """The exact shape of the sweep, so the artifacts state their own
+    coverage instead of the docs having to assert it separately."""
+    attacks = _attack_configs()
+    return {
+        "attack_scenarios": len(attacks),
+        "defense_variants": len(DEFENSE_VARIANTS),
+        "cross_product_configs": len(attacks) * len(DEFENSE_VARIANTS),
+        "configs_swept": len(_candidate_configs()),
+    }
+
+
 def build_audit_report(
     candidates: list[AuditCandidate], strongest: AuditCandidate
 ) -> dict[str, Any]:
+    coverage = audit_coverage()
     return {
+        "coverage": {**coverage, "candidates_triggered": len(candidates)},
         "candidates": [_candidate_summary(c) for c in candidates],
         "strongest": _candidate_summary(strongest),
     }
@@ -119,10 +146,21 @@ def render_audit_markdown(report: dict[str, Any]) -> str:
         "security_plane_integrity_before",
         "security_plane_integrity_after",
     ]
+    coverage = report.get("coverage", {})
+    ranked = sorted(report["candidates"], key=lambda c: -c["retained_utility_delta"])
+    regressions = [c for c in ranked if c["retained_utility_delta"] < 0]
+
     lines = ["# AgentNet Remediation Audit", ""]
+    if coverage:
+        lines.append(
+            f"Swept {coverage['configs_swept']} configurations: "
+            f"{coverage['attack_scenarios']} attack scenarios x "
+            f"{coverage['defense_variants']} defense postures "
+            f"({coverage['cross_product_configs']} combinations) plus each preset standalone."
+        )
     lines.append(
-        f"{len(report['candidates'])} of the benchmark matrix's presets triggered a "
-        "remediation recommendation; ranked by measured retained_utility improvement."
+        f"{len(report['candidates'])} of them triggered a remediation recommendation, "
+        "each re-tested for real and ranked below by measured retained_utility improvement."
     )
     lines.append("")
     lines.append("## Strongest result")
@@ -134,12 +172,24 @@ def render_audit_markdown(report: dict[str, Any]) -> str:
         f"(+{strongest['retained_utility_delta']:.4f})"
     )
     lines.append("")
+    if regressions:
+        # Surfaced, not hidden: raising sentinel_count grows the pool
+        # security_plane_integrity is measured over, so some recommendations
+        # measurably make things worse once re-tested. See
+        # tests/test_benchmark_audit.py.
+        lines.append(
+            f"{len(regressions)} of the {len(ranked)} recommendations measurably *worsened* "
+            "retained_utility once re-tested; they are listed at the bottom of the table below."
+        )
+        lines.append("")
     lines.append("## All candidates")
     header = "| " + " | ".join(columns) + " |"
     separator = "| " + " | ".join("---" for _ in columns) + " |"
     lines.append(header)
     lines.append(separator)
-    ranked = sorted(report["candidates"], key=lambda c: -c["retained_utility_delta"])
     for row in ranked:
-        lines.append("| " + " | ".join(str(row[c]) for c in columns) + " |")
+        cells = [
+            f"{row[c]:.4f}" if isinstance(row[c], float) else str(row[c]) for c in columns
+        ]
+        lines.append("| " + " | ".join(cells) + " |")
     return "\n".join(lines)

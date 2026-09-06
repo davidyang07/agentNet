@@ -256,12 +256,18 @@ cd backend
   2,500-agent scale run), 7 defense-posture variants of the same attack, and a before/after
   remediation comparison — all zero-real-provider-call, seeded, and reproducible. Writes
   `backend/.artifacts/benchmark/{results.json,report.md}`.
-- **`run_benchmark_audit.py`** sweeps all 14 attack scenarios and all 7 defense variants (21 configs)
-  for a remediation opportunity, re-tests every one that triggers a recommendation, and ranks the
-  real measured `retained_utility` improvement — surfacing the single strongest remediation result
-  across the whole matrix instead of one hand-picked case. Strongest result as of this writing:
-  `propagation_no_defense` (enable defense), `retained_utility` `0.0` → `0.8875`. Writes
-  `backend/.artifacts/benchmark/{audit.json,audit.md}`.
+- **`run_benchmark_audit.py`** sweeps the full 14 attack scenarios × 7 defense postures cross
+  product (98 combinations) plus each of the 21 presets standalone — 119 configurations — for a
+  remediation opportunity, re-tests every one that triggers a recommendation, and ranks the real
+  measured `retained_utility` improvement, surfacing the single strongest remediation result across
+  the whole matrix instead of one hand-picked case. 30 of the 119 trigger a recommendation.
+  Strongest result as of this writing: `adaptive_attacker_aggressive_bias__defense_off` (enable
+  defense), `retained_utility` `0.0` → `0.9875`. The report also names the 2 recommendations that
+  measurably *worsened* `retained_utility` on re-test rather than hiding them — raising
+  `sentinel_count` grows the pool `security_plane_integrity` is measured over, so its value is
+  posture-dependent (it lifts `sentinel_compromise_attack` from `0.0` to `0.9625` under
+  `defense_medium_sensitivity`, but regresses `adaptive_plus_byzantine` by `-0.3125`). Takes about
+  1m45s; writes `backend/.artifacts/benchmark/{audit.json,audit.md}`.
 - **`run_golden_demo.py`** runs one scenario whose real event log narrates the full story: indirect
   prompt injection → propagation → an initial legitimate quarantine → the adaptive attacker's
   deterministic strategy switch → a sentinel subverted mid-run → a false threat signature (trust

@@ -642,21 +642,28 @@ new `/replay/metrics`) fetches, so `ComparisonView.tsx` shows identical rich fie
 stream-derived total/healthy/compromised/quarantined counts.
 
 **Cross-matrix remediation audit (done).** `app/benchmark/audit.py` +
-`backend/scripts/run_benchmark_audit.py` / `make benchmark-audit`: sweeps all 14 attack-scenario
-presets and all 7 defense-posture variants (21 configs total) through `recommend()` on their own
-baseline metrics, re-tests every one that triggers a recommendation, and ranks the real measured
-`retained_utility` delta. Writes `backend/.artifacts/benchmark/{audit.json,audit.md}`. **Strongest
-real result:** `propagation_no_defense` — "100% of agents are compromised and quarantine defense is
-disabled -- enable it", `retained_utility` 0.0 → 0.8875. A second, real finding worth recording
-honestly: for the combined/adaptive-Byzantine presets (`sentinel_compromise_attack`,
-`combined_byzantine_multi_vector`, `adaptive_plus_byzantine`), raising `sentinel_count` — the only
-lever `recommend()` has for a `security_plane_integrity` gap — does **not** reliably help; it grows
-the security-plane node pool that metric's denominator counts over, and measurably *worsened* both
-`security_plane_integrity` and `retained_utility` for `adaptive_plus_byzantine` (0.833→0.571 and
-0.925→0.6125 respectively) in this run. The golden demo's own sentinel_count 1→2 fix still reliably
-helps because it was empirically tuned for that single-attacker scenario (§9's priority 12 note);
-this is a real, causally-explained boundary on where that lever generalizes, not a bug to paper
-over.
+`backend/scripts/run_benchmark_audit.py` / `make benchmark-audit`: sweeps the full **14
+attack-scenario × 7 defense-posture cross product (98 combinations)** — each attack re-run under
+every uniform defense posture, named `{attack}__{defense}` — plus all 21 presets standalone, for
+**119 configurations total**, through `recommend()` on their own baseline metrics, re-tests every
+one that triggers a recommendation, and ranks the real measured `retained_utility` delta. 30 of the
+119 trigger a recommendation. The run takes ~1m45s of real engine work (the 2,500-agent scale run
+under `defense_off` alone is ~28s). Writes `backend/.artifacts/benchmark/{audit.json,audit.md}`;
+`audit.json` carries a `coverage` block so the artifact states its own scope. **Strongest real
+result:** `adaptive_attacker_aggressive_bias__defense_off` — "100% of agents are compromised and
+quarantine defense is disabled -- enable it", `retained_utility` 0.0 → 0.9875.
+
+A second, real finding worth recording honestly: raising `sentinel_count` — the only lever
+`recommend()` has for a `security_plane_integrity` gap — is **posture-dependent**, not reliably
+good. It grows the security-plane node pool that metric's denominator counts over. Widening the
+sweep from 21 presets to the full 98-combination cross product sharpened this: the lever is
+strongly *positive* for `sentinel_compromise_attack__defense_medium_sensitivity`
+(`retained_utility` 0.0 → 0.9625, `security_plane_integrity` 0.667 → 1.0), yet still measurably
+*worsens* `adaptive_plus_byzantine` (`security_plane_integrity` 0.833→0.571, `retained_utility`
+0.925→0.6125) — 2 of the 30 candidates regress, and `audit.md` calls that count out explicitly
+rather than burying it. The golden demo's own sentinel_count 1→2 fix helps because it was
+empirically tuned for that single-attacker scenario (§9's priority 12 note); this is a real,
+causally-explained boundary on where that lever generalizes, not a bug to paper over.
 
 **`agentshield test` CI hardening (done).** `app/benchmark/cli.py::Finding` gained a `duration_s`
 field; `agentshield_test.py` gained a `--json` flag printing one machine-readable line (`{"ok":
