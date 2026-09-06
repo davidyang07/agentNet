@@ -678,11 +678,18 @@ suite: a golden-file test pinning the real committed numbers in
 file → `FileNotFoundError`; malformed JSON → `json.JSONDecodeError`; missing required field / bad
 edge shape → pydantic `ValidationError`) — previously untested failure modes.
 
-**Golden demo polish (done).** `summarize_golden_demo_narrative()` collapses the ~60+ repeated
-"compromise propagated to X" lines down to one, so `make golden-demo`'s stdout and the top of
-`report.md` show a short "Key beats" list (attack → adaptation → security-plane failure →
-remediation → re-test, ~28 lines) instead of requiring a scroll through the full tick-by-tick log;
-the full narrative is still written below it in `report.md` for anyone who wants it.
+**Golden demo polish (done).** `summarize_golden_demo_narrative()` collapses each *class* of
+repeated per-agent beat line — propagation, lateral prompt injection, quarantine, and sentinel
+subversion — down to its first occurrence, annotated with a `(+N more this run)` count. Collapsing
+only "compromise propagated to X" (the first attempt) was not enough: the per-agent injection and
+quarantine lines left the "Key beats" list at ~28 lines, no shorter than the raw log it was meant
+to summarize. It is now **12 lines** that read as the intended arc end to end — seeded compromise →
+attestation replay → sentinel subverted (+1 more) → false threat signature → propagation (+30
+more) → lateral injection (+7 more) → quarantine (+9 more) → 275 replayed nonces → adaptive
+strategy → `security_plane_integrity=0.80` identified → remediation recommended →
+`0.80 → 0.83` on re-test. So `make golden-demo` alone shows attack → adaptation → security-plane
+failure → remediation → re-test without a scroll; the full narrative is still written below it in
+`report.md`.
 
 **Priority 7 — typed-node graph rendering (again left untouched, documented).** This session again
 had no browser/screenshot tool available (confirmed via `ToolSearch` at the start of the session),
@@ -694,9 +701,27 @@ access and started `docker compose up -d postgres` + created an `agentnet_test` 
 full Postgres-backed test suite (previously always skipped) ran for real throughout this session's
 work, including the new history/replay integration tests.
 
+### Continuation pass (audit widening + demo polish)
+
+A follow-up pass re-ran the entire verification sweep from a clean checkout and closed two gaps
+between what the docs claimed and what the code did:
+
+- **The audit was not actually a cross product.** It swept the 21 presets ("14 scenarios *and* 7
+  defenses"), not the 98 combinations they define. It now sweeps all 14 × 7 plus the standalone
+  presets (119 configs), which changed the headline result and sharpened the sentinel_count
+  finding — see the audit paragraph above for the measured numbers.
+- **The "Key beats" summary was not actually curated.** It collapsed only propagation lines,
+  leaving it as long as the raw log; it now collapses every repeated beat class (12 lines).
+
+**Priority 7 — typed-node graph rendering (still deliberately untouched).** Chrome automation tools
+were nominally listed in this pass, but driving them would mean standing up the dev server and a
+live browser session purely to change the dashboard's highest-risk surface — outside the "no broad
+new scope" boundary this pass was given, and still not something to change blind. Left documented,
+consistent with §9 item 1.
+
 ### Remaining after this session
 1. An actual browser pass on `NetworkGraph.tsx` typed-node rendering — still the one open item from
-   §9/§10, for want of any browser/screenshot tool across every session so far.
+   §9/§10, deferred in every session so far.
 2. A real Qwen/vLLM validation run once a GPU endpoint is available — `backend/scripts/
    run_golden_demo.py --model-provider vllm` (see README's "Real-model benchmark/golden-demo
    validation" section for the exact setup). Not exercised this session either — no reachable vLLM

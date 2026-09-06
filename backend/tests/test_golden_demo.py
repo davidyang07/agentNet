@@ -1,3 +1,5 @@
+import re
+
 from app.benchmark.golden_demo import run_golden_demo, summarize_golden_demo_narrative
 
 
@@ -72,6 +74,43 @@ def test_summarize_golden_demo_narrative_preserves_order_and_all_required_beats(
     joined = "\n".join(summary)
     for substring in required_substrings:
         assert substring in joined, f"missing beat evidence in summary: {substring!r}"
-    # order-preserving: summary is a subsequence of the full narrative
+    # order-preserving: summary is a subsequence of the full narrative, once
+    # the "(+N more this run)" collapse annotations are stripped back off.
     it = iter(result.narrative)
-    assert all(line in it for line in summary)
+    assert all(_strip_collapse_note(line) in it for line in summary)
+
+
+def _strip_collapse_note(line: str) -> str:
+    return re.sub(r" \(\+\d+ more this run\)$", "", line)
+
+
+def test_summary_keeps_at_most_one_line_per_repeated_beat_class():
+    # The point of the summary is that it is materially shorter than the raw
+    # log: collapsing propagation alone still left one line per agent for
+    # lateral injection and quarantine.
+    result = run_golden_demo()
+    summary = summarize_golden_demo_narrative(result.narrative)
+    for beat_class in (
+        "compromise propagated to",
+        "indirect prompt injection compromised",
+        "quarantined by initial defense",
+        "adaptive attacker subverted sentinel",
+    ):
+        matching = [line for line in summary if beat_class in line]
+        assert len(matching) <= 1, f"{beat_class!r} was not collapsed: {matching}"
+    assert len(summary) < len(result.narrative)
+    assert len(summary) <= 12, f"summary is still {len(summary)} lines:\n" + "\n".join(summary)
+
+
+def test_summary_reports_how_many_repeats_it_collapsed():
+    narrative = [
+        "tick 2: compromise propagated to agent-001",
+        "tick 3: compromise propagated to agent-002",
+        "tick 4: compromise propagated to agent-003",
+        "tick 5: agent-004 quarantined by initial defense",
+    ]
+    summary = summarize_golden_demo_narrative(narrative)
+    assert summary == [
+        "tick 2: compromise propagated to agent-001 (+2 more this run)",
+        "tick 5: agent-004 quarantined by initial defense",
+    ]

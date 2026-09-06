@@ -273,7 +273,10 @@ cd backend
   deterministic strategy switch → a sentinel subverted mid-run → a false threat signature (trust
   manipulation) → AgentNet's remediation engine flagging the `security_plane_integrity` gap → a
   re-run with the fix applied, showing a real, reproducible improvement. `report.md` leads with a
-  curated "Key beats" summary (collapsing the many repeated propagation lines) above the full
+  curated 12-line "Key beats" summary — each repeated per-agent beat class (propagation, lateral
+  injection, quarantine, sentinel subversion) collapsed to its first line plus a `(+N more this
+  run)` count, so one command shows attack → adaptation → security-plane failure → remediation →
+  re-test without scrolling — above the full
   tick-by-tick narrative. Writes `backend/.artifacts/golden_demo/{report.md,result.json}`.
 - **`run_external_import_demo.py`** imports the real LangGraph sample app's topology
   (`examples/langgraph_research_agents/`) and runs an adversarial scenario against it — see that

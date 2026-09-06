@@ -111,22 +111,48 @@ def _narrate(run: BenchmarkRun) -> list[str]:
     return lines
 
 
+# Each entry identifies a beat class that repeats once per affected agent
+# (often 20-60+ times). Only the first line of each class survives into the
+# summary, annotated with how many more of that class the run produced.
+_REPEATED_BEAT_CLASSES = (
+    "compromise propagated to",
+    "indirect prompt injection compromised",
+    "quarantined by initial defense",
+    "adaptive attacker subverted sentinel",
+)
+
+
 def summarize_golden_demo_narrative(narrative: list[str]) -> list[str]:
     """Curated subset of the full narrative for the demo's headline output:
-    keeps every distinct beat line but collapses the many repeated
-    "compromise propagated to X" lines (one per newly-compromised agent,
-    often 20-60+ of them) down to the first occurrence, so the story's ten
-    beats read as a short list instead of being buried in bulk propagation
-    noise. The full, uncollapsed narrative remains available via
-    GoldenDemoResult.narrative for anyone who wants the tick-by-tick log."""
-    summary: list[str] = []
-    seen_propagation_line = False
+    keeps every distinct beat but collapses each *class* of per-agent line
+    (propagation, lateral prompt injection, quarantine, sentinel
+    subversion) down to its first occurrence, annotated with how many more
+    of that class occurred. Collapsing propagation alone was not enough --
+    the per-agent injection and quarantine lines left the "key beats" just
+    as long as the raw log. The full, uncollapsed narrative remains
+    available via GoldenDemoResult.narrative for the tick-by-tick log."""
+
+    def beat_class(line: str) -> str | None:
+        return next((c for c in _REPEATED_BEAT_CLASSES if c in line), None)
+
+    totals: dict[str, int] = {}
     for line in narrative:
-        if "compromise propagated to" in line:
-            if seen_propagation_line:
-                continue
-            seen_propagation_line = True
-        summary.append(line)
+        cls = beat_class(line)
+        if cls is not None:
+            totals[cls] = totals.get(cls, 0) + 1
+
+    summary: list[str] = []
+    seen: set[str] = set()
+    for line in narrative:
+        cls = beat_class(line)
+        if cls is None:
+            summary.append(line)
+            continue
+        if cls in seen:
+            continue
+        seen.add(cls)
+        remaining = totals[cls] - 1
+        summary.append(f"{line} (+{remaining} more this run)" if remaining else line)
     return summary
 
 
