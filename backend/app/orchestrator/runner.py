@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from collections.abc import Sequence
 from typing import Literal
 from uuid import UUID, uuid4
@@ -14,6 +15,8 @@ from app.scenarios.registry import run_async_scenarios
 from app.schemas.events import EventDraft, EventType
 from app.schemas.experiment import EdgeView, ExperimentConfig, ExperimentSummary, NodeView
 from app.schemas.frames import SnapshotFrame
+
+logger = logging.getLogger(__name__)
 
 Status = Literal["running", "paused", "finished", "stopped"]
 
@@ -95,27 +98,59 @@ class ExperimentRunner:
         self._speed = max(0.25, min(8.0, multiplier))
 
     async def _run_loop(self) -> None:
-        while self._running and not is_finished(self.state, self.config):
-            await self._pause_event.wait()
-            if not self._running:
-                break
-            self.state, drafts = advance(self.state, self.config)
-            if self._gateway is not None:
-                # Runs after advance()'s propagation+detection, not
-                # interleaved between them -- a real agent compromised this
-                # tick is first eligible for quarantine detection next tick,
-                # a deliberate, documented one-tick timing difference from
-                # the simulated path (docs/PHASE_2_PLAN.md §2, §16).
-                self.state, real_drafts = await run_async_scenarios(
-                    self.state, self.config, self._gateway, tick=self.state.tick
-                )
-                drafts = [*drafts, *real_drafts]
-            await self._publish(drafts)
-            await asyncio.sleep(self.tick_interval / self._speed)
+        try:
+            while self._running and not is_finished(self.state, self.config):
+                await self._pause_event.wait()
+                if not self._running:
+                    break
+                state, drafts = advance(self.state, self.config)
+                if self._gateway is not None:
+                    # Runs after advance()'s propagation+detection, not
+                    # interleaved between them -- a real agent compromised this
+                    # tick is first eligible for quarantine detection next tick,
+                    # a deliberate, documented one-tick timing difference from
+                    # the simulated path (docs/PHASE_2_PLAN.md §2, §16).
+                    state, real_drafts = await run_async_scenarios(
+                        state, self.config, self._gateway, tick=state.tick
+                    )
+                    drafts = [*drafts, *real_drafts]
+                # Commit the tick only once it is fully computed, together with
+                # publishing its events: if the model calls above are cancelled
+                # by stop() or fail, state and event log both stay at the
+                # previous tick rather than disagreeing.
+                self.state = state
+                await self._publish(drafts)
+                await asyncio.sleep(self.tick_interval / self._speed)
+        except Exception as exc:
+            # asyncio.CancelledError is a BaseException, so stop()'s own
+            # cancellation never lands here. If stop() is already tearing the
+            # run down, it publishes the terminal event itself.
+            if self._running:
+                logger.exception("experiment %s failed mid-tick; stopping it", self.experiment_id)
+                await self._stop_after_error(exc)
+            self._task = None
+            return
         if self._running:
             self.status = "finished"
             self._terminal_event.set()
         self._task = None
+
+    async def _stop_after_error(self, exc: Exception) -> None:
+        """Ends the run exactly as stop() does -- one EXPERIMENT_STOPPED, then
+        the terminal signal the persistence writer finalizes on -- instead of
+        leaving it "running" forever with its history record unfinalized."""
+        self._running = False
+        self.status = "stopped"
+        await self._publish(
+            [
+                EventDraft(
+                    sim_tick=self.state.tick,
+                    event_type=EventType.EXPERIMENT_STOPPED,
+                    metadata={"reason": "error", "error_type": type(exc).__name__},
+                )
+            ]
+        )
+        self._terminal_event.set()
 
     async def stop(self) -> None:
         if self.status == "finished":

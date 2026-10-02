@@ -1,5 +1,7 @@
 import asyncio
 
+from app.gateway.gateway import ModelGateway
+from app.gateway.schemas import ModelRequest, ModelResponse
 from app.orchestrator.runner import ExperimentRunner
 from app.schemas.events import Event, EventType
 from app.schemas.experiment import ExperimentConfig
@@ -272,3 +274,92 @@ def test_terminal_event_is_set_only_after_stop_publishes_the_final_event():
         assert runner._terminal_event.is_set()
 
     asyncio.run(run())
+
+
+class _FailingProvider:
+    """Raises something the gateway does not treat as a provider failure --
+    stands in for any unexpected bug reached from inside a tick."""
+
+    async def complete(self, request: ModelRequest) -> ModelResponse:
+        raise RuntimeError("unexpected")
+
+
+class _BlockingProvider:
+    def __init__(self) -> None:
+        self.called = asyncio.Event()
+
+    async def complete(self, request: ModelRequest) -> ModelResponse:
+        self.called.set()
+        await asyncio.Event().wait()
+        raise AssertionError("unreachable")
+
+
+def _real_agent_runner(provider) -> ExperimentRunner:
+    # 20 of 25 agents real: the seeded (highest-degree) node is real with real
+    # neighbours, so the first tick makes model calls.
+    config = ExperimentConfig(seed=42, node_count=25, max_ticks=10, real_agent_count=20)
+    gateway = ModelGateway(
+        provider,
+        timeout_s=5.0,
+        max_retries=0,
+        max_concurrency=4,
+        max_requests_per_experiment=100,
+    )
+    runner = ExperimentRunner(config, gateway=gateway)
+    runner.tick_interval = 0
+    return runner
+
+
+def test_an_unexpected_error_mid_tick_stops_the_run_instead_of_wedging_it():
+    """It used to kill the tick loop's task: status stayed "running" forever,
+    the terminal event never fired (so persistence never finalized), and
+    every later stop() re-raised the error."""
+    runner = _real_agent_runner(_FailingProvider())
+    initial_nodes = dict(runner.state.nodes)
+    queue = runner.bus.subscribe()
+
+    asyncio.run(_drive_to_finished(runner))
+
+    events: list[Event] = []
+    while not queue.empty():
+        events.append(queue.get_nowait())
+    assert runner.status == "stopped"
+    assert runner._terminal_event.is_set()
+    assert events[-1].event_type == EventType.EXPERIMENT_STOPPED
+    assert events[-1].metadata == {"reason": "error", "error_type": "RuntimeError"}
+    # The failed tick is not half-applied: state is still the initial world,
+    # matching a log with nothing between the initial events and the stop.
+    assert runner.state.tick == 0
+    assert runner.state.nodes == initial_nodes
+    assert all(e.sim_tick == 0 for e in events)
+    assert [e.event_type for e in events].count(EventType.COMPROMISE_ATTEMPTED) == 0
+
+    asyncio.run(runner.stop())  # a later stop is a no-op, not a re-raise
+    assert queue.empty()
+
+
+def test_stop_during_an_in_flight_model_call_leaves_state_matching_the_log():
+    """stop() cancels the tick while it awaits model calls. The runner used
+    to have already committed that tick's advance() to its state, so state
+    moved on while the tick's events were never emitted."""
+    provider = _BlockingProvider()
+    runner = _real_agent_runner(provider)
+    initial_nodes = dict(runner.state.nodes)
+    queue = runner.bus.subscribe()
+
+    async def main() -> None:
+        await runner.publish_initial()
+        runner.start()
+        await asyncio.wait_for(provider.called.wait(), timeout=5)
+        await runner.stop()
+
+    asyncio.run(main())
+
+    events: list[Event] = []
+    while not queue.empty():
+        events.append(queue.get_nowait())
+    assert runner.status == "stopped"
+    assert runner.state.tick == 0
+    assert runner.state.nodes == initial_nodes
+    assert [e.event_type for e in events].count(EventType.COMPROMISE_ATTEMPTED) == 0
+    assert events[-1].event_type == EventType.EXPERIMENT_STOPPED

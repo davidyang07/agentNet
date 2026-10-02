@@ -141,3 +141,36 @@ def test_falls_back_to_token_estimate_without_usage_field():
 
     response = asyncio.run(run())
     assert response.tokens_used == 10  # len("a"*40) // 4
+
+
+def _complete_with(body: dict):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=body)
+
+    async def run():
+        async with _client_with_handler(handler) as client:
+            provider = VLLMProvider(
+                client, base_url="http://vllm.local:8000", api_key=None, model_name="qwen-test"
+            )
+            return await provider.complete(_request())
+
+    return asyncio.run(run())
+
+
+def test_null_content_and_null_usage_are_an_empty_reply_not_a_crash():
+    # OpenAI-compatible servers send "content": null for a reply with no text
+    # (e.g. tool calls only). This used to raise TypeError from len(None),
+    # which escaped the gateway and killed the experiment's tick loop.
+    response = _complete_with({"choices": [{"message": {"content": None}}], "usage": None})
+    assert response.text == ""
+    assert response.tokens_used == 1
+
+
+def test_null_usage_falls_back_to_token_estimate():
+    response = _complete_with({"choices": [{"message": {"content": "a" * 40}}], "usage": None})
+    assert response.tokens_used == 10
+
+
+def test_non_string_content_raises_model_provider_error():
+    with pytest.raises(ModelProviderError):
+        _complete_with({"choices": [{"message": {"content": [{"type": "text", "text": "hi"}]}}]})

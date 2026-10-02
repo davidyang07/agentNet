@@ -58,8 +58,21 @@ class VLLMProvider:
             raise ModelProviderError(
                 f"unexpected vLLM response shape for agent_id={request.agent_id}"
             ) from exc
+        # OpenAI-compatible servers send "content": null for a reply with no
+        # text (e.g. tool calls only) -- an empty reply, not a provider failure.
+        if text is None:
+            text = ""
+        if not isinstance(text, str):
+            raise ModelProviderError(
+                f"unexpected vLLM response shape for agent_id={request.agent_id}"
+            )
 
-        tokens_used = data.get("usage", {}).get("total_tokens") or max(1, len(text) // 4)
+        usage = data.get("usage")
+        total_tokens = usage.get("total_tokens") if isinstance(usage, dict) else None
+        if isinstance(total_tokens, int) and total_tokens > 0:
+            tokens_used = total_tokens
+        else:
+            tokens_used = max(1, len(text) // 4)
 
         return ModelResponse(
             text=text,
