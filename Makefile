@@ -48,11 +48,11 @@ benchmark:
 benchmark-audit:
 	cd backend && .venv/bin/python scripts/run_benchmark_audit.py
 
-# The golden demo scenario (Priority 2): one config whose event log narrates
-# indirect prompt injection -> propagation -> initial quarantine -> adaptive
-# attacker strategy switch -> sentinel compromise -> false threat-memory
-# report -> remediation -> re-test -> measurable improvement. Writes
-# backend/.artifacts/golden_demo/{report.md,result.json}.
+# The golden demo scenario (Priority 2): one config narrated from its event
+# log -- prompt injection, propagation, sentinel compromise, false threat-
+# memory reports, attestation replay -- then the recommended remediation is
+# re-tested and the measured outcome reported, whether or not it helped.
+# Writes backend/.artifacts/golden_demo/{report.md,result.json}.
 golden-demo:
 	cd backend && .venv/bin/python scripts/run_golden_demo.py
 
@@ -62,7 +62,8 @@ golden-demo:
 import-demo:
 	cd backend && .venv/bin/python scripts/run_external_import_demo.py
 
-# CI-friendly pass/fail gate over a fast subset of the benchmark suite plus
-# the golden demo (Productization). Exit 0 if every finding passes.
+# CI-friendly pass/fail gate over a fast subset of the benchmark suite: the
+# defense comparison and the remediation before/after (Productization).
+# Exit 0 if every finding passes.
 agentshield-test:
 	cd backend && .venv/bin/python scripts/agentshield_test.py

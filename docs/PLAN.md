@@ -544,7 +544,7 @@ remediation engine flagging the `security_plane_integrity` gap and recommending 
 was tuned empirically (0.08) so the baseline reliably subverts its one sentinel within `max_ticks`
 while the remediated run's second sentinel doesn't also get subverted first — at higher rates both
 eventually flip, a real but different, less demonstrable claim. 3 new tests, including a full
-narrative-beat-presence assertion against the real event log (not a hand-written transcript).
+narrative-beat-presence assertion against the real event log (not a hand-written transcript). *(Superseded — see §13: this result came from a bug.)*
 
 **Priority 13 — real external (LangGraph) integration (done, scoped to topology import).**
 `examples/langgraph_research_agents/` (a genuinely separate small Python project — real
@@ -587,7 +587,7 @@ file)/build and a dev-server smoke test (`200` on `/`), not an actual rendered-i
 two concrete, causally-grounded claims (higher detector sensitivity retains at least as much
 utility as no defense; the golden demo's remediation improves `security_plane_integrity`) —
 deliberately excludes the full 14-scenario matrix and the 2,500-agent scale run (those stay a
-manual `make benchmark`). Wired into CI as a new, additive `agentshield-test` job
+manual `make benchmark`). *(Superseded — see §13: both checks passed with detection disabled.)* Wired into CI as a new, additive `agentshield-test` job
 (`.github/workflows/ci.yml`) alongside the existing `backend`/`frontend`/`schema-drift` jobs, none
 of which were modified.
 
@@ -662,7 +662,7 @@ strongly *positive* for `sentinel_compromise_attack__defense_medium_sensitivity`
 0.925→0.6125) — 2 of the 30 candidates regress, and `audit.md` calls that count out explicitly
 rather than burying it. The golden demo's own sentinel_count 1→2 fix helps because it was
 empirically tuned for that single-attacker scenario (§9's priority 12 note); this is a real,
-causally-explained boundary on where that lever generalizes, not a bug to paper over.
+causally-explained boundary on where that lever generalizes, not a bug to paper over. *(Superseded — see §13: this result came from a bug.)*
 
 **`agentshield test` CI hardening (done).** `app/benchmark/cli.py::Finding` gained a `duration_s`
 field; `agentshield_test.py` gained a `--json` flag printing one machine-readable line (`{"ok":
@@ -688,7 +688,7 @@ more) → lateral injection (+7 more) → quarantine (+9 more) → 275 replayed 
 strategy → `security_plane_integrity=0.80` identified → remediation recommended →
 `0.80 → 0.83` on re-test. So `make golden-demo` alone shows attack → adaptation → security-plane
 failure → remediation → re-test without a scroll; the full narrative is still written below it in
-`report.md`.
+`report.md`. *(Superseded — see §13: this result came from a bug.)*
 
 **Priority 7 — typed-node graph rendering (again left untouched, documented).** This session again
 had no browser/screenshot tool available (confirmed via `ToolSearch` at the start of the session),
@@ -828,3 +828,53 @@ horizontal overflow anywhere. **Not verified:** narrow-viewport rendering was bu
 (rail collapses below `lg`, inspector overlays below `xl`, grids collapse, tables scroll in their
 own containers) but could not be *looked at* — the browser window in this environment refused to
 resize below the desktop width.
+
+## 13. Review fixes (2026-10-02)
+
+A repository review found six defects that corrupted results or wedged the service; all six are
+fixed, one commit each, with a regression test that fails on the old code.
+
+1. **`real_agent_step` dropped `compromised_graph_nodes`** — the same bug §10 fixed in the three
+   sync step functions. Any tick a real agent won a target, every subverted sentinel and
+   compromised credential silently reverted to healthy.
+2. **`/replay/*` returned 500 for every mock real-agent run** — replay called `asyncio.run()` from
+   inside the async route's loop. It now runs via `asyncio.to_thread`, which also keeps a full
+   re-simulation from stalling live runs.
+3. **History replay hid the first tick's compromises** — the replay-snapshot cutoff was
+   `MAX(seq) WHERE sim_tick=0`, but the first tick's propagation events are also stamped
+   `sim_tick=0` (SPEC §3.4 stamps the pre-increment tick). The cutoff is now the last initial event.
+4. **Live event-log metrics read 0.0/None once a run passed 2,000 events** — the EventBus ring had
+   rolled over. The runner now folds every batch into an `EventLogTally` (O(agents) memory; the
+   whole-log functions replay uses wrap the same tally). `/otel-trace` returns 409 instead of an
+   empty trace once the ring no longer holds the run's start.
+5. **Runs with no attacker scenario hung at tick 0** (the console's observe-only run, add-on
+   scenarios alone, or a typo); both attackers together double-ticked. `advance()` now advances the
+   tick when no scenario did — output for every config with an attacker is byte-identical — and
+   `POST /api/experiments` rejects unknown names, duplicates, and both attackers with 422.
+6. **A malformed vLLM reply wedged the run** (`content: null` → `TypeError` past the gateway): it
+   stayed "running" forever, persistence never finalized, and `/stop` returned 500. The provider
+   now normalizes null content/usage; the runner stops a run cleanly on any unexpected tick error
+   (`EXPERIMENT_STOPPED` with `reason: error`) and commits a tick to state only together with its
+   events, so a stop during in-flight model calls no longer leaves state ahead of the log.
+
+**Corrections to earlier sections.** Fix 1 changed the golden demo's outcome, and showed its
+recorded result was produced by the bug: with its sentinel kept subverted, the demo's recommended
+remediation (`sentinel_count` 1→2) gets the second sentinel subverted too — `security_plane_integrity`
+**0.80 → 0.67**, outbreak unchanged — not 0.80 → 0.83 (§10 priority 12, §11). Across 40 seeds of
+that config the remediation was worse in 17 of 21 recommending seeds even before the fix. The
+demo also asserted beats as fixed text: on this run the adaptive attacker never switches strategy
+and the defense quarantines no agent. `golden_demo.py` now narrates only from the event log and
+reports the re-test as measured, verdict included ("the remediation made things worse").
+
+The `agentshield test` gate (§10 productization) passed with detection disabled: both checks used
+`>=` (0.00 ≥ 0.00), and the golden-demo check rested on the denominator effect above. Its checks
+are now strict — the high-sensitivity defense must beat no defense on both `compromise_fraction`
+and `retained_utility`, and the recommended remediation must strictly improve `retained_utility`
+on `REMEDIATION_CASE` without lowering integrity — and `test_agentshield_cli.py` breaks detection
+(never/always quarantining) and remediation (no-op/none) to prove the gate then fails.
+`REMEDIATION_CASE` is a deterministic regression case, not evidence the lever generalizes: only 2
+of 30 seeds of that config trigger a recommendation at all.
+
+Verified against a real Postgres: backend `ruff` + `pytest` (all passing), `verify_determinism.py`,
+frontend lint/test/typecheck, and the schema-drift check — this also closes §9's note that
+persistence tests had not been re-run locally.

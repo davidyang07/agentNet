@@ -87,7 +87,8 @@ edges — and scenarios are pluggable via the `active_scenarios` config field.
   `detector_sensitivity`, enable `defense_enabled`, raise `sentinel_count`) whenever the relevant
   metric degrades. Re-testing one is just another experiment plus the comparison view.
 - **Export** — `.../otel-trace` emits the event log as an OTLP/JSON trace for any
-  OpenTelemetry-compatible backend.
+  OpenTelemetry-compatible backend (409 once a live run has outgrown the 2,000-event in-memory
+  window, rather than a partial trace).
 
 Every live endpoint has a `.../replay/...` twin that reconstructs a persisted run's exact final
 state from `(seed, config, final_sim_tick)` and mirrors the live response shape field-for-field, so
@@ -151,7 +152,7 @@ is unset, rather than silently falling back. The benchmark and golden demo take
 ```bash
 make benchmark        # 14 attack presets + 7 defense postures + a remediation before/after
 make benchmark-audit  # the full 14 × 7 cross product plus 21 standalone presets, ranked
-make golden-demo      # one run narrating attack → adaptation → subversion → fix → re-test
+make golden-demo      # one run narrated from its event log: attack → subversion → fix → re-test
 make import-demo      # imports a real LangGraph app's topology and attacks it
 make agentshield-test # CI pass/fail gate over a fast subset; --json for machine-readable output
 ```
@@ -163,7 +164,10 @@ scale run that finishes in under a second. The audit sweeps 119 configurations f
 opportunities, re-tests the 30 that trigger one, and ranks the measured `retained_utility`
 improvement — naming the recommendations that *worsened* a metric alongside the ones that helped.
 The golden demo leads its report with a curated 12-line "Key beats" summary above the tick-by-tick
-narrative. Reports land in `backend/.artifacts/`.
+narrative, and reports its re-test as measured — in its own scenario the recommended fix makes
+security-plane integrity *worse*, and it says so. `agentshield-test` checks that the defense beats no
+defense and that a remediation measurably helps its canonical case, strictly enough to fail when
+either mechanism is broken. Reports land in `backend/.artifacts/`.
 
 ## Verification
 
