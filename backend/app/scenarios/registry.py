@@ -8,11 +8,16 @@ engine/tick.py's and orchestrator/runner.py's pre-refactor behavior exactly
 pair), so no existing test's expected output changes. Excluding
 `"prompt_injection"` from an explicit `active_scenarios` list now genuinely
 disables it -- previously impossible short of `real_agent_count=0`.
+
+POST /api/experiments rejects a list `active_scenarios_error` refuses;
+the runners themselves still skip (and warn about) an unknown name, so a
+config persisted before that check still replays exactly as it ran.
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 
 from app.engine.state import WorldState
 from app.gateway.gateway import ModelGateway
@@ -39,6 +44,29 @@ SYNC_SCENARIOS: dict[str, Scenario] = {
 ASYNC_SCENARIOS: dict[str, AsyncScenario] = {
     prompt_injection_scenario.name: prompt_injection_scenario,
 }
+
+
+# The two alternative attacker models. Each advances the tick itself, so
+# selecting both would advance two ticks per tick
+# (adaptive_attacker_scenario.py's docstring).
+TICK_OWNING_SCENARIOS = frozenset({propagation_scenario.name, adaptive_attacker_scenario.name})
+
+
+def active_scenarios_error(names: Sequence[str]) -> str | None:
+    """Why `names` is not a runnable active_scenarios list, or None if it is.
+    An empty list (and a list with no attacker) is runnable: the system is
+    built and observed but never attacked."""
+    known = {*SYNC_SCENARIOS, *ASYNC_SCENARIOS}
+    unknown = sorted({name for name in names if name not in known})
+    if unknown:
+        return f"unknown scenario(s) {unknown}; known scenarios are {sorted(known)}"
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    if duplicates:
+        return f"scenario(s) listed more than once: {duplicates}"
+    owners = [name for name in names if name in TICK_OWNING_SCENARIOS]
+    if len(owners) > 1:
+        return f"{owners} are alternative attacker models; select at most one"
+    return None
 
 
 def _warn_if_truly_unknown(scenario_name: str) -> None:
