@@ -7,10 +7,13 @@ import asyncio
 import json
 import uuid
 
+import httpx
 from fastapi.testclient import TestClient
 
 from app.db import create_pool
+from app.gateway.factory import build_gateway
 from app.main import app
+from app.orchestrator.registry import registry
 from app.orchestrator.runner import ExperimentRunner
 from app.persistence.registry import writer_registry
 from app.persistence.writer import PostgresWriter
@@ -29,8 +32,11 @@ def _make_runner(**overrides) -> ExperimentRunner:
     return runner
 
 
-async def _persist_completed_run(pool, **config_overrides) -> ExperimentRunner:
-    runner = _make_runner(**config_overrides)
+async def _persist_completed_run(
+    pool, runner: ExperimentRunner | None = None, **config_overrides
+) -> ExperimentRunner:
+    if runner is None:
+        runner = _make_runner(**config_overrides)
     # Mirrors the exact production call site in routes_experiments.py --
     # writer_registry.add() happens at the call site, not inside
     # PostgresWriter itself.
@@ -254,6 +260,50 @@ def test_replay_graph_metrics_remediation_match_a_live_equivalent_run():
             assert replay_remediation.json() == live_remediation
     finally:
         asyncio.run(_cleanup(runner.experiment_id))
+
+
+def test_replay_matches_live_for_a_mock_real_agent_run():
+    """A real_agent_count > 0 run under the mock provider is the one config
+    whose replay goes through engine/replay.py's async path -- which used to
+    call asyncio.run() from inside the server's running event loop and 500
+    on every /replay/* route."""
+    config = ExperimentConfig(
+        seed=11, node_count=25, max_ticks=8, real_agent_count=6, p_same=0.6, p_cross=0.3
+    )
+
+    async def setup() -> ExperimentRunner:
+        pool = await create_pool(TEST_SETTINGS)
+        try:
+            async with httpx.AsyncClient() as http_client:
+                gateway = build_gateway(config, TEST_SETTINGS, http_client)
+                assert gateway is not None
+                runner = ExperimentRunner(config, gateway=gateway)
+                runner.tick_interval = 0
+                await _persist_completed_run(pool, runner=runner)
+                assert gateway.requests_used > 0, "fixture must exercise the LLM path"
+                return runner
+        finally:
+            await pool.close()
+
+    runner = asyncio.run(setup())
+    exp_id = runner.experiment_id
+    try:
+        with TestClient(app) as client:
+            registry.add(runner)
+            try:
+                live = {
+                    path: client.get(f"/api/experiments/{exp_id}/{path}").json()
+                    for path in ("graph", "metrics", "remediation")
+                }
+            finally:
+                registry.remove(exp_id)
+
+            for path, live_body in live.items():
+                resp = client.get(f"/api/experiments/{exp_id}/replay/{path}")
+                assert resp.status_code == 200, resp.text
+                assert resp.json() == live_body, path
+    finally:
+        asyncio.run(_cleanup(exp_id))
 
 
 def test_replay_analysis_endpoints_return_200_for_a_persisted_run():
