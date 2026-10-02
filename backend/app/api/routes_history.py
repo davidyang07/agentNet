@@ -234,20 +234,23 @@ async def get_replay_snapshot(experiment_id: UUID, request: Request) -> Snapshot
         raise HTTPException(status_code=404, detail="experiment not found")
 
     config = ExperimentConfig(**json.loads(row["config"]))
-    world, _ = build_world(config)
+    world, topology_drafts = build_world(config)
 
-    # Every topology/seed-compromise event is emitted at sim_tick=0
-    # (topology.py's drafts; EXPERIMENT_STARTED too) -- this robustly finds
-    # the seq boundary already reflected in this regenerated snapshot,
-    # regardless of the initial-event count formula, so the next fetched
-    # event page (seq > last_seq) never re-delivers a tick-0 event.
-    last_seq = await pool.fetchval(
-        "SELECT MAX(seq) FROM experiment_events WHERE experiment_id = $1 AND sim_tick = 0",
+    # This regenerated world reflects exactly the events the runner publishes
+    # before its first tick (ExperimentRunner.publish_initial):
+    # EXPERIMENT_STARTED, then build_world's drafts -- seqs 0..len(drafts).
+    # A sim_tick=0 boundary would be wrong: the first tick's own propagation
+    # events are also stamped sim_tick=0 (SPEC §3.4 stamps the pre-increment
+    # tick), and folding past them would hide that tick's compromises.
+    last_seq = len(topology_drafts)
+    persisted = await pool.fetchval(
+        "SELECT 1 FROM experiment_events WHERE experiment_id = $1 AND seq = $2",
         experiment_id,
+        last_seq,
     )
-    if last_seq is None:
+    if persisted is None:
         raise HTTPException(
-            status_code=404, detail="no tick-0 events persisted for this experiment"
+            status_code=404, detail="initial events not persisted for this experiment"
         )
 
     return SnapshotFrame(
