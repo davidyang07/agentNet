@@ -662,7 +662,7 @@ strongly *positive* for `sentinel_compromise_attack__defense_medium_sensitivity`
 0.925→0.6125) — 2 of the 30 candidates regress, and `audit.md` calls that count out explicitly
 rather than burying it. The golden demo's own sentinel_count 1→2 fix helps because it was
 empirically tuned for that single-attacker scenario (§9's priority 12 note); this is a real,
-causally-explained boundary on where that lever generalizes, not a bug to paper over. *(Superseded — see §13: this result came from a bug.)*
+causally-explained boundary on where that lever generalizes, not a bug to paper over. *(The golden-demo claim in the last two sentences is superseded — see §13: that result came from a bug. The audit numbers above are unaffected.)*
 
 **`agentshield test` CI hardening (done).** `app/benchmark/cli.py::Finding` gained a `duration_s`
 field; `agentshield_test.py` gained a `--json` flag printing one machine-readable line (`{"ok":
@@ -874,6 +874,9 @@ on `REMEDIATION_CASE` without lowering integrity — and `test_agentshield_cli.p
 (never/always quarantining) and remediation (no-op/none) to prove the gate then fails.
 `REMEDIATION_CASE` is a deterministic regression case, not evidence the lever generalizes: only 2
 of 30 seeds of that config trigger a recommendation at all.
+
+The §11 remediation audit is unaffected by these fixes: its 119 configurations and 30 re-tested
+candidates reproduce byte-identically before and after them.
 
 Verified against a real Postgres: backend `ruff` + `pytest` (all passing), `verify_determinism.py`,
 frontend lint/test/typecheck, and the schema-drift check — this also closes §9's note that
