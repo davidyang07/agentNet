@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Sequence
 from typing import Literal
 from uuid import UUID, uuid4
 
@@ -8,6 +9,7 @@ from app.engine.topology import build_world
 from app.events.bus import EventBus
 from app.events.emitter import EventEmitter
 from app.gateway.gateway import ModelGateway
+from app.metrics.compute import EventLogTally
 from app.scenarios.registry import run_async_scenarios
 from app.schemas.events import EventDraft, EventType
 from app.schemas.experiment import EdgeView, ExperimentConfig, ExperimentSummary, NodeView
@@ -30,6 +32,10 @@ class ExperimentRunner:
         self.config = config
         self.bus = EventBus()
         self._emitter = EventEmitter(self.experiment_id)
+        # Every published event is folded in here, so live event-log metrics
+        # cover the whole run in O(agents) memory -- the bus ring only keeps
+        # the most recent RING_SIZE events (app/metrics/compute.py).
+        self.event_tally = EventLogTally()
         # Phase 2 (docs/PHASE_2_PLAN.md §2, §7): None unless the caller built
         # one (routes_experiments.py, only when real_agent_count > 0) --
         # real_agent_step is only ever called when this is set, so every
@@ -60,8 +66,7 @@ class ExperimentRunner:
         """Awaited synchronously by the create-experiment route before it
         returns, so a client that immediately opens the WS is guaranteed to
         find these events already in the bus buffer — no start-up race."""
-        events = self._emitter.emit(self._initial_drafts)
-        await self.bus.publish(events)
+        await self._publish(self._initial_drafts)
 
     def start(self) -> None:
         self._task = asyncio.create_task(self._run_loop())
@@ -105,8 +110,7 @@ class ExperimentRunner:
                     self.state, self.config, self._gateway, tick=self.state.tick
                 )
                 drafts = [*drafts, *real_drafts]
-            events = self._emitter.emit(drafts)
-            await self.bus.publish(events)
+            await self._publish(drafts)
             await asyncio.sleep(self.tick_interval / self._speed)
         if self._running:
             self.status = "finished"
@@ -135,11 +139,15 @@ class ExperimentRunner:
                 pass
             if self._task is task:
                 self._task = None
-        events = self._emitter.emit(
+        await self._publish(
             [EventDraft(sim_tick=self.state.tick, event_type=EventType.EXPERIMENT_STOPPED)]
         )
-        await self.bus.publish(events)
         self._terminal_event.set()
+
+    async def _publish(self, drafts: Sequence[EventDraft]) -> None:
+        events = self._emitter.emit(drafts)
+        self.event_tally.add(events)
+        await self.bus.publish(events)
 
     def summary(self) -> ExperimentSummary:
         return ExperimentSummary(

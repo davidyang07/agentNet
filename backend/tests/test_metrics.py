@@ -1,9 +1,12 @@
 from uuid import uuid4
 
+from app.engine.simulate import simulate
 from app.engine.state import AgentNode, SecurityState, WorldState
+from app.events.emitter import EventEmitter
 from app.graph.security_graph import SecurityGraph
 from app.graph.types import EdgeType, GraphEdge, GraphNode, NodeType
 from app.metrics.compute import (
+    EventLogTally,
     attack_success_rate,
     blast_radius_fraction,
     compromise_fraction,
@@ -15,6 +18,7 @@ from app.metrics.compute import (
     security_plane_integrity,
 )
 from app.schemas.events import Event, EventType
+from app.schemas.experiment import ExperimentConfig
 
 
 def _event(
@@ -210,3 +214,23 @@ def test_containment_latency_excludes_false_quarantines():
 def test_containment_latency_requires_a_preceding_detection():
     events = [_event(EventType.AGENT_QUARANTINED, agent_id="agent-000", sim_tick=4)]
     assert containment_latency(events) is None
+
+
+def test_event_log_tally_folded_per_batch_matches_the_whole_log_functions():
+    """The live runner folds each published batch into an EventLogTally
+    instead of keeping its full log; that fold must give exactly what the
+    whole-log functions give replay."""
+    config = ExperimentConfig(seed=7, node_count=60, false_quarantine_rate=0.01)
+    final, drafts = simulate(config)
+    events = EventEmitter(uuid4()).emit(drafts)
+
+    tally = EventLogTally()
+    for start in range(0, len(events), 7):
+        tally.add(events[start : start + 7])
+
+    assert tally.attack_success_rate() == attack_success_rate(events)
+    assert tally.false_quarantine_rate() == false_quarantine_rate(events)
+    assert tally.detection_latency(final) == detection_latency(final, events)
+    assert tally.containment_latency() == containment_latency(events)
+    assert false_quarantine_rate(events) > 0.0
+    assert detection_latency(final, events) is not None
