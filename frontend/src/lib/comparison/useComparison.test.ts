@@ -50,6 +50,9 @@ const BASE_CONFIG: ExperimentConfig = {
   sentinel_compromise_rate: 0,
   attestation_replay_rate: 0,
   byzantine_collusion_rate: 0,
+  inference_fraction: 1,
+  inference_placement: "random",
+  topology: "barabasi_albert",
 };
 
 function withoutDefenseEnabled(config: ExperimentConfig): Omit<ExperimentConfig, "defense_enabled"> {

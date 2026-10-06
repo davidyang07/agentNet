@@ -26,6 +26,9 @@ class AgentNode:
     # internal only, never added to NodeView or any other outbound schema.
     agent_kind: Literal["simulated", "real"] = "simulated"
     confidential_token: str | None = None
+    # docs/PLAN.md §14.4 C.2: an agent that can't run inference is a dead end
+    # -- it can be compromised, but never attacks anyone.
+    inference_capable: bool = True
 
 
 @dataclass

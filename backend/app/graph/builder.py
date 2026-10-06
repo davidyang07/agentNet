@@ -37,7 +37,11 @@ def build_security_graph(state: WorldState, config: ExperimentConfig) -> Securit
                 id=agent_id,
                 node_type=NodeType.AGENT,
                 security_state=node.security_state,
-                attrs={"software_type": node.software_type, "agent_kind": node.agent_kind},
+                attrs={
+                    "software_type": node.software_type,
+                    "agent_kind": node.agent_kind,
+                    "inference_capable": node.inference_capable,
+                },
             )
         )
 

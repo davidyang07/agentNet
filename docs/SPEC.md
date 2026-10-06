@@ -133,6 +133,8 @@ class WorldState:
 
 M0 uses only `HEALTHY` and `COMPROMISED`. The other three members exist and stay unused — per §3 of the brief, security state is never scattered booleans.
 
+*Opt-in extension (PLAN §14.4 C.2, approved under D7):* `AgentNode.inference_capable: bool = True`. A compromised agent that can't run inference is a dead end — it can be compromised but never attacks (§3.4). Capability is a property of the agent, not a security state.
+
 ### 3.3 `app/engine/topology.py`
 
 ```python
@@ -145,6 +147,10 @@ def build_world(config: ExperimentConfig) -> tuple[WorldState, list[EventDraft]]
 ```
 
 Topology is `networkx.barabasi_albert_graph(n=config.node_count, m=config.edge_density, seed=config.seed)`. Software types are assigned round-robin over sorted node IDs — deterministic, and it makes the diversity mix controllable later. The seeded initial compromise defaults to the highest-degree node, ties broken by lowest ID.
+
+*Opt-in extensions (PLAN §14.4 C.2, approved under D7); the defaults leave everything above unchanged and draw nothing:*
+- `config.topology = "erdos_renyi"` uses `networkx.gnm_random_graph(n=config.node_count, m=config.edge_density × (config.node_count − config.edge_density), seed=config.seed)` — the same edge count Barabási–Albert produces, so `edge_density` keeps one meaning.
+- `config.inference_fraction < 1` makes `round(inference_fraction × node_count)` agents inference-capable. The seed and real agents always are, and count toward that total. The rest are chosen by `config.inference_placement`: `hubs` (highest degree first) or `periphery` (lowest first), ties by lowest ID, or `random`, a shuffle drawn from `rng(seed, 0, "topology", "inference_placement")`. Each `AGENT_CREATED` then carries `metadata.inference_capable`.
 
 ### 3.4 `app/engine/propagation.py`
 
@@ -166,9 +172,11 @@ The rule, executed against a frozen snapshot of tick-N state so that within-tick
 6. If several sources hit one target in the same tick, **all** attempts are emitted, but the first success in sorted source order sets `compromised_by`. Later successes against an already-claimed target carry `metadata.already_compromised = true`.
 7. Newly compromised nodes become sources only from tick N+1.
 
+*Opt-in precondition (PLAN §14.4 C.2, approved under D7):* a source must be `inference_capable`. With every agent capable (the default), rule 1 is unchanged.
+
 `p_same > p_cross` is a **simulation parameter, not a finding** (§4). Every propagation event sets `metadata.probability`, so any number that ends up on screen is traceable to the input that produced it.
 
-The run ends when `config.max_ticks` is reached, or when no `HEALTHY` node borders a `COMPROMISED` one.
+The run ends when `config.max_ticks` is reached, or when no `HEALTHY` node borders a `COMPROMISED` one that can run inference (with every agent capable, any `COMPROMISED` one).
 
 ### 3.5 `app/schemas/events.py`
 

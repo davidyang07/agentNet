@@ -79,6 +79,9 @@ edges — and scenarios are pluggable via the `active_scenarios` config field.
   watches), `attestation` (stale-nonce replay), and `byzantine_collusion` (two agents jointly
   exceed a credential scope neither could alone), plus a `false_quarantine_rate` for subverted
   quarantine authority. Each security-plane attack defaults to a strict no-op.
+- **Population** — `topology` picks Barabási–Albert (default) or Erdős–Rényi with the same edge
+  count, and `inference_fraction`/`inference_placement` (random, hubs, periphery) set which agents
+  can run inference. A compromised agent that can't is a dead end: it never attacks.
 - **Analysis** — `GET /api/experiments/{id}/graph` and
   `.../analysis/{attack-paths,blast-radius,critical-nodes,provenance}` compute reachability, blast
   radius, choke points, and compromise provenance on demand from the live experiment.

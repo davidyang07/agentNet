@@ -1241,6 +1241,13 @@ transmission path, real agents included; Phase C is backend and API only, per D6
   - Censoring is stated precisely there: a member that is still `COMPROMISED` but has no healthy
     neighbour left has final offspring, so it doesn't censor its cohort.
   - `prevalence` has no `immune` count until C.4 defines immunity.
+- **C.2 — done.** SPEC §3.2–3.4 record the extensions.
+  - The seed and real agents always count toward `round(inference_fraction × agents)`, so at
+    fraction 0 they are the only propagators.
+  - Dead ends also stop counting toward `is_finished` and R(t) censoring, so a run ends once
+    nothing can spread rather than idling to `max_ticks`.
+  - `verify_determinism.py` is now a config matrix, each config run under two `PYTHONHASHSEED`
+    values. Each feature adds its config there; a set-order bug planted in placement was caught.
 
 ### 14.5 Phase D — UI redesign (scope to be agreed before starting)
 

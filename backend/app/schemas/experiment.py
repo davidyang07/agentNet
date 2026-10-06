@@ -81,6 +81,15 @@ class ExperimentConfig(BaseModel):
     # meaningful with credential_count > 0.
     byzantine_collusion_rate: float = Field(0.0, ge=0.0, le=1.0)
 
+    # Inference capability (docs/PLAN.md §14.4 C.2, after [S2]): only agents
+    # that can run inference propagate; a compromised agent that can't is a
+    # dead end. The defaults make every agent capable and draw nothing.
+    inference_fraction: float = Field(1.0, ge=0.0, le=1.0)
+    inference_placement: Literal["random", "hubs", "periphery"] = "random"
+    # erdos_renyi draws the same number of edges barabasi_albert would, so
+    # edge_density keeps one meaning across both.
+    topology: Literal["barabasi_albert", "erdos_renyi"] = "barabasi_albert"
+
 
 class NodeView(BaseModel):
     id: str

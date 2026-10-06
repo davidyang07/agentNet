@@ -10,11 +10,25 @@ def is_active_source(node: AgentNode, tick: int) -> bool:
     """SPEC §3.4 rule 7: a newly compromised agent attacks only from the next
     tick. The seeded compromise (no source) attacks from tick 0. Real-agent
     compromises are stamped with the post-increment tick, so without this
-    they would attack in the same tick they were compromised."""
-    return node.security_state == SecurityState.COMPROMISED and (
-        node.compromised_by is None
-        or node.tick_compromised is None
-        or node.tick_compromised < tick
+    they would attack in the same tick they were compromised. An agent that
+    can't run inference never attacks (docs/PLAN.md §14.4 C.2)."""
+    return (
+        node.security_state == SecurityState.COMPROMISED
+        and node.inference_capable
+        and (
+            node.compromised_by is None
+            or node.tick_compromised is None
+            or node.tick_compromised < tick
+        )
+    )
+
+
+def can_still_infect(node: AgentNode, state: WorldState) -> bool:
+    """Compromised, able to run inference, and bordering a healthy agent."""
+    return (
+        node.security_state == SecurityState.COMPROMISED
+        and node.inference_capable
+        and any(state.nodes[n].security_state == SecurityState.HEALTHY for n in node.neighbors)
     )
 
 
@@ -107,13 +121,8 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
 
 
 def is_finished(state: WorldState, config: ExperimentConfig) -> bool:
-    """Run ends at max_ticks, or when no HEALTHY node borders a COMPROMISED one."""
+    """Run ends at max_ticks, or when no agent can infect anyone any more: no
+    HEALTHY node borders a COMPROMISED one that can run inference."""
     if state.tick >= config.max_ticks:
         return True
-    for node in state.nodes.values():
-        if node.security_state != SecurityState.COMPROMISED:
-            continue
-        for neighbor_id in node.neighbors:
-            if state.nodes[neighbor_id].security_state == SecurityState.HEALTHY:
-                return False
-    return True
+    return not any(can_still_infect(node, state) for node in state.nodes.values())

@@ -9,7 +9,7 @@ Prevalence needs history, so EventLogTally folds it from the event log.
 An infected agent with no recorded source (the seeded compromise) is a root,
 generation 0. Offspring counts are right-censored while an agent can still
 infect someone: a cohort is flagged `censored` if any member is still
-compromised and borders a healthy agent.
+compromised, can run inference, and borders a healthy agent.
 """
 
 from __future__ import annotations
@@ -17,7 +17,8 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
-from app.engine.state import AgentNode, SecurityState, WorldState
+from app.engine.propagation import can_still_infect
+from app.engine.state import AgentNode, WorldState
 
 if TYPE_CHECKING:  # compute.all_metrics imports this module
     from app.metrics.compute import EventLogTally
@@ -67,12 +68,6 @@ def offspring(state: WorldState) -> dict[str, int]:
     return counts
 
 
-def _can_still_infect(node: AgentNode, state: WorldState) -> bool:
-    return node.security_state == SecurityState.COMPROMISED and any(
-        state.nodes[n].security_state == SecurityState.HEALTHY for n in node.neighbors
-    )
-
-
 def r_effective(state: WorldState) -> list[tuple[int, float, bool]]:
     """(tick, mean offspring of the agents infected that tick, censored)."""
     infected = _infected(state)
@@ -84,7 +79,7 @@ def r_effective(state: WorldState) -> list[tuple[int, float, bool]]:
         (
             tick,
             sum(counts[n] for n in members) / len(members),
-            any(_can_still_infect(infected[n], state) for n in members),
+            any(can_still_infect(infected[n], state) for n in members),
         )
         for tick, members in sorted(cohorts.items())
     ]

@@ -767,6 +767,23 @@ export interface components {
              * @default 0
              */
             byzantine_collusion_rate: number;
+            /**
+             * Inference Fraction
+             * @default 1
+             */
+            inference_fraction: number;
+            /**
+             * Inference Placement
+             * @default random
+             * @enum {string}
+             */
+            inference_placement: "random" | "hubs" | "periphery";
+            /**
+             * Topology
+             * @default barabasi_albert
+             * @enum {string}
+             */
+            topology: "barabasi_albert" | "erdos_renyi";
         };
         /** ExperimentDetail */
         ExperimentDetail: {

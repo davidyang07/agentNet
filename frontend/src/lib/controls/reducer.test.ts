@@ -44,6 +44,9 @@ const FIXTURE_CONFIG_A: ExperimentConfig = {
   sentinel_compromise_rate: 0,
   attestation_replay_rate: 0,
   byzantine_collusion_rate: 0,
+  inference_fraction: 1,
+  inference_placement: "random",
+  topology: "barabasi_albert",
 };
 
 const FIXTURE_CONFIG_B: ExperimentConfig = {
@@ -74,6 +77,9 @@ const FIXTURE_CONFIG_B: ExperimentConfig = {
   sentinel_compromise_rate: 0,
   attestation_replay_rate: 0,
   byzantine_collusion_rate: 0,
+  inference_fraction: 1,
+  inference_placement: "random",
+  topology: "barabasi_albert",
 };
 
 function running(overrides: Partial<ControlState> = {}): ControlState {
