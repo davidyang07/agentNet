@@ -184,6 +184,16 @@ class ExperimentRunner:
         self.event_tally.add(events)
         await self.bus.publish(events)
 
+    @property
+    def ended(self) -> asyncio.Event:
+        """Set once the run's final event has been published (finished,
+        stopped, or stopped by an error) -- nothing is published after it."""
+        return self._terminal_event
+
+    @property
+    def last_seq(self) -> int:
+        return self._emitter.last_seq
+
     def summary(self) -> ExperimentSummary:
         return ExperimentSummary(
             experiment_id=self.experiment_id,

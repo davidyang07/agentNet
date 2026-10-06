@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { backendWsUrl } from "@/lib/api/client";
+import { isFinalClose } from "@/lib/stream/closeCodes";
 import { type GraphState, type StreamFrame, initialGraphState, reduce } from "@/lib/stream/reducer";
 
 const MIN_BACKOFF_MS = 250;
@@ -66,8 +67,10 @@ export function useExperimentStream(experimentId: string | null): {
         }
       };
 
-      socket.onclose = () => {
-        if (cancelled) return;
+      socket.onclose = (event) => {
+        // A final close means nothing more will arrive (the run ended, or
+        // doesn't exist): reconnecting would only spin.
+        if (cancelled || isFinalClose(event.code)) return;
         scheduleReconnect(expectedNextSeq !== null ? expectedNextSeq - 1 : undefined);
       };
 

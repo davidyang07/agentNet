@@ -57,12 +57,11 @@ def test_reconnect_outside_buffer_gets_fresh_snapshot():
 
 
 def test_unknown_experiment_id_closes_connection():
+    # Accepted, then closed with a code the frontend treats as final. A
+    # rejected handshake reaches a browser only as an abnormal 1006 with no
+    # code, which it would keep retrying.
     with TestClient(app) as client:
         fake_id = uuid.uuid4()
-        try:
-            with client.websocket_connect(f"/api/experiments/{fake_id}/stream"):
-                pass
-            raised = False
-        except Exception:
-            raised = True
-        assert raised
+        with client.websocket_connect(f"/api/experiments/{fake_id}/stream") as stream:
+            message = stream.receive()
+        assert message == {"type": "websocket.close", "code": 4004, "reason": ""}
