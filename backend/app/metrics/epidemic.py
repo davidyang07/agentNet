@@ -136,8 +136,28 @@ def peak_prevalence(state: WorldState, tally: EventLogTally) -> tuple[float | No
     rows = tally.prevalence(state.tick)
     if not rows or not state.nodes:
         return None, None
-    tick, infectious, _ = max(rows, key=lambda row: (row[1], -row[0]))
+    tick, infectious, _, _ = max(rows, key=lambda row: (row[1], -row[0]))
     return infectious / len(state.nodes), tick
+
+
+def immunity_metrics(state: WorldState, tally: EventLogTally) -> dict[str, float | None]:
+    """§14.4 C.4; all None unless immune memory is on.
+    - immunity_coverage: agents holding a legitimate signature ÷ all agents.
+    - signature_block_rate: attacks immune memory blocked ÷ attempts.
+    - benign_block_rate: benign probes blocked ÷ probes screened."""
+    if not tally.immunity_on:
+        return dict.fromkeys(("immunity_coverage", "signature_block_rate", "benign_block_rate"))
+    protected = any(s.legitimate and s.adopt_tick <= state.tick for s in state.signatures)
+    holders = sum(n.immune_participant for n in state.nodes.values()) if protected else 0
+    return {
+        "immunity_coverage": holders / len(state.nodes) if state.nodes else 0.0,
+        "signature_block_rate": (
+            tally.blocked_by_signature / tally.attempted if tally.attempted else 0.0
+        ),
+        "benign_block_rate": (
+            state.benign_blocked / state.benign_probes if state.benign_probes else 0.0
+        ),
+    }
 
 
 def epidemic_metrics(state: WorldState, tally: EventLogTally) -> dict[str, float | int | None]:
@@ -150,6 +170,7 @@ def epidemic_metrics(state: WorldState, tally: EventLogTally) -> dict[str, float
         "peak_prevalence": peak,
         "peak_tick": peak_tick,
         "strains_observed": strains_observed(state),
+        **immunity_metrics(state, tally),
     }
 
 
@@ -157,8 +178,13 @@ def epidemic_report(state: WorldState, tally: EventLogTally) -> dict[str, list[d
     """Everything EpidemicResponse reports, one way for live and replay."""
     return {
         "prevalence": [
-            {"tick": tick, "infectious": infectious, "quarantined": quarantined}
-            for tick, infectious, quarantined in tally.prevalence(state.tick)
+            {
+                "tick": tick,
+                "infectious": infectious,
+                "quarantined": quarantined,
+                "immune": immune,
+            }
+            for tick, infectious, quarantined, immune in tally.prevalence(state.tick)
         ],
         "r_effective": [
             {"tick": tick, "value": value, "censored": censored}

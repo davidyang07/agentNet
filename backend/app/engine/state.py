@@ -32,6 +32,22 @@ class AgentNode:
     # docs/PLAN.md §14.4 C.3: the worm strain this agent carries, a
     # signature_bits-bit vector; None unless strains are tracked.
     strain: int | None = None
+    # docs/PLAN.md §14.4 C.4: whether this agent takes part in shared
+    # immune memory, holding every adopted signature.
+    immune_participant: bool = False
+
+
+@dataclass(frozen=True)
+class Signature:
+    """One entry of shared immune memory (docs/PLAN.md §14.4 C.4): a strain
+    vector, legitimate (published on a detection) or poisoned (published by
+    a subverted sentinel). Participants hold it from adopt_tick on;
+    `announced` records that its adoption event has been emitted."""
+
+    vector: int
+    legitimate: bool
+    adopt_tick: int
+    announced: bool = False
 
 
 @dataclass
@@ -48,3 +64,9 @@ class WorldState:
     # already reads AgentNode.security_state for AGENT nodes. Defaults to
     # empty, so every existing WorldState() call site is unaffected.
     compromised_graph_nodes: frozenset[str] = frozenset()
+    # Shared immune memory (docs/PLAN.md §14.4 C.4), and the benign probes
+    # participants have screened against it so far (autoimmunity). Empty
+    # and zero unless immunity is enabled.
+    signatures: tuple[Signature, ...] = ()
+    benign_probes: int = 0
+    benign_blocked: int = 0

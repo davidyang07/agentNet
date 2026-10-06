@@ -133,7 +133,7 @@ class WorldState:
 
 M0 uses only `HEALTHY` and `COMPROMISED`. The other three members exist and stay unused — per §3 of the brief, security state is never scattered booleans.
 
-*Opt-in extension (PLAN §14.4 C.2, approved under D7):* `AgentNode.inference_capable: bool = True`. A compromised agent that can't run inference is a dead end — it can be compromised but never attacks (§3.4). Capability is a property of the agent, not a security state.
+*Opt-in extensions (PLAN §14.4 C.2–C.4, approved under D7):* `AgentNode.strain: int | None` (C.3), `AgentNode.immune_participant: bool = False`, and on `WorldState` the immune-memory registry `signatures: tuple[Signature, ...]` and the counters `benign_probes`/`benign_blocked` (C.4). `AgentNode.inference_capable: bool = True`. A compromised agent that can't run inference is a dead end — it can be compromised but never attacks (§3.4). Capability is a property of the agent, not a security state.
 
 ### 3.3 `app/engine/topology.py`
 
@@ -180,6 +180,17 @@ The rule, executed against a frozen snapshot of tick-N state so that within-tick
   - Its `COMPROMISE_SUCCEEDED` gains `metadata.strain` (zero-padded hex) and `metadata.mutated`.
   - The first winner's carried strain becomes the target's.
   - The same holds for the adaptive attacker and real agents.
+
+*Opt-in immune memory (PLAN §14.4 C.4, approved under D7), only while `config.immunity_enabled`:*
+- **Precondition.** Before the draw in rule 4, an attempt on a participating target holding a signature within `signature_radius` bits of the source's strain is blocked. It emits `COMPROMISE_FAILED` with `metadata.blocked_by_signature` after its `COMPROMISE_ATTEMPTED`, and draws nothing. The same holds for the adaptive attacker, and for real agents before any model call.
+- **Draws.**
+  - Participants are placed like inference capability, drawing `rng(seed, 0, "topology", "immunity_placement")` for random placement.
+  - Benign probes draw `rng(seed, tick, agent_id, f"benign_probe:{i}")`.
+  - Poisoned signatures draw `rng(seed, tick, sentinel_id, "poison_signature")`.
+- **Events.**
+  - `THREAT_SIGNATURE_PUBLISHED` gains `metadata.signature`.
+  - `THREAT_SIGNATURE_RECEIVED {legitimate, signature, adopters}` records each adoption.
+  - `AGENT_CREATED` gains `metadata.immune_participant`.
 
 `p_same > p_cross` is a **simulation parameter, not a finding** (§4). Every propagation event sets `metadata.probability`, so any number that ends up on screen is traceable to the input that produced it.
 

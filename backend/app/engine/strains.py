@@ -21,7 +21,8 @@ from app.schemas.experiment import ExperimentConfig
 
 
 def tracked(config: ExperimentConfig) -> bool:
-    return config.mutation_rate > 0.0
+    """Strains matter while they can mutate or be matched by immune memory."""
+    return config.mutation_rate > 0.0 or config.immunity_enabled
 
 
 def _flip(strain: int, positions: list[int]) -> int:

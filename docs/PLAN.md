@@ -312,6 +312,10 @@ batch as it happens, and replay folds its reconstructed log.
 | `serial_interval` | mean ticks from a source's `tick_compromised` to its target's; `None` with no transmission. A gap from the seed can be 0, since the seed attacks from tick 0 (SPEC §3.4 rule 7); every other gap is at least 1 |
 | `final_size` | agents ever infected (`tick_compromised` set) ÷ all agents |
 | `peak_prevalence`, `peak_tick` | the largest fraction of agents `COMPROMISED` at the end of a tick, and the first tick it was reached; `None` before any event |
+| `strains_observed` | distinct strains among infected agents (§14.4 C.3); `None` unless strains are tracked |
+| `immunity_coverage` | agents holding a legitimate signature ÷ all agents (§14.4 C.4); `None` unless immune memory is on |
+| `signature_block_rate` | attacks immune memory blocked (`COMPROMISE_FAILED` with `blocked_by_signature`) ÷ `COMPROMISE_ATTEMPTED`; `None` unless immune memory is on |
+| `benign_block_rate` | benign probes blocked ÷ benign probes screened — the autoimmune cost; `None` unless immune memory is on |
 
 **Epidemic metrics (§14.4 C.1).** Every infected agent's `compromised_by` is its one source, the
 first winner (SPEC §3.4 rule 6), so infections form a tree. An infected agent with no source (the
@@ -321,8 +325,9 @@ in the state, so live and replay agree by construction. Prevalence needs history
 `EventLogTally` folds the agents infectious and quarantined at the end of each tick from the event
 log: one row per tick, so O(ticks) memory. `GET /api/experiments/{id}/epidemic` and its
 `/replay/epidemic` twin return:
-- `prevalence`: per tick, the agents infectious (`COMPROMISED`) and quarantined. An `immune` count
-  arrives with immune memory (C.4).
+- `prevalence`: per tick, the agents infectious (`COMPROMISED`), quarantined, and `immune`: healthy
+  participants once a legitimate signature is held (C.4; every participant holds every adopted
+  signature, so this is all of them).
 - `r_effective`: per tick on which anyone was infected, that cohort's mean offspring. The cohort is
   `censored` while a member can still infect: still `COMPROMISED` and bordering a `HEALTHY` agent.
   A compromised agent with no healthy neighbour left has its final offspring count.
@@ -1253,6 +1258,24 @@ transmission path, real agents included; Phase C is backend and API only, per D6
     default run draws nothing.
   - Every success carries `strain`/`mutated`, including a losing same-tick win. The winner's strain
     becomes the target's.
+- **C.4 — done.** SPEC §3.2 and §3.4 record the extension; metric definitions are in §6.
+  - **Benign traffic (D5).** A benign vector is the centroid with a keyed number of bits, uniform in
+    `[0, strain_benign_distance]`, flipped, so it spans the gap between normal behaviour and the
+    worm. A poisoned signature is such a vector.
+  - **Publication and adoption.**
+    - A signature is published once per distinct vector.
+    - Adoption is uniform: every participant holds a signature from `signature_delay_ticks` after
+      publication. A pre-seeded one is held from tick 0.
+    - `THREAT_SIGNATURE_RECEIVED.adopters` is the participant count.
+    - The immunity step runs after detection, so a zero delay protects from the same tick.
+  - **Blocking.** A blocked attempt emits `COMPROMISE_ATTEMPTED`, then `COMPROMISE_FAILED`
+    `{blocked_by_signature}`. It skips the draw, or the model call for a real agent, which spends
+    no budget.
+  - **Measured:**
+    - With every transmission mutating one bit, radius 0 blocks 4% of attacks (final size 0.71);
+      radius 6 blocks 78% (final size 0.14) at a 23% benign block rate. These are 8-seed means.
+    - Pre-seeding at full coverage holds the outbreak to patient zero.
+    - Poisoning with no detection blocks benign traffic and no worm.
   - `strains_observed` counts distinct strains among infected agents. Validation keeps
     `strain_benign_distance` and `mutation_bits` within `signature_bits`.
 

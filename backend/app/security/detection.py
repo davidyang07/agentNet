@@ -6,6 +6,7 @@ from app.graph.builder import build_security_graph
 from app.graph.types import EdgeType, NodeType
 from app.schemas.events import EventDraft, EventType
 from app.schemas.experiment import ExperimentConfig
+from app.security import immunity
 
 
 def _suppressed_by_compromised_sentinels(state: WorldState, config: ExperimentConfig) -> set[str]:
@@ -49,6 +50,7 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
 
     drafts: list[EventDraft] = []
     quarantined: set[str] = set()
+    signatures = list(state.signatures)
 
     for node_id in compromised:
         draw = rng(config.seed, state.tick, node_id, "detect").random()
@@ -62,6 +64,15 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
                     metadata={"sensitivity": config.detector_sensitivity},
                 )
             )
+            # Shared immune memory (docs/PLAN.md §14.4 C.4): a detection
+            # publishes the detected strain.
+            strain = state.nodes[node_id].strain
+            if config.immunity_enabled and strain is not None:
+                published = immunity.publish(
+                    signatures, config, state.tick, strain, legitimate=True, agent_id=node_id
+                )
+                if published is not None:
+                    drafts.append(published)
             drafts.append(
                 EventDraft(
                     sim_tick=state.tick,
@@ -105,5 +116,5 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
             new_nodes[node_id], security_state=SecurityState.QUARANTINED
         )
 
-    new_state = replace(state, nodes=new_nodes)
+    new_state = replace(state, nodes=new_nodes, signatures=tuple(signatures))
     return new_state, drafts

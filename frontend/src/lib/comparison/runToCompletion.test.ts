@@ -40,6 +40,13 @@ const CONFIG: ExperimentConfig = {
   strain_benign_distance: 32,
   mutation_rate: 0,
   mutation_bits: 1,
+  immunity_enabled: false,
+  immunity_coverage: 1,
+  immunity_placement: "random",
+  signature_radius: 0,
+  signature_delay_ticks: 1,
+  preseed_patient_zero_signature: false,
+  benign_probes_per_tick: 1,
 };
 
 const EXPERIMENT_ID = "exp-1";
