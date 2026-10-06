@@ -192,3 +192,30 @@ def test_deterministic_across_repeated_runs_with_mock_provider():
         ]
 
     assert project(drafts_a) == project(drafts_b)
+
+
+def test_attacks_from_different_sources_on_one_target_are_independent():
+    """The mock draw was keyed on (seed, tick, target) only, so every source
+    attacking the same target got the same outcome: with p=0.3 and two
+    sources the target fell 30% of the time instead of 1 - 0.7^2 = 51%,
+    unlike propagation's per-source infect:{source} draws (PLAN 14.2 A.5).
+    Fixed seeds, so this is deterministic, not statistical flakiness."""
+
+    def two_sources_one_target(seed: int) -> bool:
+        nodes = {
+            "agent-000": _real_node("agent-000", SecurityState.COMPROMISED, ("agent-002",)),
+            "agent-001": _real_node("agent-001", SecurityState.COMPROMISED, ("agent-002",)),
+            "agent-002": _real_node(
+                "agent-002", SecurityState.HEALTHY, ("agent-000", "agent-001")
+            ),
+        }
+        world = WorldState(
+            tick=1, nodes=nodes, edges=(("agent-000", "agent-002"), ("agent-001", "agent-002"))
+        )
+        new_world, _ = asyncio.run(
+            real_agent_step(world, _config(seed=seed, p_same=0.3), _gateway(), tick=1)
+        )
+        return new_world.nodes["agent-002"].security_state == SecurityState.COMPROMISED
+
+    compromised = sum(two_sources_one_target(seed) for seed in range(1000)) / 1000
+    assert abs(compromised - 0.51) < 0.05

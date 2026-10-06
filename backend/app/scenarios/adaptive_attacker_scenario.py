@@ -23,6 +23,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from app.engine.propagation import is_active_source
 from app.engine.rng import rng
 from app.engine.state import SecurityState, WorldState
 from app.schemas.events import EventDraft, EventType
@@ -52,9 +53,7 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
     """Advance exactly one tick. Pure, synchronous, total."""
     strategy = choose_strategy(state, config)
     sources = sorted(
-        node_id
-        for node_id, node in state.nodes.items()
-        if node.security_state == SecurityState.COMPROMISED
+        node_id for node_id, node in state.nodes.items() if is_active_source(node, state.tick)
     )
 
     drafts: list[EventDraft] = []
@@ -62,10 +61,13 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
 
     for source in sources:
         source_node = state.nodes[source]
+        # Real-real edges belong to agents.runtime's LLM-mediated attempt, as
+        # in propagation.step: each edge is attacked by exactly one path.
         healthy_neighbors = sorted(
             t
             for t in source_node.neighbors
             if state.nodes[t].security_state == SecurityState.HEALTHY
+            and not (source_node.agent_kind == "real" and state.nodes[t].agent_kind == "real")
         )
         if not healthy_neighbors:
             continue

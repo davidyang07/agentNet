@@ -79,11 +79,15 @@ def test_golden_demo_narrative_is_faithful_to_its_event_log():
 def test_golden_demo_reports_the_measured_remediation_outcome():
     """The re-test is reported as measured. For this config the recommended
     remediation (sentinel_count 1 -> 2) backfires: the second sentinel is
-    subverted too, so security_plane_integrity falls 0.80 -> 0.67 while the
-    outbreak is unchanged -- and the demo says so. It used to claim an
-    improvement that only reproduced while real_agent_step was silently
-    un-subverting sentinels. Pinned deliberately: if an engine change moves
-    these numbers, re-derive them and update this on purpose."""
+    subverted too, so security_plane_integrity falls 0.80 -> 0.67 and the
+    outbreak grows (compromise 0.975 -> 1.0) -- and the demo says so. It used
+    to claim an improvement that only reproduced while real_agent_step was
+    silently un-subverting sentinels.
+
+    Pinned deliberately: if an engine change moves these numbers, re-derive
+    them and update this on purpose. Last re-derived for PLAN 14.2 A.5/A.7
+    (per-source mock draws; new compromises attack from the next tick),
+    which moved the baseline's compromise from 1.0 to 0.975."""
     result = run_golden_demo()
     assert result.recommendation is not None
     assert result.rerun is not None
@@ -92,8 +96,9 @@ def test_golden_demo_reports_the_measured_remediation_outcome():
     before, after = result.baseline.metrics, result.rerun.metrics
     assert round(before["security_plane_integrity"], 2) == 0.80
     assert round(after["security_plane_integrity"], 2) == 0.67
-    assert after["retained_utility"] == before["retained_utility"]
-    assert after["compromise_fraction"] == before["compromise_fraction"]
+    assert after["retained_utility"] == before["retained_utility"] == 0.0
+    assert before["compromise_fraction"] == 0.975
+    assert after["compromise_fraction"] == 1.0
 
     outcome = result.narrative[-1]
     assert outcome == describe_remediation_outcome(result.baseline, result.rerun)

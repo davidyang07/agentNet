@@ -65,6 +65,7 @@ async def real_agent_step(
                 max_tokens=config.model_max_tokens,
                 mock_leak_probability=probability,
                 purpose="propagation",
+                source_agent_id=source,
             )
             attempts.append((source, target, probability, request))
 
