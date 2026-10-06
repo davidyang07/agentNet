@@ -34,6 +34,14 @@ class ExperimentRegistry:
     def remove(self, experiment_id: UUID) -> None:
         self._runners.pop(experiment_id, None)
 
+    def clear(self) -> None:
+        """For app shutdown. A run's task lives on the app's event loop, so
+        once the app has shut down its runs can never advance or be served
+        again -- and an unfinished one would otherwise count against the
+        active-run cap for the rest of the process (every TestClient
+        lifespan in one pytest process shares this registry)."""
+        self._runners.clear()
+
     def active_count(self) -> int:
         """Runs still running or paused."""
         return sum(1 for runner in self._runners.values() if runner.ended_at is None)

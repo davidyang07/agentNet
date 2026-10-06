@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from app.api import routes_experiments
 from app.config import Settings
 from app.main import app
-from app.orchestrator.registry import ExperimentRegistry
+from app.orchestrator.registry import ExperimentRegistry, registry
 from app.orchestrator.runner import ExperimentRunner
 from app.schemas.experiment import ExperimentConfig
 
@@ -84,3 +84,16 @@ def test_creating_beyond_the_active_run_cap_is_refused_with_429(monkeypatch):
             client.post(f"/api/experiments/{first.json()['experiment_id']}/stop")
         # Stopping the first run frees its slot.
         assert client.post("/api/experiments", json=body | {"max_ticks": 1}).status_code == 201
+
+
+def test_app_shutdown_releases_its_runs():
+    """A run's task dies with the app's event loop, so a run left unfinished
+    at shutdown must not keep holding an active-run slot. Every TestClient
+    lifespan in one pytest process shares the registry: before this, about
+    20 tests' unfinished runs filled the cap and later tests got 429s."""
+    with TestClient(app) as client:
+        body = {"seed": 1, "node_count": 25, "max_ticks": 2000}
+        assert client.post("/api/experiments", json=body).status_code == 201
+        assert registry.active_count() == 1
+
+    assert registry.active_count() == 0
