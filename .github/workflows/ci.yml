@@ -4,6 +4,11 @@ on:
   push:
   pull_request:
 
+# Recorded on every persisted run as its app_version, so replay can tell when
+# a run came from a different build (docs/PLAN.md §14.3 B.8).
+env:
+  GIT_SHA: ${{ github.sha }}
+
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -34,10 +39,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      # Pinned by the lockfiles (docs/PLAN.md §14.7 D3); regenerate with `make lock`.
       - name: Install backend
         run: |
           python3 -m venv backend/.venv
-          backend/.venv/bin/pip install -e "backend[dev]"
+          backend/.venv/bin/pip install -r backend/requirements-dev.lock
+          backend/.venv/bin/pip install --no-deps -e backend
       - name: Ruff
         run: backend/.venv/bin/ruff check backend
       - name: Pytest
@@ -96,7 +103,8 @@ jobs:
       - name: Install backend
         run: |
           python3 -m venv backend/.venv
-          backend/.venv/bin/pip install -e "backend[dev]"
+          backend/.venv/bin/pip install -r backend/requirements.lock
+          backend/.venv/bin/pip install --no-deps -e backend
       - name: agentshield test
         working-directory: backend
         run: .venv/bin/python scripts/agentshield_test.py
@@ -118,7 +126,8 @@ jobs:
       - name: Install backend
         run: |
           python3 -m venv backend/.venv
-          backend/.venv/bin/pip install -e "backend[dev]"
+          backend/.venv/bin/pip install -r backend/requirements.lock
+          backend/.venv/bin/pip install --no-deps -e backend
       - name: Install frontend
         working-directory: frontend
         run: npm ci
