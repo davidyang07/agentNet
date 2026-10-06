@@ -9,3 +9,14 @@
 - Preserve documented architectural boundaries.
 - If implementation requires deviating materially from SPEC, stop and surface the deviation and rationale before making it.
 - Prefer small, reviewable changes over unrelated cleanup or refactoring. Do not change unrelated files while completing a scoped task.
+
+## UI rules
+
+- Read `DESIGN.md` before any UI change; it is the source of truth for tokens.
+- `design-refs/<screen>.png` is the layout reference for that screen. Match its density and hierarchy, but use `DESIGN.md` tokens, not the reference's colors. `design-refs/before/` is the console as it was before the redesign.
+- Colour is reserved for security state and severity, never decoration. Node type = shape and size.
+- Never: gradients, emoji icons, glassmorphism, gradient text, glow effects, marketing copy.
+- One icon set (`lucide-react`) only.
+- After any UI change, run `scripts/screenshot.mjs` on the changed page and view the result against its reference.
+  - Example: `node scripts/screenshot.mjs http://localhost:3000/topology /tmp/shots --full-page --session agentshield.activeExperimentId=<run-id>`.
+  - A screen that needs a run shows live data (outbreak curve, event log) only for events received while it is connected. Screenshot while the run is still running, not after it ends.
