@@ -15,7 +15,7 @@ from app.gateway.vllm_provider import VLLMProvider
 from app.schemas.experiment import ExperimentConfig
 
 # httpx defaults to a 5s timeout on every operation, which silently preempts
-# the ModelGateway asyncio.wait_for(timeout=model_timeout_s) bound:
+# the ModelGateway's model_timeout_s deadline:
 # model_timeout_s is configurable up to 120s, so every value above 5 was dead
 # config and a slow-but-healthy vLLM call surfaced as a ModelProviderError
 # instead of being allowed its configured budget. Bounding read/write/pool
