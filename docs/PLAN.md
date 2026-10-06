@@ -882,11 +882,12 @@ Verified against a real Postgres: backend `ruff` + `pytest` (all passing), `veri
 frontend lint/test/typecheck, and the schema-drift check — this also closes §9's note that
 persistence tests had not been re-run locally.
 
-## 14. Next phases (PROPOSED 2026-10-06 — not yet approved for implementation)
+## 14. Next phases (APPROVED 2026-10-06)
 
-> **Status: proposal.** Nothing in this section is approved to build yet (`CLAUDE.md`: implement only
-> the phase explicitly requested). Order: **A → B → C → D**. Each phase lists its exit criteria;
-> §14.7 lists the decisions needed before each one starts.
+> **Status: approved by the repo owner on 2026-10-06**, including decisions D1–D7 (§14.7) as
+> recommended and the SPEC extensions listed in §14.4. Order: **A → B → C → D**; each phase starts
+> only once the previous one is merged, and Phase D's scope is agreed separately before it starts.
+> Each phase lists its exit criteria.
 
 Two inputs drive this section. First, the repository review behind §13 left medium/low findings
 open — some make displayed numbers wrong, others leak resources or block the server — and all were
@@ -1210,9 +1211,9 @@ Inputs, beyond the user's own goals for the redesign:
   - Inference honeypots and canary tokens.
   - Economic friction as a fail-closed layer.
 
-### 14.7 Decisions needed
+### 14.7 Decisions (all approved as recommended, 2026-10-06)
 
-| # | Decision | Recommendation |
+| # | Decision | Approved |
 |---|---|---|
 | D1 | Containment latency until C.5 lands | Return `None` in `quarantine` mode, and document why, rather than a constant 0 |
 | D2 | Accept that A.2, A.4 and A.5 change reported numbers and the tests pinning them (ASR drops; real-agent and golden-demo numbers move) | Yes — they are wrong today |
