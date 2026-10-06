@@ -87,6 +87,9 @@ async def _reconstruct_async(
 def reconstruct_final_state(
     config: ExperimentConfig, target_tick: int
 ) -> tuple[WorldState, list[Event]]:
+    """Synchronous and blocking. A real-agent config runs its own event loop
+    via asyncio.run(), so async callers must call this through
+    asyncio.to_thread() rather than directly from a running loop."""
     if config.real_agent_count > 0 and config.model_provider != "mock":
         raise ReplayUnsupportedError(
             "replay reconstruction only supports model_provider='mock' -- a real "

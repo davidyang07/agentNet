@@ -98,7 +98,7 @@ describe("replay/live reduce() equivalence", () => {
 
     // Replay-style: the exact fold useReplayStream performs -- snapshot,
     // then only events with seq > snapshot.last_seq, mirroring the
-    // backend's replay-snapshot MAX(seq) WHERE sim_tick=0 cutoff.
+    // backend's replay-snapshot cutoff (the last initial event's seq).
     const allEvents = [...tick0Events, ...postCutoffEvents];
     let replayState = reduce(initialGraphState, snapshot);
     for (const event of allEvents.filter((e) => e.seq > snapshot.last_seq)) {

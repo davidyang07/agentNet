@@ -24,10 +24,11 @@ export type ReplayData = {
  * lib/comparison/runToCompletion.ts: fetches a regenerated tick-0 snapshot
  * plus the full persisted event log after it, once, and folds the snapshot
  * through the same pure reduce() the live view uses. The returned `events`
- * array never includes a tick-0 event -- pagination starts at
- * `snapshot.last_seq` (the backend's MAX(seq) WHERE sim_tick=0 cutoff), so
- * the seeded patient-zero compromise the snapshot already reflects is never
- * re-delivered through the event branch (docs/PHASE_1_5_PLAN.md §7).
+ * array never includes an initial (pre-first-tick) event -- pagination starts
+ * at `snapshot.last_seq` (the last of the EXPERIMENT_STARTED/AGENT_CREATED/
+ * seed-compromise events the regenerated snapshot already reflects), so the
+ * seeded patient-zero compromise is never re-delivered through the event
+ * branch, while the first tick's own events (also stamped sim_tick 0) are.
  */
 export async function loadReplayData(
   experimentId: string,

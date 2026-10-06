@@ -1,12 +1,15 @@
-"""The canonical golden demo (Priority 2): one scenario, one config, whose
-real event log narrates all ten brief beats -- indirect prompt injection,
-propagation, initial quarantine, an adaptive attacker strategy switch, a
-sentinel-compromise attack on the security plane, a false threat-memory
-report, AgentShield identifying the resulting security_plane_integrity gap via
-the existing remediation engine, applying the fix, and re-running to show
-measurable improvement. No new scenario logic -- pure config selection over
-app/scenarios/registry.py's existing scenarios, narrated by walking the
-resulting event log.
+"""The canonical golden demo (Priority 2): one scenario, one config, narrated
+from its real event log -- indirect prompt injection, propagation, the
+adaptive attacker's targeting, a sentinel-compromise attack on the security
+plane, false threat-memory reports, attestation replay -- then AgentShield's
+remediation engine recommends a fix for the security_plane_integrity gap, the
+same scenario is re-run with it, and the measured before -> after is reported
+as it is, including when the recommended fix makes things worse.
+
+Every narrative line is derived from the run's events or measured metrics, so
+a beat the run did not produce (no quarantine, no strategy switch) is reported
+as absent rather than claimed. No new scenario logic -- pure config selection
+over app/scenarios/registry.py's existing scenarios.
 """
 
 from __future__ import annotations
@@ -47,15 +50,28 @@ class GoldenDemoResult:
 
 def _narrate(run: BenchmarkRun) -> list[str]:
     lines: list[str] = []
+    provider = run.config.model_provider
     seen_false_signature_from: set[str] = set()
     replayed_attestation_count = 0
+    legitimate_quarantines = 0
+    strategy: str | None = None
+    strategy_switches = 0
     for event in run.events:
         etype = event.event_type.value
-        if etype == "COMPROMISE_SUCCEEDED" and event.metadata.get("real_agent"):
+        if etype == "COMPROMISE_ATTEMPTED" and "strategy" in event.metadata:
+            new_strategy = event.metadata["strategy"]
+            if strategy is not None and new_strategy != strategy:
+                strategy_switches += 1
+                lines.append(
+                    f"tick {event.sim_tick}: adaptive attacker switched from {strategy} "
+                    f"to {new_strategy} targeting"
+                )
+            strategy = new_strategy
+        elif etype == "COMPROMISE_SUCCEEDED" and event.metadata.get("real_agent"):
             lines.append(
                 f"tick {event.sim_tick}: indirect prompt injection compromised "
-                f"{event.target_agent_id} via a real LLM-backed lateral attempt from "
-                f"{event.source_agent_id}"
+                f"{event.target_agent_id} via an LLM-mediated lateral attempt from "
+                f"{event.source_agent_id} ({provider} provider)"
             )
         elif etype == "COMPROMISE_SUCCEEDED" and event.metadata.get("initial_compromise"):
             lines.append(
@@ -66,6 +82,7 @@ def _narrate(run: BenchmarkRun) -> list[str]:
                 f"tick {event.sim_tick}: compromise propagated to {event.target_agent_id}"
             )
         elif etype == "AGENT_QUARANTINED" and event.metadata.get("legitimate") is not False:
+            legitimate_quarantines += 1
             lines.append(
                 f"tick {event.sim_tick}: {event.agent_id} quarantined by initial defense"
             )
@@ -74,9 +91,8 @@ def _narrate(run: BenchmarkRun) -> list[str]:
             and event.metadata.get("violation_type") == "sentinel_subverted"
         ):
             lines.append(
-                f"tick {event.sim_tick}: adaptive attacker subverted sentinel {event.agent_id} "
-                "-- the attacker shifted from attacking agents to attacking the security "
-                "plane itself"
+                f"tick {event.sim_tick}: sentinel {event.agent_id} subverted while monitoring "
+                "a compromised agent -- it now suppresses detection for every agent it monitors"
             )
         elif etype == "THREAT_SIGNATURE_PUBLISHED" and event.metadata.get("legitimate") is False:
             if event.agent_id not in seen_false_signature_from:
@@ -98,17 +114,76 @@ def _narrate(run: BenchmarkRun) -> list[str]:
             f"...{replayed_attestation_count} stale attestation nonces were replayed and "
             "accepted in total over the run"
         )
-
-    lines.append(
-        "attacker strategy: the adaptive attacker recomputed its strategy every tick from the "
-        "observed quarantine rate, switching between aggressive (highest-degree-neighbor) and "
-        "stealthy (lowest-degree-neighbor) targeting"
-    )
+    if strategy is not None and strategy_switches == 0:
+        lines.append(
+            f"adaptive attacker kept {strategy} targeting for the whole run -- it switches "
+            "only when the observed quarantine rate crosses "
+            f"{run.config.adaptive_detection_threshold:.2f}"
+        )
+    if legitimate_quarantines == 0:
+        lines.append("the defense quarantined no agents this run")
     lines.append(
         f"AgentShield identified the failed control: final security_plane_integrity="
         f"{run.metrics['security_plane_integrity']:.2f}"
     )
     return lines
+
+
+# (metric, higher_is_better) -- what a re-test reports before -> after.
+_OUTCOME_METRICS = (
+    ("security_plane_integrity", True),
+    ("retained_utility", True),
+    ("compromise_fraction", False),
+)
+
+
+def _subverted_sentinels(run: BenchmarkRun) -> int:
+    return len(
+        {
+            e.agent_id
+            for e in run.events
+            if e.event_type.value == "POLICY_VIOLATION"
+            and e.metadata.get("violation_type") == "sentinel_subverted"
+        }
+    )
+
+
+def describe_remediation_outcome(baseline: BenchmarkRun, rerun: BenchmarkRun) -> str:
+    """The re-test's measured before -> after and what it adds up to, stated as
+    measured -- including when the recommended fix made things worse."""
+    parts: list[str] = []
+    improved: list[str] = []
+    worsened: list[str] = []
+    for name, higher_is_better in _OUTCOME_METRICS:
+        before, after = baseline.metrics[name], rerun.metrics[name]
+        if after == before:
+            change = "unchanged"
+        elif (after > before) == higher_is_better:
+            change = "better"
+            improved.append(name)
+        else:
+            change = "worse"
+            worsened.append(name)
+        parts.append(f"{name} {before:.2f} -> {after:.2f} ({change})")
+    if baseline.config.sentinel_count or rerun.config.sentinel_count:
+        parts.append(
+            f"sentinels subverted {_subverted_sentinels(baseline)}/"
+            f"{baseline.config.sentinel_count} -> {_subverted_sentinels(rerun)}/"
+            f"{rerun.config.sentinel_count}"
+        )
+
+    if improved and worsened:
+        verdict = f"mixed: better {', '.join(improved)}, worse {', '.join(worsened)}"
+    elif improved:
+        verdict = "the remediation helped"
+    elif worsened:
+        verdict = "the remediation made things worse"
+    else:
+        verdict = "the remediation made no measurable difference"
+    return (
+        "re-ran the same scenario with the remediation applied: "
+        f"{', '.join(parts)} -- {verdict}"
+    )
 
 
 # Each entry identifies a beat class that repeats once per affected agent
@@ -118,7 +193,8 @@ _REPEATED_BEAT_CLASSES = (
     "compromise propagated to",
     "indirect prompt injection compromised",
     "quarantined by initial defense",
-    "adaptive attacker subverted sentinel",
+    "subverted while monitoring",
+    "adaptive attacker switched",
 )
 
 
@@ -126,7 +202,7 @@ def summarize_golden_demo_narrative(narrative: list[str]) -> list[str]:
     """Curated subset of the full narrative for the demo's headline output:
     keeps every distinct beat but collapses each *class* of per-agent line
     (propagation, lateral prompt injection, quarantine, sentinel
-    subversion) down to its first occurrence, annotated with how many more
+    subversion, strategy switches) down to its first occurrence, annotated with how many more
     of that class occurred. Collapsing propagation alone was not enough --
     the per-agent injection and quarantine lines left the "key beats" just
     as long as the raw log. The full, uncollapsed narrative remains
@@ -184,11 +260,7 @@ def run_golden_demo(
     narrative.append(f"remediation recommended: {recommendation.description}")
     rerun_config = config.model_copy(update=recommendation.config_diff)
     rerun = run_headless_async("golden_demo_rerun", rerun_config)
-    narrative.append(
-        "re-ran the same scenario with the remediation applied: security_plane_integrity "
-        f"{baseline.metrics['security_plane_integrity']:.2f} -> "
-        f"{rerun.metrics['security_plane_integrity']:.2f}"
-    )
+    narrative.append(describe_remediation_outcome(baseline, rerun))
     return GoldenDemoResult(
         baseline=baseline, narrative=narrative, recommendation=recommendation, rerun=rerun
     )

@@ -1,16 +1,19 @@
 """Postgres-backed coverage for the read-only history API: pagination
-cursors, filtering, 404s, replay-snapshot's last_seq matching
-MAX(seq) WHERE sim_tick=0, and event-log pagination across a full run with
-no gaps or duplicates."""
+cursors, filtering, 404s, replay-snapshot's last_seq covering exactly the
+initial events (so snapshot + later events folds to the final state), and
+event-log pagination across a full run with no gaps or duplicates."""
 
 import asyncio
 import json
 import uuid
 
+import httpx
 from fastapi.testclient import TestClient
 
 from app.db import create_pool
+from app.gateway.factory import build_gateway
 from app.main import app
+from app.orchestrator.registry import registry
 from app.orchestrator.runner import ExperimentRunner
 from app.persistence.registry import writer_registry
 from app.persistence.writer import PostgresWriter
@@ -29,8 +32,11 @@ def _make_runner(**overrides) -> ExperimentRunner:
     return runner
 
 
-async def _persist_completed_run(pool, **config_overrides) -> ExperimentRunner:
-    runner = _make_runner(**config_overrides)
+async def _persist_completed_run(
+    pool, runner: ExperimentRunner | None = None, **config_overrides
+) -> ExperimentRunner:
+    if runner is None:
+        runner = _make_runner(**config_overrides)
     # Mirrors the exact production call site in routes_experiments.py --
     # writer_registry.add() happens at the call site, not inside
     # PostgresWriter itself.
@@ -89,17 +95,23 @@ def test_detail_and_events_and_replay_snapshot_for_a_persisted_run():
             assert len(snap_body["nodes"]) == 25
             assert len(snap_body["edges"]) > 0
 
-            # replay-snapshot's last_seq must equal MAX(seq) WHERE sim_tick=0
-            # -- the exact boundary that prevents the seed compromise from
-            # being double-delivered by the next /events page.
+            # replay-snapshot's last_seq is the last of the initial events the
+            # snapshot already reflects (EXPERIMENT_STARTED, one AGENT_CREATED
+            # per node, the seed compromise) -- so the next /events page never
+            # re-delivers the seed compromise and starts at the first tick.
+            assert snap_body["last_seq"] == 25 + 1
             events_page = client.get(
                 f"/api/experiments/{exp_id}/events",
                 params={"since_seq": snap_body["last_seq"]},
             )
             assert events_page.status_code == 200
-            first_returned = events_page.json()["events"][0]
-            assert first_returned["sim_tick"] >= 1 or first_returned["seq"] > snap_body["last_seq"]
-            assert all(e["sim_tick"] != 0 for e in events_page.json()["events"])
+            later = events_page.json()["events"]
+            assert later[0]["seq"] == snap_body["last_seq"] + 1
+            assert not any(
+                e["event_type"] in ("EXPERIMENT_STARTED", "AGENT_CREATED")
+                or e["metadata"].get("initial_compromise")
+                for e in later
+            )
 
             # Paginate the full log to completion via next_seq: no gaps, no dupes.
             all_seqs: list[int] = []
@@ -117,6 +129,59 @@ def test_detail_and_events_and_replay_snapshot_for_a_persisted_run():
                 since_seq = body["next_seq"]
             assert all_seqs == list(range(runner._emitter.last_seq + 1))
             assert len(all_seqs) == len(set(all_seqs))
+    finally:
+        asyncio.run(_cleanup(runner.experiment_id))
+
+
+def test_replay_snapshot_plus_later_events_reproduces_the_final_state():
+    """The replay contract the history UI relies on (loadReplayData.ts):
+    replay-snapshot, then every event with seq > its last_seq, folds to the
+    run's final state. The first tick's propagation events are stamped
+    sim_tick=0 (SPEC §3.4 stamps the pre-increment tick), so a boundary of
+    MAX(seq) WHERE sim_tick=0 hid them and those nodes replayed as healthy.
+    p=1.0 guarantees first-tick compromises exist."""
+
+    async def setup() -> ExperimentRunner:
+        pool = await create_pool(TEST_SETTINGS)
+        try:
+            return await _persist_completed_run(pool, p_same=1.0, p_cross=1.0)
+        finally:
+            await pool.close()
+
+    runner = asyncio.run(setup())
+    try:
+        with TestClient(app) as client:
+            exp_id = runner.experiment_id
+            snapshot = client.get(f"/api/experiments/{exp_id}/replay-snapshot").json()
+
+            later: list[dict] = []
+            since_seq = snapshot["last_seq"]
+            while True:
+                page = client.get(
+                    f"/api/experiments/{exp_id}/events",
+                    params={"since_seq": since_seq, "limit": 500},
+                ).json()
+                later.extend(page["events"])
+                if page["next_seq"] is None:
+                    break
+                since_seq = page["next_seq"]
+
+            assert any(
+                e["event_type"] == "COMPROMISE_SUCCEEDED" and e["sim_tick"] == 0 for e in later
+            ), "fixture must compromise nodes on the first tick"
+
+            states = {n["id"]: n["security_state"] for n in snapshot["nodes"]}
+            for e in later:
+                if e["event_type"] == "COMPROMISE_SUCCEEDED" and not e["metadata"].get(
+                    "already_compromised"
+                ):
+                    states[e["target_agent_id"]] = "compromised"
+                elif e["event_type"] == "AGENT_QUARANTINED":
+                    states[e["agent_id"]] = "quarantined"
+
+            assert states == {
+                node_id: node.security_state.value for node_id, node in runner.state.nodes.items()
+            }
     finally:
         asyncio.run(_cleanup(runner.experiment_id))
 
@@ -254,6 +319,50 @@ def test_replay_graph_metrics_remediation_match_a_live_equivalent_run():
             assert replay_remediation.json() == live_remediation
     finally:
         asyncio.run(_cleanup(runner.experiment_id))
+
+
+def test_replay_matches_live_for_a_mock_real_agent_run():
+    """A real_agent_count > 0 run under the mock provider is the one config
+    whose replay goes through engine/replay.py's async path -- which used to
+    call asyncio.run() from inside the server's running event loop and 500
+    on every /replay/* route."""
+    config = ExperimentConfig(
+        seed=11, node_count=25, max_ticks=8, real_agent_count=6, p_same=0.6, p_cross=0.3
+    )
+
+    async def setup() -> ExperimentRunner:
+        pool = await create_pool(TEST_SETTINGS)
+        try:
+            async with httpx.AsyncClient() as http_client:
+                gateway = build_gateway(config, TEST_SETTINGS, http_client)
+                assert gateway is not None
+                runner = ExperimentRunner(config, gateway=gateway)
+                runner.tick_interval = 0
+                await _persist_completed_run(pool, runner=runner)
+                assert gateway.requests_used > 0, "fixture must exercise the LLM path"
+                return runner
+        finally:
+            await pool.close()
+
+    runner = asyncio.run(setup())
+    exp_id = runner.experiment_id
+    try:
+        with TestClient(app) as client:
+            registry.add(runner)
+            try:
+                live = {
+                    path: client.get(f"/api/experiments/{exp_id}/{path}").json()
+                    for path in ("graph", "metrics", "remediation")
+                }
+            finally:
+                registry.remove(exp_id)
+
+            for path, live_body in live.items():
+                resp = client.get(f"/api/experiments/{exp_id}/replay/{path}")
+                assert resp.status_code == 200, resp.text
+                assert resp.json() == live_body, path
+    finally:
+        asyncio.run(_cleanup(exp_id))
 
 
 def test_replay_analysis_endpoints_return_200_for_a_persisted_run():

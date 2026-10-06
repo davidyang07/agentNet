@@ -1,6 +1,13 @@
+import asyncio
+
 from fastapi.testclient import TestClient
 
+from app.events.bus import EventBus
 from app.main import app
+from app.metrics import compute
+from app.orchestrator.registry import registry
+from app.orchestrator.runner import ExperimentRunner
+from app.schemas.experiment import ExperimentConfig
 
 
 def _start_experiment(client: TestClient, **overrides) -> dict:
@@ -40,3 +47,35 @@ def test_metrics_endpoint_404_for_unknown_experiment():
             "/api/experiments/00000000-0000-0000-0000-000000000000/metrics"
         )
         assert resp.status_code == 404
+
+
+def test_live_event_log_metrics_cover_the_whole_run_after_the_event_ring_wraps():
+    """Live /metrics used to read the EventBus ring, which returns nothing
+    once a run has emitted more than RING_SIZE events -- every event-log
+    metric then silently read 0.0/None. They must match the full log."""
+    runner = ExperimentRunner(ExperimentConfig(seed=7, node_count=100, edge_density=5))
+    runner.tick_interval = 0
+    queue = runner.bus.subscribe()
+
+    async def run() -> None:
+        await runner.publish_initial()
+        await runner._run_loop()
+
+    asyncio.run(run())
+    events = []
+    while not queue.empty():
+        events.append(queue.get_nowait())
+    assert len(events) > EventBus.RING_SIZE
+
+    with TestClient(app) as client:
+        registry.add(runner)
+        try:
+            body = client.get(f"/api/experiments/{runner.experiment_id}/metrics").json()
+        finally:
+            registry.remove(runner.experiment_id)
+
+    assert body["attack_success_rate"] == compute.attack_success_rate(events) > 0.0
+    assert body["false_quarantine_rate"] == compute.false_quarantine_rate(events)
+    assert body["detection_latency"] == compute.detection_latency(runner.state, events)
+    assert body["detection_latency"] is not None
+    assert body["containment_latency"] == compute.containment_latency(events)

@@ -80,10 +80,10 @@ jobs:
         run: npm run build
 
   # Priority 1/productization of the benchmark-suite work: a fast pass/fail
-  # gate (defense comparison + golden demo, not the full 14-scenario matrix
-  # or the 2,500-agent scale run -- those stay a manual `make benchmark`)
-  # proving the defense and remediation mechanisms actually work, not just
-  # that the code runs. See README's "Canonical benchmark suite" section.
+  # gate (defense comparison + remediation before/after, not the full
+  # 14-scenario matrix or the 2,500-agent scale run -- those stay a manual
+  # `make benchmark`) proving the defense and remediation mechanisms actually
+  # work, not just that the code runs. See README's "Benchmarks and demos".
   agentshield-test:
     runs-on: ubuntu-latest
     steps:

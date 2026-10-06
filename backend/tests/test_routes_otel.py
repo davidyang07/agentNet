@@ -1,6 +1,11 @@
+import asyncio
+
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.orchestrator.registry import registry
+from app.orchestrator.runner import ExperimentRunner
+from app.schemas.experiment import ExperimentConfig
 
 
 def _start_experiment(client: TestClient, **overrides) -> dict:
@@ -36,3 +41,26 @@ def test_otel_trace_404_for_unknown_experiment():
             "/api/experiments/00000000-0000-0000-0000-000000000000/otel-trace"
         )
         assert resp.status_code == 404
+
+
+def test_otel_trace_409_once_the_in_memory_window_no_longer_holds_the_whole_log():
+    """Past EventBus.RING_SIZE events the ring no longer holds the start of
+    the run; the endpoint used to export an empty trace as if it were the
+    whole history."""
+    runner = ExperimentRunner(ExperimentConfig(seed=7, node_count=100, edge_density=5))
+    runner.tick_interval = 0
+
+    async def run() -> None:
+        await runner.publish_initial()
+        await runner._run_loop()
+
+    asyncio.run(run())
+    assert runner.bus.since(-1) is None
+
+    with TestClient(app) as client:
+        registry.add(runner)
+        try:
+            resp = client.get(f"/api/experiments/{runner.experiment_id}/otel-trace")
+        finally:
+            registry.remove(runner.experiment_id)
+    assert resp.status_code == 409

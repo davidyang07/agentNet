@@ -1,11 +1,16 @@
 import importlib.util
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+from app.benchmark import cli
 from app.benchmark.cli import Finding, evaluate
+from app.engine.state import SecurityState
+from app.remediation.analyze import Recommendation
+from app.security import detection
 
 SCRIPT_PATH = Path(__file__).resolve().parent.parent / "scripts" / "agentshield_test.py"
 
@@ -88,3 +93,42 @@ def test_evaluate_findings_all_pass():
     findings = evaluate()
     for finding in findings:
         assert finding.passed, f"{finding.name}: {finding.detail}"
+
+
+# The gate is only meaningful if it fails when the mechanism a check covers
+# stops working -- the earlier `>=` checks passed with detection disabled.
+
+
+def _finding(findings: list[Finding], name_prefix: str) -> Finding:
+    return next(f for f in findings if f.name.startswith(name_prefix))
+
+
+def test_gate_fails_when_detection_never_quarantines(monkeypatch):
+    monkeypatch.setattr(detection, "step", lambda state, config: (state, []))
+    assert not _finding(evaluate(), "high-sensitivity defense").passed
+
+
+def test_gate_fails_when_detection_quarantines_every_agent(monkeypatch):
+    def quarantine_everyone(state, config):
+        if not config.defense_enabled:
+            return state, []
+        nodes = {
+            node_id: replace(node, security_state=SecurityState.QUARANTINED)
+            for node_id, node in state.nodes.items()
+        }
+        return replace(state, nodes=nodes), []
+
+    monkeypatch.setattr(detection, "step", quarantine_everyone)
+    assert not _finding(evaluate(), "high-sensitivity defense").passed
+
+
+def test_gate_fails_when_the_recommended_remediation_changes_nothing(monkeypatch):
+    monkeypatch.setattr(
+        cli, "recommend", lambda *args, **kwargs: [Recommendation(description="no-op")]
+    )
+    assert not _finding(evaluate(), "recommended remediation").passed
+
+
+def test_gate_fails_when_no_remediation_is_recommended(monkeypatch):
+    monkeypatch.setattr(cli, "recommend", lambda *args, **kwargs: [])
+    assert not _finding(evaluate(), "recommended remediation").passed

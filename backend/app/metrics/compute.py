@@ -6,11 +6,12 @@ required (compromise_fraction, blast_radius_fraction, retained_utility,
 privileged_exposure, security_plane_integrity).
 
 Event-log metrics (attack_success_rate, false_quarantine_rate) count
-occurrences across a run's events and need the event sequence -- for a
-live experiment that's `runner.bus.since(-1)` (bounded by EventBus.
-RING_SIZE, the same bound every other live-runner consumer already lives
-with); a persisted run's full log works identically once a history
-equivalent is wired in (docs/PLAN.md §9, not yet built this session).
+occurrences across a run's whole event log. Both families of event-log
+metric are computed by folding events into an EventLogTally, whose memory is
+O(agents) rather than O(events): a live runner folds each batch as it
+publishes (ExperimentRunner.event_tally), so its metrics cover the whole run
+-- not just the EventBus ring, which stops holding a long run's start --
+while replay folds its full reconstructed log through the same arithmetic.
 
 Detection/containment latency (docs/PLAN.md §6) are event-log metrics too:
 the number of ticks between a node's tick_compromised and its first
@@ -24,7 +25,8 @@ value from an on-demand, possibly-empty event window.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, field
 
 from app.engine.state import SecurityState, WorldState
 from app.graph.analysis import blast_radius
@@ -93,61 +95,93 @@ def security_plane_integrity(graph: SecurityGraph) -> float:
     return healthy / len(plane_nodes)
 
 
+@dataclass
+class EventLogTally:
+    """Running fold of everything the event-log metrics read from a run's
+    events. Feeding it a log in any batching gives the same result as
+    feeding it the whole log at once."""
+
+    succeeded: int = 0
+    failed: int = 0
+    quarantined: int = 0
+    false_quarantined: int = 0
+    # First ANOMALY_DETECTED tick, and first legitimate AGENT_QUARANTINED
+    # tick, per agent -- insertion order is first-occurrence order.
+    first_detected: dict[str, int] = field(default_factory=dict)
+    first_quarantined: dict[str, int] = field(default_factory=dict)
+
+    @classmethod
+    def of(cls, events: Iterable[Event]) -> EventLogTally:
+        tally = cls()
+        tally.add(events)
+        return tally
+
+    def add(self, events: Iterable[Event]) -> None:
+        for e in events:
+            etype = e.event_type.value
+            if etype == "COMPROMISE_SUCCEEDED":
+                self.succeeded += 1
+            elif etype == "COMPROMISE_FAILED":
+                self.failed += 1
+            elif etype == "ANOMALY_DETECTED":
+                if e.agent_id is not None:
+                    self.first_detected.setdefault(e.agent_id, e.sim_tick)
+            elif etype == "AGENT_QUARANTINED":
+                self.quarantined += 1
+                if e.metadata.get("legitimate") is False:
+                    self.false_quarantined += 1
+                elif e.agent_id is not None:
+                    self.first_quarantined.setdefault(e.agent_id, e.sim_tick)
+
+    def attack_success_rate(self) -> float:
+        total = self.succeeded + self.failed
+        return (self.succeeded / total) if total else 0.0
+
+    def false_quarantine_rate(self) -> float:
+        if not self.quarantined:
+            return 0.0
+        return self.false_quarantined / self.quarantined
+
+    def detection_latency(self, state: WorldState) -> float | None:
+        """Mean ticks between a node's tick_compromised and its first
+        ANOMALY_DETECTED. None when no currently-compromised-or-recovered
+        node with a recorded tick_compromised has been detected yet."""
+        latencies = [
+            self.first_detected[node_id] - node.tick_compromised
+            for node_id, node in state.nodes.items()
+            if node.tick_compromised is not None and node_id in self.first_detected
+        ]
+        if not latencies:
+            return None
+        return sum(latencies) / len(latencies)
+
+    def containment_latency(self) -> float | None:
+        """Mean ticks between a node's first ANOMALY_DETECTED and its first
+        legitimate AGENT_QUARANTINED (metadata.legitimate is not False --
+        excludes the false-quarantine attack, which by definition has no
+        preceding detection to measure a containment response against).
+        None when no node has completed that transition yet."""
+        latencies = [
+            self.first_quarantined[node_id] - self.first_detected[node_id]
+            for node_id in self.first_quarantined
+            if node_id in self.first_detected
+        ]
+        if not latencies:
+            return None
+        return sum(latencies) / len(latencies)
+
+
 def attack_success_rate(events: Sequence[Event]) -> float:
-    succeeded = sum(1 for e in events if e.event_type.value == "COMPROMISE_SUCCEEDED")
-    failed = sum(1 for e in events if e.event_type.value == "COMPROMISE_FAILED")
-    total = succeeded + failed
-    return (succeeded / total) if total else 0.0
+    return EventLogTally.of(events).attack_success_rate()
 
 
 def false_quarantine_rate(events: Sequence[Event]) -> float:
-    quarantined = [e for e in events if e.event_type.value == "AGENT_QUARANTINED"]
-    if not quarantined:
-        return 0.0
-    false_ones = sum(1 for e in quarantined if e.metadata.get("legitimate") is False)
-    return false_ones / len(quarantined)
+    return EventLogTally.of(events).false_quarantine_rate()
 
 
 def detection_latency(state: WorldState, events: Sequence[Event]) -> float | None:
-    """Mean ticks between a node's tick_compromised and its first
-    ANOMALY_DETECTED. None when no currently-compromised-or-recovered node
-    with a recorded tick_compromised has been detected yet."""
-    first_detected: dict[str, int] = {}
-    for e in events:
-        if e.event_type.value == "ANOMALY_DETECTED" and e.agent_id is not None:
-            first_detected.setdefault(e.agent_id, e.sim_tick)
-
-    latencies = [
-        first_detected[node_id] - node.tick_compromised
-        for node_id, node in state.nodes.items()
-        if node.tick_compromised is not None and node_id in first_detected
-    ]
-    if not latencies:
-        return None
-    return sum(latencies) / len(latencies)
+    return EventLogTally.of(events).detection_latency(state)
 
 
 def containment_latency(events: Sequence[Event]) -> float | None:
-    """Mean ticks between a node's first ANOMALY_DETECTED and its first
-    legitimate AGENT_QUARANTINED (metadata.legitimate is not False --
-    excludes the false-quarantine attack, which by definition has no
-    preceding detection to measure a containment response against). None
-    when no node has completed that transition yet."""
-    first_detected: dict[str, int] = {}
-    first_quarantined: dict[str, int] = {}
-    for e in events:
-        if e.event_type.value == "ANOMALY_DETECTED" and e.agent_id is not None:
-            first_detected.setdefault(e.agent_id, e.sim_tick)
-        elif e.event_type.value == "AGENT_QUARANTINED" and e.agent_id is not None:
-            if e.metadata.get("legitimate") is False:
-                continue
-            first_quarantined.setdefault(e.agent_id, e.sim_tick)
-
-    latencies = [
-        first_quarantined[node_id] - first_detected[node_id]
-        for node_id in first_quarantined
-        if node_id in first_detected
-    ]
-    if not latencies:
-        return None
-    return sum(latencies) / len(latencies)
+    return EventLogTally.of(events).containment_latency()

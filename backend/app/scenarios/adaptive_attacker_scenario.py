@@ -14,8 +14,9 @@ adapt    -- next tick recomputes strategy fresh from the then-current
 
 This is an alternative attacker model to propagation_scenario, not a
 supplement to it: both own the sim_tick increment (mirroring
-app/engine/propagation.py::step exactly), so an experiment should select
-one or the other in active_scenarios, never both.
+app/engine/propagation.py::step exactly), so an experiment selects one or
+the other in active_scenarios, never both (POST /api/experiments rejects
+both -- app/scenarios/registry.py::active_scenarios_error).
 """
 
 from __future__ import annotations

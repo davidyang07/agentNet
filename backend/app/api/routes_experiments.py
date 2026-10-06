@@ -9,6 +9,7 @@ from app.orchestrator.registry import registry
 from app.orchestrator.runner import ExperimentRunner, InvalidTransitionError
 from app.persistence.registry import writer_registry
 from app.persistence.writer import PostgresWriter
+from app.scenarios.registry import active_scenarios_error
 from app.schemas.experiment import ExperimentConfig, ExperimentSummary, SpeedRequest
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,12 @@ router = APIRouter(prefix="/api/experiments", tags=["experiments"])
 
 @router.post("", response_model=ExperimentSummary, status_code=201)
 async def create_experiment(config: ExperimentConfig, request: Request) -> ExperimentSummary:
+    # Checked here rather than on ExperimentConfig, so configs persisted
+    # before this check still load for history/replay.
+    scenarios_error = active_scenarios_error(config.active_scenarios)
+    if scenarios_error is not None:
+        raise HTTPException(status_code=422, detail=scenarios_error)
+
     # Fail fast (docs/PHASE_2_PLAN.md §8): never construct a runner that can
     # never make a real model call. model_provider="mock" always succeeds --
     # it needs no external service.

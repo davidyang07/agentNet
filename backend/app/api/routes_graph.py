@@ -104,19 +104,19 @@ async def get_provenance(experiment_id: UUID, node_id: str) -> ProvenanceRespons
 async def get_metrics(experiment_id: UUID) -> MetricsResponse:
     runner = _runner_for(experiment_id)
     graph = build_security_graph(runner.state, runner.config)
-    # Bounded by EventBus.RING_SIZE, same limitation every other live-runner
-    # event consumer already lives with (docs/PLAN.md §6/§9).
-    events = runner.bus.since(-1) or []
+    # The runner's whole-run tally, not the EventBus ring: the ring stops
+    # holding a long run's start, which silently zeroed these metrics.
+    tally = runner.event_tally
     return MetricsResponse(
         compromise_fraction=metrics.compromise_fraction(runner.state),
         retained_utility=metrics.retained_utility(runner.state),
         blast_radius_fraction=metrics.blast_radius_fraction(graph),
         privileged_exposure=metrics.privileged_exposure(graph),
         security_plane_integrity=metrics.security_plane_integrity(graph),
-        attack_success_rate=metrics.attack_success_rate(events),
-        false_quarantine_rate=metrics.false_quarantine_rate(events),
-        detection_latency=metrics.detection_latency(runner.state, events),
-        containment_latency=metrics.containment_latency(events),
+        attack_success_rate=tally.attack_success_rate(),
+        false_quarantine_rate=tally.false_quarantine_rate(),
+        detection_latency=tally.detection_latency(runner.state),
+        containment_latency=tally.containment_latency(),
     )
 
 
