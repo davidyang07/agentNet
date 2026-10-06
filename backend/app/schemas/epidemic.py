@@ -5,6 +5,9 @@ class PrevalencePoint(BaseModel):
     tick: int
     infectious: int
     quarantined: int
+    # Healthy agents holding a legitimate signature (§14.4 C.4); 0 without
+    # immune memory.
+    immune: int
 
 
 class REffectivePoint(BaseModel):

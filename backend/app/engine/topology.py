@@ -1,10 +1,13 @@
+from dataclasses import replace
+
 import networkx as nx
 
 from app.engine import strains
 from app.engine.rng import rng
-from app.engine.state import AgentNode, SecurityState, WorldState
+from app.engine.state import AgentNode, SecurityState, Signature, WorldState
 from app.schemas.events import EventDraft, EventType
 from app.schemas.experiment import ExperimentConfig
+from app.security import immunity
 
 _TYPE_LETTERS = "abcdefghijklmnopqrstuvwxyz"
 
@@ -36,6 +39,20 @@ def _select_real_agents(sorted_ids: list[str], degree: dict[str, int], count: in
     return set(ranked[:count])
 
 
+def _place(
+    ids: list[str], degree: dict[str, int], placement: str, config: ExperimentConfig, purpose: str
+) -> list[str]:
+    """`ids` in placement order: hubs (highest degree first) or periphery
+    (lowest first), ties by lowest id; or a keyed shuffle for random."""
+    if placement == "hubs":
+        return sorted(ids, key=lambda n: (-degree[n], n))
+    if placement == "periphery":
+        return sorted(ids, key=lambda n: (degree[n], n))
+    ranked = list(ids)
+    rng(config.seed, 0, "topology", purpose).shuffle(ranked)
+    return ranked
+
+
 def _select_inference_capable(
     sorted_ids: list[str], degree: dict[str, int], config: ExperimentConfig, always: set[str]
 ) -> set[str]:
@@ -43,20 +60,26 @@ def _select_inference_capable(
     agents can run inference. The seed and real agents always can -- every
     run has a propagator, and a real agent is a model -- and count toward
     the total; the rest are placed at random, on the hubs, or on the
-    periphery (by degree, ties by lowest id). At the default fraction every
-    agent is capable and nothing is drawn."""
+    periphery. At the default fraction every agent is capable and nothing is
+    drawn."""
     if config.inference_fraction >= 1.0:
         return set(sorted_ids)
     count = round(config.inference_fraction * len(sorted_ids))
     others = [n for n in sorted_ids if n not in always]
-    if config.inference_placement == "hubs":
-        ranked = sorted(others, key=lambda n: (-degree[n], n))
-    elif config.inference_placement == "periphery":
-        ranked = sorted(others, key=lambda n: (degree[n], n))
-    else:
-        ranked = others
-        rng(config.seed, 0, "topology", "inference_placement").shuffle(ranked)
+    ranked = _place(others, degree, config.inference_placement, config, "inference_placement")
     return always | set(ranked[: max(0, count - len(always))])
+
+
+def _select_immune_participants(
+    sorted_ids: list[str], degree: dict[str, int], config: ExperimentConfig
+) -> set[str]:
+    """docs/PLAN.md §14.4 C.4: round(immunity_coverage x agents) agents take
+    part in shared immune memory, placed like inference capability."""
+    if not config.immunity_enabled:
+        return set()
+    count = round(config.immunity_coverage * len(sorted_ids))
+    ranked = _place(sorted_ids, degree, config.immunity_placement, config, "immunity_placement")
+    return set(ranked[:count])
 
 
 def build_world_from_agents(
@@ -94,6 +117,7 @@ def build_world_from_agents(
         sorted_ids, degree, config, always={seed_node} | real_agent_ids
     )
     patient_zero = strains.patient_zero_strain(config) if strains.tracked(config) else None
+    participants = _select_immune_participants(sorted_ids, degree, config)
 
     nodes: dict[str, AgentNode] = {}
     for n in sorted_ids:
@@ -110,6 +134,7 @@ def build_world_from_agents(
             confidential_token=_generate_confidential_token(config.seed, n) if is_real else None,
             inference_capable=n in capable,
             strain=patient_zero if n == seed_node else None,
+            immune_participant=n in participants,
         )
 
     world = WorldState(tick=0, nodes=nodes, edges=tuple(sorted(edge_set)))
@@ -119,6 +144,8 @@ def build_world_from_agents(
         metadata: dict[str, object] = {"software_type": types[n]}
         if config.inference_fraction < 1.0:
             metadata["inference_capable"] = n in capable
+        if config.immunity_enabled:
+            metadata["immune_participant"] = n in participants
         drafts.append(
             EventDraft(
                 sim_tick=0,
@@ -135,6 +162,14 @@ def build_world_from_agents(
             metadata={"initial_compromise": True},
         )
     )
+
+    if config.immunity_enabled and config.preseed_patient_zero_signature:
+        # [S1]'s red-team pre-seeding: held from tick 0, before any attack.
+        assert patient_zero is not None
+        preseeded = Signature(vector=patient_zero, legitimate=True, adopt_tick=0, announced=True)
+        drafts.append(immunity.published_draft(config, preseeded, None, 0, preseeded=True))
+        drafts.append(immunity.received_draft(config, preseeded, len(participants), 0))
+        world = replace(world, signatures=(preseeded,))
 
     return world, drafts
 

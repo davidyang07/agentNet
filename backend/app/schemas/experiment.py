@@ -100,9 +100,25 @@ class ExperimentConfig(BaseModel):
     mutation_rate: float = Field(0.0, ge=0.0, le=1.0)
     mutation_bits: int = Field(1, ge=1, le=64)
 
+    # Shared immune memory (docs/PLAN.md §14.4 C.4, after [S1] and [S2]): a
+    # detection publishes the detected strain as a signature; participants
+    # (immunity_coverage of the agents, placed by immunity_placement) hold it
+    # signature_delay_ticks later and block attacks whose strain is within
+    # signature_radius bits of a held signature. Each tick every healthy
+    # participant also screens benign_probes_per_tick benign vectors, which
+    # measures the autoimmune cost. Off by default.
+    immunity_enabled: bool = False
+    immunity_coverage: float = Field(1.0, ge=0.0, le=1.0)
+    immunity_placement: Literal["random", "hubs", "periphery"] = "random"
+    signature_radius: int = Field(0, ge=0, le=256)
+    signature_delay_ticks: int = Field(1, ge=0, le=50)
+    # [S1]'s red-team pre-seeding: patient zero's strain is held from tick 0.
+    preseed_patient_zero_signature: bool = False
+    benign_probes_per_tick: int = Field(1, ge=0, le=10)
+
     @model_validator(mode="after")
     def _distances_fit_the_strain_length(self) -> "ExperimentConfig":
-        for name in ("strain_benign_distance", "mutation_bits"):
+        for name in ("strain_benign_distance", "mutation_bits", "signature_radius"):
             if getattr(self, name) > self.signature_bits:
                 raise ValueError(f"{name} cannot exceed signature_bits ({self.signature_bits})")
         return self

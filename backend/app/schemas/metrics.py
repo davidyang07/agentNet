@@ -25,3 +25,7 @@ class MetricsResponse(BaseModel):
     # Distinct worm strains among infected agents (§14.4 C.3); None unless
     # strains are tracked.
     strains_observed: int | None = None
+    # Shared immune memory (§14.4 C.4, defined in §6); None unless it is on.
+    immunity_coverage: float | None = None
+    signature_block_rate: float | None = None
+    benign_block_rate: float | None = None

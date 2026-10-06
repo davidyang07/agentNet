@@ -804,6 +804,42 @@ export interface components {
              * @default 1
              */
             mutation_bits: number;
+            /**
+             * Immunity Enabled
+             * @default false
+             */
+            immunity_enabled: boolean;
+            /**
+             * Immunity Coverage
+             * @default 1
+             */
+            immunity_coverage: number;
+            /**
+             * Immunity Placement
+             * @default random
+             * @enum {string}
+             */
+            immunity_placement: "random" | "hubs" | "periphery";
+            /**
+             * Signature Radius
+             * @default 0
+             */
+            signature_radius: number;
+            /**
+             * Signature Delay Ticks
+             * @default 1
+             */
+            signature_delay_ticks: number;
+            /**
+             * Preseed Patient Zero Signature
+             * @default false
+             */
+            preseed_patient_zero_signature: boolean;
+            /**
+             * Benign Probes Per Tick
+             * @default 1
+             */
+            benign_probes_per_tick: number;
         };
         /** ExperimentDetail */
         ExperimentDetail: {
@@ -962,6 +998,12 @@ export interface components {
             peak_tick?: number | null;
             /** Strains Observed */
             strains_observed?: number | null;
+            /** Immunity Coverage */
+            immunity_coverage?: number | null;
+            /** Signature Block Rate */
+            signature_block_rate?: number | null;
+            /** Benign Block Rate */
+            benign_block_rate?: number | null;
         };
         /**
          * NodeType
@@ -994,6 +1036,8 @@ export interface components {
             infectious: number;
             /** Quarantined */
             quarantined: number;
+            /** Immune */
+            immune: number;
         };
         /** ProvenanceResponse */
         ProvenanceResponse: {

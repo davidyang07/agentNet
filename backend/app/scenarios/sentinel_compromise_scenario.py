@@ -22,12 +22,15 @@ test's expected output changes.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from app.engine.rng import rng
 from app.engine.state import SecurityState, WorldState
 from app.graph.builder import build_security_graph
 from app.graph.types import EdgeType, NodeType
 from app.schemas.events import EventDraft, EventType
 from app.schemas.experiment import ExperimentConfig
+from app.security import immunity
 
 
 def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[EventDraft]]:
@@ -74,7 +77,19 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
     compromised_sentinel_ids = sorted(
         s.id for s in sentinels if s.id in newly_compromised
     )
+    signatures = list(state.signatures)
     for sentinel_id in compromised_sentinel_ids:
+        if config.immunity_enabled:
+            # docs/PLAN.md §14.4 C.4: with immune memory on, the poisoned
+            # signature is a real, benign-looking vector participants adopt
+            # -- it stops no worm, but blocks legitimate traffic.
+            vector = immunity.benign_vector(config, state.tick, sentinel_id, "poison_signature")
+            published = immunity.publish(
+                signatures, config, state.tick, vector, legitimate=False, agent_id=sentinel_id
+            )
+            if published is not None:
+                drafts.append(published)
+            continue
         drafts.append(
             EventDraft(
                 sim_tick=state.tick,
@@ -84,14 +99,15 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
             )
         )
 
-    if newly_compromised == state.compromised_graph_nodes:
+    if newly_compromised == state.compromised_graph_nodes and len(signatures) == len(
+        state.signatures
+    ):
         return state, drafts
 
-    new_state = WorldState(
-        tick=state.tick,
-        nodes=state.nodes,
-        edges=state.edges,
+    new_state = replace(
+        state,
         compromised_graph_nodes=frozenset(newly_compromised),
+        signatures=tuple(signatures),
     )
     return new_state, drafts
 

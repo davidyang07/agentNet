@@ -8,6 +8,7 @@ import json
 import uuid
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 
 from app.db import create_pool
@@ -264,7 +265,25 @@ def test_history_endpoints_503_when_pool_unavailable():
         assert client.get(f"/api/experiments/{fake_id}/detail").status_code == 503
 
 
-def test_replay_graph_metrics_remediation_match_a_live_equivalent_run():
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {},
+        # Shared immune memory, strains and poisoning (PLAN 14.4 C.3-C.4),
+        # whose metrics come from both the state and the event log.
+        {
+            "immunity_enabled": True,
+            "immunity_coverage": 0.6,
+            "mutation_rate": 0.4,
+            "signature_radius": 2,
+            "preseed_patient_zero_signature": True,
+            "sentinel_compromise_rate": 0.5,
+            "active_scenarios": ["propagation", "sentinel_compromise"],
+        },
+    ],
+    ids=["default", "immune_memory"],
+)
+def test_replay_graph_metrics_remediation_match_a_live_equivalent_run(extra):
     # Same config run twice: once through the live path (registry + /graph,
     # /metrics, /remediation), once persisted and read back through the new
     # /replay/* endpoints -- since both reconstruct the exact same
@@ -275,6 +294,7 @@ def test_replay_graph_metrics_remediation_match_a_live_equivalent_run():
         "p_same": 0.3,
         "max_ticks": 10,
         "sentinel_count": 1,
+        **extra,
     }
 
     async def setup() -> ExperimentRunner:
@@ -323,6 +343,9 @@ def test_replay_graph_metrics_remediation_match_a_live_equivalent_run():
             assert replay_remediation.json() == live_remediation
             assert replay_epidemic.json() == live_epidemic
             assert live_epidemic["prevalence"], "the comparison must cover a real curve"
+            if extra:
+                assert live_metrics["immunity_coverage"] is not None
+                assert any(p["immune"] for p in live_epidemic["prevalence"])
     finally:
         asyncio.run(_cleanup(runner.experiment_id))
 

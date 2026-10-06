@@ -84,6 +84,11 @@ edges — and scenarios are pluggable via the `active_scenarios` config field.
   can run inference. A compromised agent that can't is a dead end: it never attacks.
 - **Worm strains** — with `mutation_rate > 0`, every infection carries a `signature_bits`-bit strain
   that may mutate on each transmission, starting `strain_benign_distance` bits from benign behaviour.
+- **Shared immune memory** — with `immunity_enabled`, a detection publishes the worm's strain as a
+  signature. Participating agents (`immunity_coverage`, placed at random, on hubs or on the
+  periphery) adopt it after `signature_delay_ticks`, and block attacks whose strain is within
+  `signature_radius` bits. A wider radius catches more variants and blocks more benign traffic
+  (`benign_block_rate`). A subverted sentinel's poisoned signatures now cost real benign traffic.
 - **Analysis** — `GET /api/experiments/{id}/graph` and
   `.../analysis/{attack-paths,blast-radius,critical-nodes,provenance}` compute reachability, blast
   radius, choke points, and compromise provenance on demand from the live experiment.

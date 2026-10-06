@@ -51,6 +51,21 @@ CONFIGS: dict[str, ExperimentConfig] = {
     "strain_mutation": ExperimentConfig(
         seed=12, mutation_rate=0.3, mutation_bits=2, real_agent_count=6, p_same=0.5, p_cross=0.2
     ),
+    # docs/PLAN.md §14.4 C.4: immune memory with poisoning and real agents
+    "immune_memory": ExperimentConfig(
+        seed=13,
+        immunity_enabled=True,
+        immunity_coverage=0.7,
+        mutation_rate=0.3,
+        signature_radius=3,
+        benign_probes_per_tick=2,
+        real_agent_count=6,
+        p_same=0.5,
+        p_cross=0.2,
+        sentinel_count=2,
+        sentinel_compromise_rate=0.3,
+        active_scenarios=["propagation", "sentinel_compromise", "prompt_injection"],
+    ),
 }
 
 DETERMINISM_FIELDS = (

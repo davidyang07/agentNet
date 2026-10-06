@@ -29,6 +29,7 @@ from app.engine.rng import rng
 from app.engine.state import SecurityState, WorldState
 from app.schemas.events import EventDraft, EventType
 from app.schemas.experiment import ExperimentConfig
+from app.security import immunity
 
 
 def _detection_rate(state: WorldState) -> float:
@@ -83,7 +84,6 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
 
         same = state.nodes[target].software_type == source_node.software_type
         p = config.p_same if same else config.p_cross
-        draw = rng(config.seed, state.tick, target, f"adaptive:{source}").random()
 
         drafts.append(
             EventDraft(
@@ -95,6 +95,15 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
             )
         )
 
+        if immunity.blocks(state, config, target, source_node.strain, state.tick):
+            drafts.append(
+                immunity.blocked_draft(
+                    state.tick, source, target, {"probability": p, "strategy": strategy}
+                )
+            )
+            continue
+
+        draw = rng(config.seed, state.tick, target, f"adaptive:{source}").random()
         if draw < p:
             already_claimed = target in claims
             metadata: dict[str, object] = {"probability": p, "strategy": strategy}
@@ -137,12 +146,7 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
             strain=claimed_strains.get(target),
         )
 
-    new_state = WorldState(
-        tick=state.tick + 1,
-        nodes=new_nodes,
-        edges=state.edges,
-        compromised_graph_nodes=state.compromised_graph_nodes,
-    )
+    new_state = replace(state, tick=state.tick + 1, nodes=new_nodes)
     return new_state, drafts
 
 

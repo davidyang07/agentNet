@@ -5,6 +5,7 @@ from app.engine.rng import rng
 from app.engine.state import AgentNode, SecurityState, WorldState
 from app.schemas.events import EventDraft, EventType
 from app.schemas.experiment import ExperimentConfig
+from app.security import immunity
 
 
 def is_active_source(node: AgentNode, tick: int) -> bool:
@@ -66,7 +67,6 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
                 continue
             same = state.nodes[target].software_type == source_type
             p = config.p_same if same else config.p_cross
-            draw = rng(config.seed, state.tick, target, f"infect:{source}").random()
 
             drafts.append(
                 EventDraft(
@@ -78,6 +78,15 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
                 )
             )
 
+            # docs/PLAN.md §14.4 C.4: immune memory stops the attack before
+            # any draw.
+            if immunity.blocks(state, config, target, source_node.strain, state.tick):
+                drafts.append(
+                    immunity.blocked_draft(state.tick, source, target, {"probability": p})
+                )
+                continue
+
+            draw = rng(config.seed, state.tick, target, f"infect:{source}").random()
             if draw < p:
                 already_claimed = target in claims
                 metadata: dict[str, object] = {"probability": p}
@@ -120,12 +129,7 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
             strain=claimed_strains.get(target),
         )
 
-    new_state = WorldState(
-        tick=state.tick + 1,
-        nodes=new_nodes,
-        edges=state.edges,
-        compromised_graph_nodes=state.compromised_graph_nodes,
-    )
+    new_state = replace(state, tick=state.tick + 1, nodes=new_nodes)
     return new_state, drafts
 
 

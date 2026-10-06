@@ -131,12 +131,14 @@ def _prevalence_log() -> list[Event]:
 
 def test_prevalence_is_folded_per_tick_and_fills_quiet_ticks():
     tally = EventLogTally.of(_prevalence_log())
+    # (tick, infectious, quarantined, immune); nothing is immune without
+    # immune memory (C.4).
     assert tally.prevalence(final_tick=4) == [
-        (0, 3, 0),
-        (1, 2, 2),  # a quarantined; h falsely quarantined while healthy
-        (2, 3, 2),  # a duplicate win on b is not a new infection
-        (3, 3, 2),
-        (4, 3, 2),
+        (0, 3, 0, 0),
+        (1, 2, 2, 0),  # a quarantined; h falsely quarantined while healthy
+        (2, 3, 2, 0),  # a duplicate win on b is not a new infection
+        (3, 3, 2, 0),
+        (4, 3, 2, 0),
     ]
 
 
@@ -153,7 +155,7 @@ def test_a_snapshot_does_not_see_later_events():
     tally = EventLogTally.of(log[:3])
     frozen = tally.snapshot()
     tally.add(log[3:])
-    assert frozen.prevalence(1) == [(0, 3, 0), (1, 3, 0)]
+    assert frozen.prevalence(1) == [(0, 3, 0, 0), (1, 3, 0, 0)]
 
 
 def test_report_on_a_simulated_run_is_internally_consistent():

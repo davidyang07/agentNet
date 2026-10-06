@@ -122,8 +122,15 @@ class EventLogTally:
     # so a tick's row is final once an event from a later tick arrives.
     infectious_ids: set[str] = field(default_factory=set)
     quarantined_ids: set[str] = field(default_factory=set)
-    prevalence_rows: list[tuple[int, int, int]] = field(default_factory=list)
+    prevalence_rows: list[tuple[int, int, int, int]] = field(default_factory=list)
     open_tick: int | None = None
+    # Shared immune memory (PLAN 14.4 C.4): whether it is on (AGENT_CREATED
+    # says who participates only then), who participates, whether any
+    # legitimate signature has been adopted, and attacks it blocked.
+    immunity_on: bool = False
+    participant_ids: set[str] = field(default_factory=set)
+    legitimate_adopted: bool = False
+    blocked_by_signature: int = 0
 
     def snapshot(self) -> EventLogTally:
         """An independent copy, safe to read off the event loop while the
@@ -135,6 +142,7 @@ class EventLogTally:
             infectious_ids=set(self.infectious_ids),
             quarantined_ids=set(self.quarantined_ids),
             prevalence_rows=list(self.prevalence_rows),
+            participant_ids=set(self.participant_ids),
         )
 
     @classmethod
@@ -158,6 +166,16 @@ class EventLogTally:
             elif etype == "COMPROMISE_FAILED":
                 if e.metadata.get("gateway_error"):
                     self.gateway_failures += 1
+                if e.metadata.get("blocked_by_signature"):
+                    self.blocked_by_signature += 1
+            elif etype == "AGENT_CREATED":
+                if "immune_participant" in e.metadata:
+                    self.immunity_on = True
+                    if e.metadata["immune_participant"] and e.agent_id is not None:
+                        self.participant_ids.add(e.agent_id)
+            elif etype == "THREAT_SIGNATURE_RECEIVED":
+                if e.metadata.get("legitimate"):
+                    self.legitimate_adopted = True
             elif etype == "ANOMALY_DETECTED":
                 if e.agent_id is not None:
                     self.first_detected.setdefault(e.agent_id, e.sim_tick)
@@ -176,17 +194,23 @@ class EventLogTally:
             self.open_tick = tick
             return
         for closed in range(self.open_tick, tick):
-            self.prevalence_rows.append(
-                (closed, len(self.infectious_ids), len(self.quarantined_ids))
-            )
+            self.prevalence_rows.append((closed, *self._counts()))
         self.open_tick = max(self.open_tick, tick)
 
-    def prevalence(self, final_tick: int) -> list[tuple[int, int, int]]:
-        """(tick, infectious, quarantined) at the end of every tick through
-        final_tick. A tick with no events repeats the one before it."""
+    def _counts(self) -> tuple[int, int, int]:
+        """Infectious, quarantined, and immune: healthy participants holding a
+        legitimate signature (every participant holds every adopted one)."""
+        immune = 0
+        if self.legitimate_adopted:
+            immune = len(self.participant_ids - self.infectious_ids - self.quarantined_ids)
+        return len(self.infectious_ids), len(self.quarantined_ids), immune
+
+    def prevalence(self, final_tick: int) -> list[tuple[int, int, int, int]]:
+        """(tick, infectious, quarantined, immune) at the end of every tick
+        through final_tick. A tick with no events repeats the one before it."""
         if self.open_tick is None:
             return []
-        current = (len(self.infectious_ids), len(self.quarantined_ids))
+        current = self._counts()
         return self.prevalence_rows + [
             (tick, *current) for tick in range(self.open_tick, max(self.open_tick, final_tick) + 1)
         ]
