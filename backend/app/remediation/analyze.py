@@ -41,7 +41,13 @@ def recommend(
     compromise_fraction: float,
     security_plane_integrity: float = 1.0,
 ) -> list[Recommendation]:
-    if security_plane_integrity < 1.0 and 0 < config.sentinel_count < MAX_SENTINEL_COUNT:
+    # Only with the defense on: with it off, detection never runs, so a
+    # sentinel can't help, and "enable the defense" (below) is the fix.
+    if (
+        config.defense_enabled
+        and security_plane_integrity < 1.0
+        and 0 < config.sentinel_count < MAX_SENTINEL_COUNT
+    ):
         new_count = min(MAX_SENTINEL_COUNT, config.sentinel_count + 1)
         return [
             Recommendation(

@@ -68,8 +68,17 @@ def test_sentinel_recommendation_is_capped_at_five():
     assert recommend(config, compromise_fraction=0.0, security_plane_integrity=0.5) == []
 
 
-def test_sentinel_recommendation_takes_priority_over_the_compromise_fraction_rules():
+def test_disabled_defense_is_recommended_before_any_sentinel_change():
+    # With the defense off, detection never runs, so a sentinel can't help:
+    # the benchmark audit measured that recommendation leaving retained
+    # utility unchanged and integrity worse (PLAN 14.2 A.4).
     config = ExperimentConfig(seed=1, node_count=25, sentinel_count=1, defense_enabled=False)
+    recs = recommend(config, compromise_fraction=0.9, security_plane_integrity=0.5)
+    assert recs[0].config_diff == {"defense_enabled": True}
+
+
+def test_sentinel_recommendation_takes_priority_over_sensitivity_when_defense_is_on():
+    config = ExperimentConfig(seed=1, node_count=25, sentinel_count=1, defense_enabled=True)
     recs = recommend(config, compromise_fraction=0.9, security_plane_integrity=0.5)
     assert recs[0].config_diff == {"sentinel_count": 2}
 
