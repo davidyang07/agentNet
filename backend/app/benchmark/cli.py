@@ -1,5 +1,6 @@
 """agentshield test: runs a fixed, fast subset of the benchmark matrix -- the
-defense comparison and the canonical remediation before/after -- and checks
+defense comparison, the canonical remediation before/after, and the canonical
+immunity case (docs/PLAN.md §14.4 C.6) -- and checks
 concrete pass/fail criteria. Excludes the 2,500-agent scale run and the full
 14-scenario attack matrix (too slow for a CI gate) -- those stay a manual
 `make benchmark` command; see README's benchmark section.
@@ -18,9 +19,12 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 
+from app.benchmark.epidemiology import IMMUNITY_BASE, SEEDS, averaged
 from app.benchmark.matrix import DEFENSE_BASE_ATTACK, DEFENSE_VARIANTS, REMEDIATION_CASE
 from app.benchmark.runner import run_preset
 from app.remediation.analyze import recommend
+
+GATE_SEEDS = SEEDS[:6]
 
 
 @dataclass
@@ -93,6 +97,25 @@ def evaluate() -> list[Finding]:
             name="recommended remediation measurably improves the remediation case",
             passed=passed,
             detail=detail,
+            duration_s=time.monotonic() - start,
+        )
+    )
+
+    # docs/PLAN.md §14.4 C.6: the canonical immunity case. Pre-seeded immune
+    # memory at 90% coverage, above the ~73% herd-immunity threshold for this
+    # graph, must hold Reff below 1 -- and the same run with no participants
+    # must not, so it is immune memory doing it.
+    start = time.monotonic()
+    protected = averaged(IMMUNITY_BASE | {"immunity_coverage": 0.9}, seeds=GATE_SEEDS)
+    control = averaged(IMMUNITY_BASE | {"immunity_coverage": 0.0}, seeds=GATE_SEEDS)
+    findings.append(
+        Finding(
+            name="immune memory above the herd-immunity threshold holds Reff below 1",
+            passed=protected["r0_estimate"] < 1 <= control["r0_estimate"],
+            detail=(
+                f"Reff {protected['r0_estimate']:.2f} at 90% coverage, "
+                f"{control['r0_estimate']:.2f} with no participants"
+            ),
             duration_s=time.monotonic() - start,
         )
     )

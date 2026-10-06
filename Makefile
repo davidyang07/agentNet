@@ -1,4 +1,4 @@
-.PHONY: dev up test lint lock types verify-determinism migrate benchmark benchmark-audit golden-demo import-demo agentshield-test
+.PHONY: dev up test lint lock types verify-determinism migrate benchmark benchmark-audit golden-demo import-demo agentshield-test epidemiology
 
 # Hot reload: the images plus docker-compose.dev.yml's source mounts.
 dev:
@@ -75,6 +75,14 @@ golden-demo:
 # backend/.artifacts/external_import/result.json.
 import-demo:
 	cd backend && .venv/bin/python scripts/run_external_import_demo.py
+
+# The epidemiology suite (docs/PLAN.md §14.4 C.6): five sweeps checked against
+# the qualitative predictions of the prompt-worm papers -- inference
+# thresholds, the immunity trade-off, signature delay, immunization placement,
+# and immune-memory poisoning. Exit 1 if a check fails. Writes
+# backend/.artifacts/epidemiology/{results.json,report.md}. About 2.5 minutes.
+epidemiology:
+	cd backend && .venv/bin/python scripts/run_epidemiology.py
 
 # CI-friendly pass/fail gate over a fast subset of the benchmark suite: the
 # defense comparison and the remediation before/after (Productization).

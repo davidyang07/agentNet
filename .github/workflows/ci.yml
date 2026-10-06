@@ -176,3 +176,28 @@ jobs:
       - name: Service logs
         if: failure()
         run: docker compose logs
+
+  # docs/PLAN.md §14.4 C.6: the epidemiology suite, in full, checked against
+  # the qualitative predictions of [S1] and [S2]. Its measured tables are
+  # uploaded whether or not a check fails.
+  epidemiology:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install backend
+        run: |
+          python3 -m venv backend/.venv
+          backend/.venv/bin/pip install -r backend/requirements.lock
+          backend/.venv/bin/pip install --no-deps -e backend
+      - name: Epidemiology suite
+        working-directory: backend
+        run: .venv/bin/python scripts/run_epidemiology.py
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: epidemiology-report
+          path: backend/.artifacts/epidemiology/

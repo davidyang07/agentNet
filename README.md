@@ -179,6 +179,7 @@ make benchmark-audit  # the full 14 × 7 cross product plus 21 standalone preset
 make golden-demo      # one run narrated from its event log: attack → subversion → fix → re-test
 make import-demo      # imports a real LangGraph app's topology and attacks it
 make agentshield-test # CI pass/fail gate over a fast subset; --json for machine-readable output
+make epidemiology     # five sweeps checked against the prompt-worm papers' predictions
 ```
 
 All are seeded, reproducible, and make zero real provider calls by default. The benchmark covers
@@ -190,8 +191,13 @@ improvement — naming the recommendations that *worsened* a metric alongside th
 The golden demo leads its report with a curated 12-line "Key beats" summary above the tick-by-tick
 narrative, and reports its re-test as measured — in its own scenario the recommended fix makes
 security-plane integrity *worse*, and it says so. `agentshield-test` checks that the defense beats no
-defense and that a remediation measurably helps its canonical case, strictly enough to fail when
-either mechanism is broken. Reports land in `backend/.artifacts/`.
+defense, that a remediation measurably helps its canonical case, and that immune memory above the
+herd-immunity threshold holds Reff below 1, each strictly enough to fail when its mechanism is
+broken. The epidemiology suite sweeps the inference threshold, the immunity trade-off
+(coverage × radius × mutation), signature delay, immunization placement, and immune-memory
+poisoning. It checks each against the qualitative predictions of Barnathan's papers, and
+`docs/PLAN.md` §14.4 records the measured tables, including where they qualify the papers. Reports
+land in `backend/.artifacts/`.
 
 ## Verification
 
