@@ -1,0 +1,22 @@
+# Hot reload for development, layered on docker-compose.yml (`make dev`):
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+# Source is mounted into the containers, so edits apply without a rebuild.
+services:
+  backend:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    build:
+      # The dependency stage: the dev server needs devDependencies and the
+      # source, not a production build.
+      target: deps
+    command: ["npx", "next", "dev", "-H", "0.0.0.0"]
+    environment:
+      NEXT_PUBLIC_BACKEND_URL: http://localhost:8000
+      NEXT_PUBLIC_BACKEND_WS_URL: ws://localhost:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next

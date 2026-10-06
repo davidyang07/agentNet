@@ -1,7 +1,13 @@
-.PHONY: dev test lint lock types verify-determinism migrate benchmark benchmark-audit golden-demo import-demo agentshield-test
+.PHONY: dev up test lint lock types verify-determinism migrate benchmark benchmark-audit golden-demo import-demo agentshield-test
 
+# Hot reload: the images plus docker-compose.dev.yml's source mounts.
 dev:
-	docker compose up --build
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+
+# The images as built, recording the commit as every run's app_version
+# ("-dirty" when the working tree has uncommitted changes).
+up:
+	GIT_SHA=$$(git rev-parse HEAD)$$(git diff --quiet HEAD || echo -dirty) docker compose up --build
 
 # Backend tests hit a real Postgres (persistence integration tests) -- run
 # against a dedicated agentnet_test database, created if absent, so the
