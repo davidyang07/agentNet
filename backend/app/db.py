@@ -7,6 +7,10 @@ from app.config import Settings, get_settings
 
 POOL_MIN_SIZE = 2
 POOL_MAX_SIZE = 10
+# A database that accepts connections but never answers must not hang the
+# server: every new connection and every statement is time-bounded.
+POOL_CONNECT_TIMEOUT_S = 5.0
+POOL_COMMAND_TIMEOUT_S = 10.0
 
 
 async def create_pool(settings: Settings) -> asyncpg.Pool:
@@ -18,6 +22,8 @@ async def create_pool(settings: Settings) -> asyncpg.Pool:
         database=settings.postgres_db,
         min_size=POOL_MIN_SIZE,
         max_size=POOL_MAX_SIZE,
+        timeout=POOL_CONNECT_TIMEOUT_S,
+        command_timeout=POOL_COMMAND_TIMEOUT_S,
     )
 
 
