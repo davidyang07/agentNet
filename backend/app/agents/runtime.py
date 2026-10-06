@@ -1,4 +1,4 @@
-"""The Agent Runtime (docs/BRIEF.md §6, docs/PHASE_2_PLAN.md §2, §7): the one
+"""The Agent Runtime (docs/BRIEF.md §6): the one
 place real-agent LLM interaction happens. Deliberately NOT part of
 app/engine/ -- a real model call is irreducible async I/O, which
 app/engine/propagation.py::step()'s purity contract forbids. Called by
@@ -27,7 +27,7 @@ async def real_agent_step(
     Same (state, config) -> (state', drafts) shape as propagation.step(),
     but explicitly async and, with a real provider behind the gateway, not
     reproducible byte-for-byte -- only the deterministic mock-provider path
-    is (docs/PHASE_2_PLAN.md §9). Never raises for a gateway/provider
+    is. Never raises for a gateway/provider
     failure: ModelGateway already degrades that to a `None` response, which
     this function turns into a COMPROMISE_FAILED draft, same as a
     probabilistic miss.

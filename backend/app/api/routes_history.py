@@ -2,7 +2,7 @@
 in currently-live (in-registry) experiments -- conflating the in-memory
 registry and Postgres as one listing authority would be exactly the
 dual-source-of-truth risk this design otherwise avoids (an open product
-question, not resolved here -- see docs/PHASE_1_5_PLAN.md §17)."""
+question, not resolved here)."""
 
 import asyncio
 import base64

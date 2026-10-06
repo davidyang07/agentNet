@@ -1,8 +1,8 @@
 // Pure control-lifecycle state, mirroring the F3 backend's own transition
-// table (docs/M1_F3_PLAN.md §3) client-side for UX responsiveness. The
+// table client-side for UX responsiveness. The
 // backend remains sole authority (BRIEF §6) — this reducer only decides
 // what the UI shows and which actions it lets a user attempt; it never
-// simulates tick/pause behavior itself (docs/M1_F5_PLAN.md §4/§6).
+// simulates tick/pause behavior itself.
 //
 // No React/DOM dependency, so it's unit-testable directly, same discipline
 // as lib/stream/reducer.ts.

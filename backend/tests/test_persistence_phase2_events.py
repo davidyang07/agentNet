@@ -1,9 +1,8 @@
-"""Proves docs/PHASE_2_PLAN.md §10's central claim structurally, not just by
-assertion: MODEL_REQUESTED/MODEL_RESPONDED/TOOL_EXECUTED events round-trip
-through PostgresWriter and the existing history endpoints with zero
-persistence-layer code changes -- because event_type is TEXT and metadata is
-unconstrained JSONB (docs/PHASE_1_5_PLAN.md §4), not because anything new
-was added to accommodate them.
+"""Proves structurally, not just by assertion, that
+MODEL_REQUESTED/MODEL_RESPONDED/TOOL_EXECUTED events round-trip through
+PostgresWriter and the existing history endpoints with zero persistence-layer
+code changes -- because event_type is TEXT and metadata is unconstrained
+JSONB, not because anything new was added to accommodate them.
 """
 
 import asyncio
@@ -100,8 +99,7 @@ def test_model_and_tool_events_persist_and_page_through_events_endpoint():
             assert "latency_ms" in model_responded["metadata"]
 
             # No confidential_token or raw prompt/response text anywhere in
-            # any persisted, API-readable event metadata (docs/PHASE_2_PLAN.md
-            # §10's logging/persistence discipline).
+            # any persisted, API-readable event metadata.
             for e in all_events:
                 assert "confidential_token" not in e["metadata"]
                 assert "system_prompt" not in e["metadata"]

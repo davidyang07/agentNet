@@ -28,14 +28,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # One shared httpx.AsyncClient for the process lifetime, mirroring
     # app.state.pg_pool -- VLLMProvider instances (one per real-agent
     # experiment) all share this single connection pool while each
-    # experiment's ModelGateway keeps its own semaphore/budget state
-    # (docs/PHASE_2_PLAN.md §3). Construction can't fail (no eager
+    # experiment's ModelGateway keeps its own semaphore/budget state.
+    # Construction can't fail (no eager
     # connection), unlike the Postgres pool.
     app.state.http_client = build_http_client()
     # Persistence is additive and must never block the app from serving live
     # (in-memory) experiments: a Postgres outage at startup degrades to
-    # app.state.pg_pool = None rather than failing app startup (see
-    # docs/PHASE_1_5_PLAN.md §11 "DB down at creation"). Routes that need the
+    # app.state.pg_pool = None rather than failing app startup. Routes that need the
     # pool check for None and skip persistence, not crash.
     pool = None
     try:

@@ -57,9 +57,11 @@ carried by shape and size, so a compromised sentinel and a compromised agent sta
 - **`backend/app/gateway/`** — a provider-agnostic Model Gateway with per-experiment
   timeout/retry/concurrency/budget controls, wrapping a deterministic `MockProvider` or a
   `VLLMProvider` against any OpenAI-compatible endpoint.
-- **`backend/app/agents/`** — the Agent Runtime, where real LLM-backed agents attempt genuine
-  lateral prompt injection against a neighbor's own model call. It sits outside `app/engine/`
-  because real model calls are async I/O the engine's pure `step()` contract forbids.
+- **`backend/app/agents/`** — the Agent Runtime, where "real" agents attempt lateral prompt
+  injection against a neighbor's own model call, through the Model Gateway. By default that model
+  is the deterministic `MockProvider`; it is an actual LLM only when `model_provider: "vllm"` points
+  at a model server. It sits outside `app/engine/` because model calls are async I/O the engine's
+  pure `step()` contract forbids.
 - **`docker-compose.yml`** — Postgres with a healthcheck and a named volume, so history survives
   `down && up`. A `PostgresWriter` subscribes to the same live event stream the WebSocket does; the
   simulation stays fully in-memory, so a DB outage affects only the durable record, never the run.
@@ -128,7 +130,8 @@ when the runs differ in more than their defense setting.
 
 ## Real (LLM-backed) agents
 
-`real_agent_count` designates that many of the highest-degree nodes as real, LLM-backed agents.
+`real_agent_count` designates that many of the highest-degree nodes as "real" agents, whose
+behavior goes through a model call rather than a probability draw.
 Each holds a synthetic `CONFIDENTIAL_TOKEN` it is instructed never to reveal; a compromised real
 agent sends a prompt injection to a healthy real neighbor attempting to extract that token via the
 neighbor's own LLM call. Success is verified by exact string match against the known token — never
@@ -137,7 +140,9 @@ through the event stream and history like any other event.
 
 `model_provider: "mock"` (the default) is a deterministic provider keyed off the same seeded RNG
 discipline as the engine, so a hybrid run is exactly as reproducible as a pure-synthetic one, with
-no GPU or network access. `model_provider: "vllm"` talks to a real Qwen — or any
+no GPU or network access. It is not a language model: it returns a canned leak or refusal with the
+scenario's configured probability, so it exercises the attack, verification and event plumbing,
+not a model's actual resistance to injection. Only a real model provider measures that. `model_provider: "vllm"` talks to a real Qwen — or any
 OpenAI-chat-compatible — model server:
 
 ```bash

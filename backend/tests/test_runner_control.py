@@ -160,7 +160,7 @@ def test_snapshot_carries_compromise_provenance_for_every_node():
     security_state, silently dropping compromised_by/tick_compromised even
     though AgentNode carries them — breaking the agent detail drawer's
     ground truth on every fresh connect, not just on reconnect
-    (M1_PLAN.md §9: NodeView exists precisely so a snapshot alone is enough)."""
+    (NodeView exists precisely so a snapshot alone is enough)."""
 
     async def run() -> None:
         runner = _make_runner(p_same=1.0, p_cross=1.0, detector_sensitivity=0.0)
@@ -243,7 +243,7 @@ def test_terminal_event_set_on_natural_completion():
 
 
 def test_terminal_event_is_set_only_after_stop_publishes_the_final_event():
-    """Regression for the verified race in docs/PHASE_1_5_PLAN.md §6:
+    """Regression for a verified race:
     `stop()` must publish EXPERIMENT_STOPPED *before* signalling terminal, not
     after -- a persistence writer finalizing on "status terminal + queue
     empty" would otherwise risk observing the terminal signal before the

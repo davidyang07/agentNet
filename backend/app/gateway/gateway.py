@@ -1,6 +1,6 @@
 """ModelGateway: the single object real-agent code calls into (never a bare
-provider) so every cost/safety control lives in exactly one place
-(docs/PHASE_2_PLAN.md §3). One instance per experiment -- constructed by
+provider) so every cost/safety control lives in exactly one place.
+One instance per experiment -- constructed by
 ExperimentRunner -- so its request budget is genuinely per-experiment, not
 global or per-tick.
 """

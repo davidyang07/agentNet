@@ -1,5 +1,5 @@
-"""Provider-agnostic request/response shapes for the Model Gateway
-(docs/PHASE_2_PLAN.md §3). `ModelProvider` is the uniform interface both
+"""Provider-agnostic request/response shapes for the Model Gateway.
+`ModelProvider` is the uniform interface both
 `MockProvider` (deterministic, no I/O) and `VLLMProvider` (real HTTP against
 an OpenAI-compatible vLLM endpoint) implement, so callers never need to know
 which is behind a given `ModelGateway`.
@@ -17,7 +17,7 @@ class ModelRequest(BaseModel):
     system_prompt: str
     user_message: str
     max_tokens: int
-    # Consumed only by MockProvider (docs/PHASE_2_PLAN.md §6) to decide its
+    # Consumed only by MockProvider to decide its
     # canned outcome deterministically. Real providers ignore this entirely --
     # a real model decides its own output.
     mock_leak_probability: float

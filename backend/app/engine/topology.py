@@ -14,8 +14,8 @@ def _software_types(sorted_ids: list[str], software_type_count: int) -> dict[str
 
 
 def _generate_confidential_token(seed: int, node_id: str) -> str:
-    """Deterministic per-(seed, node_id) synthetic secret (docs/PHASE_2_PLAN.md
-    §4/§6) -- reproducible across replays of the same seed, never derived
+    """Deterministic per-(seed, node_id) synthetic secret -- reproducible
+    across replays of the same seed, never derived
     from anything real. Uses the same rng() keying discipline as every other
     engine draw site, drawing raw bytes rather than a float."""
     draw = rng(seed, 0, node_id, "confidential_token")
@@ -28,7 +28,7 @@ def _select_real_agents(sorted_ids: list[str], degree: dict[str, int], count: in
     initial_compromised="highest_degree"). Barabasi-Albert graphs are hub-
     heavy, so highest-degree selection maximizes the odds that at least one
     real-real edge exists for the LLM-mediated propagation path to exercise,
-    rather than leaving that to chance (docs/PHASE_2_PLAN.md §4)."""
+    rather than leaving that to chance."""
     if count <= 0:
         return set()
     ranked = sorted(sorted_ids, key=lambda n: (-degree[n], n))

@@ -47,8 +47,8 @@ def test_mock_provider_with_real_agents_succeeds_regardless_of_vllm_config():
 
 def test_vllm_with_zero_real_agents_never_triggers_validation():
     """real_agent_count=0 means no real agent ever exists -- the vLLM
-    base_url check only matters when real_agent_count > 0 (docs/PHASE_2_PLAN.md
-    §8), so this must succeed even with model_provider="vllm" and nothing
+    base_url check only matters when real_agent_count > 0, so this must
+    succeed even with model_provider="vllm" and nothing
     configured."""
     with TestClient(app) as client:
         resp = client.post(

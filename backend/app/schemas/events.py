@@ -68,8 +68,8 @@ M1_EVENT_TYPES = M0_EVENT_TYPES | frozenset(
 )
 
 # Phase 2 additionally emits model/tool interaction events for real
-# (LLM-backed) agents' lateral prompt-injection attempts
-# (docs/PHASE_2_PLAN.md §7). COMPROMISE_*/ANOMALY_DETECTED/AGENT_QUARANTINED
+# (LLM-backed) agents' lateral prompt-injection attempts.
+# COMPROMISE_*/ANOMALY_DETECTED/AGENT_QUARANTINED
 # are reused verbatim -- these three are the only genuinely new emitted types.
 PHASE_2_EVENT_TYPES = M1_EVENT_TYPES | frozenset(
     {

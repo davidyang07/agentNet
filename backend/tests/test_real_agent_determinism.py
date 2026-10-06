@@ -1,4 +1,4 @@
-"""Tier 2 determinism (docs/PHASE_2_PLAN.md §9): a hybrid experiment
+"""Tier 2 determinism: a hybrid experiment
 (real_agent_count > 0) driven through the real async ExperimentRunner with a
 MockProvider-backed gateway is fully deterministic -- same as Tier 1's
 verify_determinism.py proves for the synthetic baseline, but for the new
@@ -70,8 +70,8 @@ def test_hybrid_run_differs_at_different_seed():
 
 
 def test_real_agent_count_zero_matches_pure_synthetic_baseline():
-    """The other half of the additivity claim (docs/PHASE_2_PLAN.md §9 tier
-    1): driving the runner with real_agent_count=0 (no gateway needed at
+    """The other half of the additivity claim (tier 1): driving the runner
+    with real_agent_count=0 (no gateway needed at
     all, matching production wiring where build_gateway() returns None)
     must be identical to the same run with a gateway constructed but never
     invoked, proving real_agent_step's early return is truly a no-op."""

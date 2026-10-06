@@ -123,7 +123,7 @@ export function nodeShape(nodeType: string): NodeShape {
 export function nodeSize(node: TopologyNode): number {
   const base = NODE_SIZE[node.nodeType] ?? 4;
   // Size, not colour, is also how LLM-backed ("real") agents are distinguished
-  // from simulated ones (docs/PHASE_2_PLAN.md §11).
+  // from simulated ones.
   if (node.nodeType === "agent" && node.attrs.agent_kind === "real") return base * 1.5;
   return base;
 }

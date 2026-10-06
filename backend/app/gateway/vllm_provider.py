@@ -1,5 +1,5 @@
 """Thin async client against vLLM's own OpenAI-compatible
-`POST /v1/chat/completions` contract (docs/PHASE_2_PLAN.md §3). No vLLM SDK,
+`POST /v1/chat/completions` contract. No vLLM SDK,
 no RunPod SDK -- a RunPod GPU pod running `vllm serve ...` is, from this
 codebase's point of view, just an HTTP endpoint behind `settings.vllm_base_url`.
 """
@@ -65,8 +65,7 @@ class VLLMProvider:
             data = resp.json()
         except (httpx.HTTPError, ValueError) as exc:
             # Never log `payload`/`data` wholesale here -- system_prompt
-            # embeds the target's confidential_token in plaintext
-            # (docs/PHASE_2_PLAN.md §10's logging discipline).
+            # embeds the target's confidential_token in plaintext.
             raise ModelProviderError(
                 f"vLLM request failed for agent_id={request.agent_id}: {_describe(exc)}",
                 retryable=_is_retryable(exc),

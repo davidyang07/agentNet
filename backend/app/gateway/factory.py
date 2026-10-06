@@ -1,5 +1,5 @@
-"""Selects and constructs the ModelGateway for one experiment
-(docs/PHASE_2_PLAN.md §3, §8). Centralized here so routes_experiments.py
+"""Selects and constructs the ModelGateway for one experiment.
+Centralized here so routes_experiments.py
 stays a thin wiring point and this selection logic is independently
 testable.
 """
@@ -47,7 +47,7 @@ def build_gateway(
 
     if config.model_provider == "vllm":
         # POST /api/experiments already rejected this combination with a 400
-        # if vllm_base_url were unset (docs/PHASE_2_PLAN.md §8) -- this
+        # if vllm_base_url were unset -- this
         # assertion documents that invariant rather than re-checking it.
         assert settings.vllm_base_url is not None
         provider = VLLMProvider(

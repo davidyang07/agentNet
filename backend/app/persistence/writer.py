@@ -189,7 +189,7 @@ class PostgresWriter:
             async with self._pool.acquire() as conn, conn.transaction():
                 await conn.executemany(_INSERT_EVENTS_SQL, rows)
         except Exception:
-            # Best-effort, fire-and-forget (docs/PHASE_1_5_PLAN.md §11): a
+            # Best-effort, fire-and-forget: a
             # failed batch is logged and skipped rather than retried against
             # a possibly-down DB while the live simulation keeps producing
             # more events. The resulting seq gap is caught, not hidden, by

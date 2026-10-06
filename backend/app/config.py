@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     postgres_db: str = "agentnet"
     cors_origins: list[str] = ["http://localhost:3000"]
 
-    # Phase 2 (docs/PHASE_2_PLAN.md §8): the vLLM server endpoint/credential
+    # Phase 2: the vLLM server endpoint/credential
     # live here, env-var-driven like postgres_*, deliberately NOT in
     # ExperimentConfig -- ExperimentConfig is persisted verbatim into
     # Postgres and returned by multiple existing read endpoints, so putting

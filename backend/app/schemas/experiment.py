@@ -22,7 +22,7 @@ class ExperimentConfig(BaseModel):
     defense_enabled: bool = Field(True)
     initial_compromised: Literal["highest_degree", "random_node"] = "highest_degree"
 
-    # Phase 2 (docs/PHASE_2_PLAN.md §8): opt-in, defaults preserve the
+    # Phase 2: opt-in, defaults preserve the
     # synthetic baseline exactly. Deliberately NOT here: vLLM base_url/api
     # key -- those are infra/credentials, kept in app/config.py::Settings so
     # they never round-trip through this persisted, API-returned config.
@@ -43,8 +43,8 @@ class ExperimentConfig(BaseModel):
     credential_count: int = Field(0, ge=0, le=20)
     resource_count: int = Field(0, ge=0, le=20)
     sentinel_count: int = Field(0, ge=0, le=5)
-    # "prompt_injection" (the real-agent lateral prompt-injection scenario,
-    # docs/PHASE_2_PLAN.md §7) is in the default so real_agent_count > 0
+    # "prompt_injection" (the real-agent lateral prompt-injection scenario)
+    # is in the default so real_agent_count > 0
     # keeps working exactly as before this field started gating async
     # scenarios too (docs/PLAN.md §3) -- every existing real-agent test
     # relies on it running whenever eligible without setting this field.
@@ -88,7 +88,7 @@ class NodeView(BaseModel):
     security_state: SecurityState
     compromised_by: str | None = None
     tick_compromised: int | None = None
-    # Never confidential_token -- see docs/PHASE_2_PLAN.md §4/§11: exposing
+    # Never confidential_token: exposing
     # it here would hand every client the synthetic secret the experiment is
     # testing whether real agents leak.
     agent_kind: Literal["simulated", "real"] = "simulated"

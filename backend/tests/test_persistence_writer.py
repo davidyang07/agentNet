@@ -1,9 +1,9 @@
 """Postgres-backed integration coverage for PostgresWriter: seq ordering,
 natural-finish vs manual-stop finalization, duplicate-write idempotency,
 writer cleanup, no event loss under a burst larger than the drain batch cap,
-and -- the centerpiece of docs/PHASE_1_5_PLAN.md's correction to the plan --
-detecting a mid-run write failure as an incomplete/untrustworthy run even
-when the run otherwise finishes and finalizes "successfully".
+and -- most importantly -- detecting a mid-run write failure as an
+incomplete/untrustworthy run even when the run otherwise finishes and
+finalizes "successfully".
 """
 
 import asyncio
@@ -194,7 +194,7 @@ def test_no_event_loss_under_a_burst_larger_than_the_drain_batch_cap():
 
 
 def test_incomplete_run_detected_when_a_batch_fails_then_recovers():
-    """The correction to docs/PHASE_1_5_PLAN.md: a run that finishes and
+    """A run that finishes and
     finalizes "successfully" (final_status populated) but suffered a
     transient mid-run write failure must be marked is_complete=False, not
     presented as a trustworthy complete run. A naive "log the failed batch
