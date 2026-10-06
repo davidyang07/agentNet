@@ -35,6 +35,25 @@ class AgentNode:
     # docs/PLAN.md §14.4 C.4: whether this agent takes part in shared
     # immune memory, holding every adopted signature.
     immune_participant: bool = False
+    # docs/PLAN.md §14.4 C.5, graduated response: the tick a first detection
+    # made this agent SUSPICIOUS; None otherwise.
+    suspicious_since: int | None = None
+
+
+def is_infected(node: AgentNode) -> bool:
+    """COMPROMISED, or SUSPICIOUS while infected (graduated response, §14.4
+    C.5): an advisory flag doesn't cure anything."""
+    return node.security_state == SecurityState.COMPROMISED or (
+        node.security_state == SecurityState.SUSPICIOUS and node.tick_compromised is not None
+    )
+
+
+def is_susceptible(node: AgentNode) -> bool:
+    """HEALTHY, or SUSPICIOUS without an infection (a detector false
+    positive, §14.4 C.5)."""
+    return node.security_state == SecurityState.HEALTHY or (
+        node.security_state == SecurityState.SUSPICIOUS and node.tick_compromised is None
+    )
 
 
 @dataclass(frozen=True)

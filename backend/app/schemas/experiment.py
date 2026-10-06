@@ -116,6 +116,22 @@ class ExperimentConfig(BaseModel):
     preseed_patient_zero_signature: bool = False
     benign_probes_per_tick: int = Field(1, ge=0, le=10)
 
+    # Realistic detection and graduated response (docs/PLAN.md §14.4 C.5,
+    # after [S1]: change-point detection needs evidence, and false positives
+    # are "autoimmune"). detector_ramp_ticks: detection probability rises
+    # linearly to detector_sensitivity over that many ticks after
+    # compromise. detector_false_positive_rate: the detector's own error on
+    # uninfected agents -- distinct from the false_quarantine_rate attack.
+    # response_mode="graduated": a first detection makes an agent SUSPICIOUS
+    # (its transmission scaled by suspicious_transmission_factor), a second
+    # quarantines it, and with no repeat detection within review_ticks it
+    # is released. The defaults keep today's single-step quarantine.
+    detector_ramp_ticks: int = Field(0, ge=0, le=50)
+    detector_false_positive_rate: float = Field(0.0, ge=0.0, le=1.0)
+    response_mode: Literal["quarantine", "graduated"] = "quarantine"
+    suspicious_transmission_factor: float = Field(0.5, ge=0.0, le=1.0)
+    review_ticks: int = Field(5, ge=1, le=100)
+
     @model_validator(mode="after")
     def _distances_fit_the_strain_length(self) -> "ExperimentConfig":
         for name in ("strain_benign_distance", "mutation_bits", "signature_radius"):

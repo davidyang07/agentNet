@@ -11,7 +11,7 @@ time with no separate persistence for graph structure.
 from __future__ import annotations
 
 from app.engine.rng import rng
-from app.engine.state import SecurityState, WorldState
+from app.engine.state import SecurityState, WorldState, is_infected
 from app.graph.security_graph import SecurityGraph
 from app.graph.types import EdgeType, GraphEdge, GraphNode, NodeType
 from app.schemas.experiment import ExperimentConfig
@@ -42,6 +42,8 @@ def build_security_graph(state: WorldState, config: ExperimentConfig) -> Securit
                     "agent_kind": node.agent_kind,
                     "inference_capable": node.inference_capable,
                     "immune_participant": node.immune_participant,
+                    # A SUSPICIOUS agent may be infected (§14.4 C.5).
+                    "infected": is_infected(node),
                 },
             )
         )

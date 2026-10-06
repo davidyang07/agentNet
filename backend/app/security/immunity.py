@@ -28,7 +28,7 @@ from dataclasses import replace
 
 from app.engine import strains
 from app.engine.rng import rng
-from app.engine.state import SecurityState, Signature, WorldState
+from app.engine.state import Signature, WorldState, is_susceptible
 from app.schemas.events import EventDraft, EventType
 from app.schemas.experiment import ExperimentConfig
 
@@ -150,7 +150,7 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
     holding = [s for s in signatures if s.adopt_tick <= tick]
     probes = blocked = 0
     for agent_id in participants:
-        if state.nodes[agent_id].security_state != SecurityState.HEALTHY:
+        if not is_susceptible(state.nodes[agent_id]):
             continue
         for i in range(config.benign_probes_per_tick):
             probes += 1

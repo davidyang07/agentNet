@@ -840,6 +840,32 @@ export interface components {
              * @default 1
              */
             benign_probes_per_tick: number;
+            /**
+             * Detector Ramp Ticks
+             * @default 0
+             */
+            detector_ramp_ticks: number;
+            /**
+             * Detector False Positive Rate
+             * @default 0
+             */
+            detector_false_positive_rate: number;
+            /**
+             * Response Mode
+             * @default quarantine
+             * @enum {string}
+             */
+            response_mode: "quarantine" | "graduated";
+            /**
+             * Suspicious Transmission Factor
+             * @default 0.5
+             */
+            suspicious_transmission_factor: number;
+            /**
+             * Review Ticks
+             * @default 5
+             */
+            review_ticks: number;
         };
         /** ExperimentDetail */
         ExperimentDetail: {
