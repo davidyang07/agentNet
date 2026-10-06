@@ -1311,6 +1311,62 @@ transmission path, real agents included; Phase C is backend and API only, per D6
 
     Advisory flagging is only as safe as the throttling behind it. A ramp costs more than its
     latency suggests. Graduated response absorbs false positives cheaply.
+- **C.6 — done; Phase C is complete.**
+  - **How it runs.** `scripts/run_epidemiology.py` (`make epidemiology`) runs the five sweeps,
+    averaged over seeds.
+    - It checks each one against the papers' qualitative predictions and exits 1 on a failure.
+    - CI runs it in full as the `epidemiology` job (about 2.5 minutes) and uploads the tables.
+  - **The agentshield gate** gains a third strict check: pre-seeded immune memory at 90% coverage
+    holds Reff below 1, and the same run with no participants does not.
+    - Its break-the-mechanism tests disable blocking and participation.
+  - **Reff** here is `r0_estimate` measured under immune memory: the mean offspring of
+    generations 0–1. The immunity sweeps pre-seed patient zero's signature, [S1]'s red-team
+    pre-seeding. A signature published by a detection arrives when a fast outbreak is already
+    saturating, so measured "since onset" even the no-immunity control reads below 1.
+  - **Measured results.** All 14 checks pass; the qualifications are noted in each item.
+
+  1. **[S2] threshold.** 180 agents, transmission certain, defense off, 30 ticks, 10 seeds. Mean
+     final size by capable fraction ρ:
+
+     | graph, placement | ρ = 0.1 | 0.2 | 0.3 | 0.4 | 0.6 | 1.0 |
+     |---|---|---|---|---|---|---|
+     | ER ⟨k⟩≈4.0, random | 0.04 | 0.06 | 0.14 | 0.26 | 0.78 | 0.98 |
+     | ER ⟨k⟩≈5.9, random | 0.06 | 0.17 | 0.45 | 0.63 | 0.97 | 1.00 |
+     | BA, random | 0.04 | 0.07 | 0.15 | 0.37 | 0.86 | 1.00 |
+     | BA, hubs | 0.66 | 0.94 | 0.98 | 1.00 | 1.00 | 1.00 |
+     | BA, periphery | 0.02 | 0.03 | 0.03 | 0.03 | 0.03 | 1.00 |
+
+     - **Confirmed:**
+       - there is a threshold;
+       - the denser graph crosses it sooner;
+       - capable hubs collapse it (0.44 already at ρ = 0.05);
+       - a capable periphery contains outbreaks up to ρ = 0.6.
+     - **Qualified:** on ER the steep rise sits above 1/⟨k⟩ (≈0.25 for ⟨k⟩≈4). Final size first
+       passes 0.25 near ρ = 0.4, a finite-size effect of 180 agents and a 30-tick cap. And at
+       this size BA with random placement behaves like ER, not the vanishing threshold of an
+       infinite scale-free graph.
+  2. **[S1] trade-off.** ER ⟨k⟩≈5.9, transmission 0.4, so R0 ≈ 3.3; 6 seeds.
+     - Coverage 0 / 0.5 / 0.9 gives final size 1.00 / 0.40 / 0.01, and Reff 3.26 / 1.96 / 0.58,
+       consistent with a herd-immunity threshold near 1 − 1/R0.
+     - At 90% coverage, mutation on every transmission escapes an exact-match signature
+       (0.01 → 0.50). Radius 2 already catches the variants back (0.01).
+     - **Qualified:** [S1]'s benign cost appears as a cliff, not a slope. With the worm 12 bits
+       from benign behaviour, the benign block rate is 0 up to radius 6 and 0.15 at radius 12.
+       Benign traffic spans 0–12 bits from the centroid, so it only reaches a signature as the
+       radius nears the worm's disguise distance. A topically-adjacent worm (small distance)
+       moves the cliff to small radii.
+  3. **Signature delay** (detection-published, 90% coverage): final size 0.04 / 0.15 / 0.57 /
+     0.89 / 0.92 for a delay of 0 / 2 / 5 / 10 / 20 ticks.
+  4. **Placement** ([S2] Figs. 6–7 analogue, BA):
+     - at 20% coverage, hub-first 0.05, random 0.78, periphery 0.80;
+     - at 40%, 0.02 / 0.47 / 0.60.
+  5. **Poisoning.**
+     - With subverted sentinels publishing poisoned memory, the benign block rate goes from 0 to
+       0.18, and the final size from 0.07 to 1.00.
+     - The size increase is mostly the subverted sentinels suppressing detection: the poisoned
+       signatures themselves block no worm.
+     - The benign rate is not monotone in the compromise rate (0.33 at 0.2): more infected agents
+       means fewer healthy ones probing.
   - `strains_observed` counts distinct strains among infected agents. Validation keeps
     `strain_benign_distance` and `mutation_bits` within `signature_bits`.
 

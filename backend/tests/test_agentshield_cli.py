@@ -8,9 +8,10 @@ import pytest
 
 from app.benchmark import cli
 from app.benchmark.cli import Finding, evaluate
+from app.engine import topology
 from app.engine.state import SecurityState
 from app.remediation.analyze import Recommendation
-from app.security import detection
+from app.security import detection, immunity
 
 SCRIPT_PATH = Path(__file__).resolve().parent.parent / "scripts" / "agentshield_test.py"
 
@@ -132,3 +133,13 @@ def test_gate_fails_when_the_recommended_remediation_changes_nothing(monkeypatch
 def test_gate_fails_when_no_remediation_is_recommended(monkeypatch):
     monkeypatch.setattr(cli, "recommend", lambda *args, **kwargs: [])
     assert not _finding(evaluate(), "recommended remediation").passed
+
+
+def test_gate_fails_when_immune_memory_never_blocks(monkeypatch):
+    monkeypatch.setattr(immunity, "blocks", lambda *args, **kwargs: False)
+    assert not _finding(evaluate(), "immune memory above").passed
+
+
+def test_gate_fails_when_no_agent_participates(monkeypatch):
+    monkeypatch.setattr(topology, "_select_immune_participants", lambda *args: set())
+    assert not _finding(evaluate(), "immune memory above").passed
