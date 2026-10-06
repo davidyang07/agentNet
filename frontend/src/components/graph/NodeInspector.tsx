@@ -136,7 +136,7 @@ export function NodeInspector({
                     <li key={step} className="flex items-center gap-2 py-0.5">
                       <span
                         aria-hidden
-                        className="flex size-4 shrink-0 items-center justify-center rounded-full border border-line text-[9px] text-fg-subtle"
+                        className="flex size-5 shrink-0 items-center justify-center rounded-full border border-line-strong text-2xs text-fg-subtle"
                       >
                         {index + 1}
                       </span>

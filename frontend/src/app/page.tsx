@@ -18,7 +18,6 @@ import { RunConfigurator } from "@/components/run/RunConfigurator";
 import { PageHeader } from "@/components/shell/AppShell";
 import { Badge } from "@/components/ui/Badge";
 import { Button, ButtonLink } from "@/components/ui/Button";
-import { BrandMark } from "@/components/ui/icons";
 import { Panel, PanelHeader } from "@/components/ui/Panel";
 import { Disclaimer, ErrorState, Spinner, StatListSkeleton } from "@/components/ui/States";
 import { useExperiment } from "@/lib/experiment/ExperimentProvider";
@@ -167,7 +166,7 @@ export default function OverviewPage() {
                   actions={
                     <Link
                       href="/topology"
-                      className="text-2xs font-medium text-accent hover:text-accent-hover"
+                      className="text-xs font-medium text-fg-muted transition-colors hover:text-fg"
                     >
                       Open topology →
                     </Link>
@@ -191,14 +190,16 @@ export default function OverviewPage() {
                   actions={
                     <Link
                       href="/activity"
-                      className="text-2xs font-medium text-accent hover:text-accent-hover"
+                      className="text-xs font-medium text-fg-muted transition-colors hover:text-fg"
                     >
                       Full log →
                     </Link>
                   }
                 />
-                <div className="h-64">
+                {/* The feed fills a fixed-height box and scrolls inside it. */}
+                <div className="flex h-64 flex-col">
                   <EventFeed
+                    className="flex-1"
                     events={stream.recentEvents.slice(-40)}
                     emptyTitle={
                       liveLogGapHint(control.status, stream.recentEvents.length > 0)
@@ -245,29 +246,11 @@ export default function OverviewPage() {
 
 function LaunchHero() {
   return (
-    <header className="border-b border-line px-5 py-6 lg:px-6 lg:py-7">
-      <div className="max-w-3xl">
-        <span className="mb-3 inline-flex items-center gap-2 rounded-full border border-line bg-raised px-2.5 py-1 text-2xs text-fg-muted">
-          <BrandMark className="size-3.5 text-accent" />
-          Multi-agent adversarial resilience platform
-        </span>
-        <h1 className="text-2xl font-semibold tracking-tight text-fg">
-          Find out how far one compromised agent gets.
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-fg-muted">
-          Model an agent system as a typed security graph — agents, tools, credentials, resources
-          and the sentinels watching them — then run adversarial scenarios against it. Watch
-          compromise propagate tick by tick, trace any incident back to patient zero, measure
-          security against the utility it costs, and validate that a proposed fix actually changes
-          the outcome.
-        </p>
-        <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-2xs text-fg-subtle">
-          <li>Deterministic — same seed, same run, every time</li>
-          <li>Event-sourced — every claim traces to a recorded event</li>
-          <li>Six attack scenarios, from lateral spread to sentinel subversion</li>
-        </ul>
-      </div>
-    </header>
+    <PageHeader
+      eyebrow="New assessment"
+      title="Configure an assessment"
+      description="Model an agent system as a typed security graph — agents, tools, credentials, resources and the sentinels watching them — then run adversarial scenarios against it and measure how far compromise spreads, what the defense costs, and whether a proposed fix changes the outcome."
+    />
   );
 }
 

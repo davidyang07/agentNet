@@ -163,7 +163,9 @@ function HistoryList({
                 <Td className="text-right font-mono text-fg">{item.seed}</Td>
                 <Td className="text-right font-mono text-fg">{item.config.node_count}</Td>
                 <Td>
-                  <span className="flex flex-wrap gap-1">
+                  {/* One line per run: on a narrow screen the table scrolls
+                      sideways rather than growing every row. */}
+                  <span className="flex items-center gap-1">
                     {scenarios.length === 0 ? (
                       <span className="text-fg-subtle">—</span>
                     ) : (
@@ -205,10 +207,10 @@ function HistoryList({
                     </Badge>
                   )}
                 </Td>
-                <Td className="text-right">
+                <Td className="whitespace-nowrap text-right">
                   <Link
                     href={`/history/${item.experiment_id}`}
-                    className="text-2xs font-medium text-accent transition-colors hover:text-accent-hover"
+                    className="text-xs font-medium text-fg-muted transition-colors hover:text-fg"
                   >
                     Replay →
                   </Link>

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { IconAlert, IconInfo } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 
 /**
@@ -54,13 +55,16 @@ export function ErrorState({
     <div
       role="alert"
       className={cn(
-        "flex flex-col gap-1.5 rounded-md border border-critical/30 bg-critical-soft px-3 py-2.5",
+        "flex items-start gap-2.5 rounded-md border border-critical-line bg-critical-soft px-3 py-2.5",
         className,
       )}
     >
-      <p className="text-xs font-medium text-critical">{title}</p>
-      {detail && <p className="break-words font-mono text-2xs leading-4 text-critical/80">{detail}</p>}
-      {action && <div className="mt-1">{action}</div>}
+      <IconAlert className="mt-px size-3.5 shrink-0 text-critical" />
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <p className="text-xs font-medium text-fg">{title}</p>
+        {detail && <p className="break-words font-mono text-2xs text-fg-muted">{detail}</p>}
+        {action && <div className="mt-1">{action}</div>}
+      </div>
     </div>
   );
 }
@@ -70,11 +74,11 @@ export function WarningBanner({ children, className }: { children: ReactNode; cl
     <div
       role="status"
       className={cn(
-        "flex items-start gap-2.5 rounded-md border border-warn/30 bg-warn-soft px-3 py-2.5 text-xs leading-5 text-warn",
+        "flex items-start gap-2.5 rounded-md border border-warn-line bg-warn-soft px-3 py-2.5 text-xs leading-5 text-fg",
         className,
       )}
     >
-      <span aria-hidden className="mt-[3px] size-1.5 shrink-0 rounded-full bg-warn" />
+      <IconAlert className="mt-0.5 size-3.5 shrink-0 text-warn" />
       <div className="min-w-0">{children}</div>
     </div>
   );
@@ -84,8 +88,8 @@ export function WarningBanner({ children, className }: { children: ReactNode; cl
  * real-world evidence. Quiet by design — it must not compete with the data. */
 export function Disclaimer({ children }: { children: ReactNode }) {
   return (
-    <p className="flex items-start gap-2 text-2xs leading-4 text-fg-subtle">
-      <span aria-hidden className="mt-[5px] size-1 shrink-0 rounded-full bg-fg-subtle" />
+    <p className="flex items-start gap-1.5 text-2xs text-fg-subtle">
+      <IconInfo className="mt-0.5 size-3 shrink-0" />
       <span>{children}</span>
     </p>
   );
@@ -93,9 +97,7 @@ export function Disclaimer({ children }: { children: ReactNode }) {
 
 export function Skeleton({ className }: { className?: string }) {
   return (
-    <div className={cn("relative overflow-hidden rounded-sm bg-raised", className)}>
-      <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/[0.04] to-transparent motion-safe:[animation:shimmer_1.6s_infinite]" />
-    </div>
+    <div className={cn("rounded-sm bg-overlay motion-safe:animate-pulse", className)} />
   );
 }
 
@@ -118,7 +120,7 @@ export function Spinner({ className }: { className?: string }) {
       role="status"
       aria-label="Loading"
       className={cn(
-        "inline-block size-3.5 animate-spin rounded-full border-[1.5px] border-line-strong border-t-accent",
+        "inline-block size-3.5 animate-spin rounded-full border-2 border-line-strong border-t-accent",
         className,
       )}
     />

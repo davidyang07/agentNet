@@ -154,7 +154,7 @@ export function MetricsList({
               withDefinitions ? (
                 <span className="block">
                   <span className="block text-xs text-fg-muted">{descriptor.label}</span>
-                  <span className="block max-w-md text-2xs leading-4 text-fg-subtle">
+                  <span className="block max-w-md text-2xs text-fg-subtle">
                     {descriptor.definition}
                   </span>
                 </span>

@@ -47,13 +47,13 @@ export function FindingsList({
         return (
           <li
             key={index}
-            className="rounded-md border border-line bg-raised p-3.5 transition-colors hover:border-line-strong"
+            className="rounded-md border border-line bg-surface p-3.5 transition-colors hover:border-line-strong"
           >
             <div className="mb-2 flex items-start gap-2.5">
               <span className="mt-0.5 shrink-0 rounded-sm bg-warn-soft p-1 text-warn">
                 <IconWrench className="size-3.5" />
               </span>
-              <p className="min-w-0 flex-1 text-sm leading-6 text-fg">
+              <p className="min-w-0 flex-1 text-sm text-fg">
                 {recommendation.description}
               </p>
             </div>

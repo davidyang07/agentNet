@@ -12,12 +12,12 @@ const BASE =
   "disabled:pointer-events-none disabled:opacity-40 aria-disabled:pointer-events-none aria-disabled:opacity-40";
 
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary:
-    "border-accent-line bg-accent text-white hover:bg-accent-hover hover:border-accent-hover",
-  default:
-    "border-line-strong bg-raised text-fg hover:border-fg-subtle/50 hover:bg-overlay",
-  ghost: "border-transparent bg-transparent text-fg-muted hover:bg-raised hover:text-fg",
-  danger: "border-critical/40 bg-critical-soft text-critical hover:border-critical/70",
+  // Accent is interaction only: the one primary action in a region.
+  primary: "border-transparent bg-accent text-on-accent hover:bg-accent-hover",
+  default: "border-line-strong bg-overlay text-fg hover:border-fg-subtle/60",
+  ghost: "border-transparent bg-transparent text-fg-muted hover:bg-overlay hover:text-fg",
+  // A destructive action is in the critical state; its label stays ink.
+  danger: "border-critical-line bg-critical-soft text-fg hover:border-critical",
 };
 
 const SIZES: Record<ButtonSize, string> = {
@@ -92,7 +92,7 @@ export function SegmentedControl<T extends string | number>({
       role="radiogroup"
       aria-label={ariaLabel}
       className={cn(
-        "inline-flex h-7 items-center gap-0.5 rounded-md border border-line bg-raised p-0.5",
+        "inline-flex h-7 items-center gap-0.5 rounded-md border border-line bg-surface p-0.5",
         disabled && "pointer-events-none opacity-40",
         className,
       )}
@@ -108,7 +108,7 @@ export function SegmentedControl<T extends string | number>({
             title={option.title}
             onClick={() => onChange(option.value)}
             className={cn(
-              "h-6 rounded-sm px-2 text-2xs font-medium transition-colors duration-100",
+              "h-full rounded-sm px-2 text-xs font-medium transition-colors duration-100",
               active
                 ? "bg-overlay text-fg shadow-panel"
                 : "text-fg-subtle hover:text-fg-muted",

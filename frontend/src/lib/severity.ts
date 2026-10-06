@@ -35,31 +35,9 @@ export const SECURITY_STATE_HINT: Record<SecurityState, string> = {
   recovered: "Returned to a trusted state after containment.",
 };
 
-/**
- * Hex values mirroring the `--color-*` severity tokens in globals.css.
- * Duplicated here (rather than read from CSS) because WebGL canvas rendering
- * needs literal colours, not custom properties — the graph is the only
- * consumer, and this keeps a single named list to keep in sync.
- */
-export const SEVERITY_HEX: Record<Severity, string> = {
-  critical: "#f2555f",
-  high: "#f5834e",
-  warn: "#e0b341",
-  contained: "#a273f2",
-  ok: "#3fb87a",
-  neutral: "#7b8698",
-};
-
-/** Tailwind classes per severity, for the three ways severity is presented. */
-export const SEVERITY_TEXT: Record<Severity, string> = {
-  critical: "text-critical",
-  high: "text-high",
-  warn: "text-warn",
-  contained: "text-contained",
-  ok: "text-ok",
-  neutral: "text-neutral",
-};
-
+/** Tailwind classes per severity. Colour goes on marks — dots, meters, graph
+ * nodes, chart bands — never on text (DESIGN.md › Colors › Ink), so there is
+ * no text-colour map. Canvas and WebGL read the same tokens via lib/theme.ts. */
 export const SEVERITY_BG: Record<Severity, string> = {
   critical: "bg-critical",
   high: "bg-high",
@@ -69,13 +47,25 @@ export const SEVERITY_BG: Record<Severity, string> = {
   neutral: "bg-neutral",
 };
 
-export const SEVERITY_CHIP: Record<Severity, string> = {
-  critical: "bg-critical-soft text-critical ring-critical/25",
-  high: "bg-high-soft text-high ring-high/25",
-  warn: "bg-warn-soft text-warn ring-warn/25",
-  contained: "bg-contained-soft text-contained ring-contained/25",
-  ok: "bg-ok-soft text-ok ring-ok/25",
-  neutral: "bg-neutral-soft text-fg-muted ring-line-strong/60",
+/** Fill for SVG marks (chart bands, legend swatches). */
+export const SEVERITY_FILL: Record<Severity, string> = {
+  critical: "fill-critical",
+  high: "fill-high",
+  warn: "fill-warn",
+  contained: "fill-contained",
+  ok: "fill-ok",
+  neutral: "fill-neutral",
+};
+
+/** Tinted surface for an area that *is* in a state — an error banner, a
+ * finding card. */
+export const SEVERITY_SURFACE: Record<Severity, string> = {
+  critical: "border-critical-line bg-critical-soft",
+  high: "border-high-line bg-high-soft",
+  warn: "border-warn-line bg-warn-soft",
+  contained: "border-contained-line bg-contained-soft",
+  ok: "border-ok-line bg-ok-soft",
+  neutral: "border-line bg-raised",
 };
 
 /**

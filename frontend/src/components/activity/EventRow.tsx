@@ -1,7 +1,6 @@
 import { SeverityDot } from "@/components/ui/Badge";
 import { cn } from "@/lib/cn";
 import { formatEventMetadata } from "@/lib/format";
-import { SEVERITY_TEXT } from "@/lib/severity";
 import type { Event } from "@/lib/stream/reducer";
 import { eventMeta, eventSeverity } from "@/lib/vocabulary";
 
@@ -26,14 +25,13 @@ export function EventRow({
   const target = event.target_agent_id ?? null;
 
   return (
-    <li className={cn("flex items-baseline gap-2.5", compact ? "py-1" : "py-1.5")}>
-      <span className="flex w-10 shrink-0 items-baseline gap-1.5">
-        <SeverityDot severity={severity} className="translate-y-[-1px]" />
-        <span className="font-mono text-2xs tabular text-fg-subtle">t{event.sim_tick}</span>
-      </span>
+    <li className={cn("flex items-center gap-2.5", compact ? "h-7" : "h-8")}>
+      <span className="w-8 shrink-0 font-mono text-2xs tabular text-fg-subtle">t{event.sim_tick}</span>
 
-      <span className={cn("shrink-0 text-2xs font-medium", SEVERITY_TEXT[severity])}>
-        {meta.label}
+      {/* The dot carries the severity; the label stays ink. */}
+      <span className="flex shrink-0 items-center gap-2">
+        <SeverityDot severity={severity} />
+        <span className="text-xs font-medium text-fg">{meta.label}</span>
       </span>
 
       {(source || target) && (
@@ -68,7 +66,7 @@ function ClickableId({ id, onSelect }: { id: string; onSelect?: (id: string) => 
     <button
       type="button"
       onClick={() => onSelect(id)}
-      className="rounded-xs transition-colors hover:text-accent"
+      className="rounded-xs transition-colors hover:text-fg hover:underline"
     >
       {id}
     </button>

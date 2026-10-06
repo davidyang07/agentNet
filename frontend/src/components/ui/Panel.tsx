@@ -20,7 +20,7 @@ export function Panel({
   return (
     <section
       className={cn(
-        "flex min-w-0 flex-col rounded-lg border border-line bg-surface shadow-panel",
+        "flex min-w-0 flex-col rounded-lg border border-line bg-raised shadow-panel",
         !flush && "p-4",
         className,
       )}

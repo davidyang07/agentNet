@@ -15,12 +15,54 @@ import {
   type TopologyModel,
   type TopologyNode,
 } from "@/lib/graph/model";
+import { mix, severityColor, token, withAlpha } from "@/lib/theme";
 import { EDGE_LAYER_META, type EdgeLayer } from "@/lib/vocabulary";
 
-const ACCENT = "#4d8dfd";
-const LABEL_FG = "#c7cfdb";
-const LABEL_BG = "rgba(10, 12, 16, 0.82)";
 const ALL_LAYERS: EdgeLayer[] = ["mesh", "access", "oversight"];
+
+// Overlay geometry, in CSS pixels. Annotation follows the console type floor —
+// nothing on screen renders below 11px (DESIGN.md › Typography).
+const LABEL_SIZE = 11;
+const LABEL_HEIGHT = 16;
+const LABEL_PAD_X = 5;
+const BADGE_RADIUS = 8;
+
+/** Design tokens resolved to literal values: Sigma's WebGL program and the 2D
+ * overlay cannot take CSS variables. Read once per build — tokens are static. */
+type GraphTheme = {
+  accent: string;
+  onAccent: string;
+  fg: string;
+  fgMuted: string;
+  /** What the graph is drawn on; dimmed marks recede toward it. */
+  background: string;
+  labelBackground: string;
+  neutral: string;
+  edge: Record<EdgeLayer, string>;
+  monoFont: string;
+  sansFont: string;
+  radius: number;
+};
+
+function readGraphTheme(): GraphTheme {
+  return {
+    accent: token("--color-accent"),
+    onAccent: token("--color-on-accent"),
+    fg: token("--color-fg"),
+    fgMuted: token("--color-fg-muted"),
+    background: token("--color-surface"),
+    labelBackground: withAlpha(token("--color-canvas"), 0.85),
+    neutral: severityColor("neutral"),
+    edge: {
+      mesh: token(EDGE_LAYER_META.mesh.token),
+      access: token(EDGE_LAYER_META.access.token),
+      oversight: token(EDGE_LAYER_META.oversight.token),
+    },
+    monoFont: token("--font-mono") || "monospace",
+    sansFont: token("--font-sans") || "sans-serif",
+    radius: parseFloat(token("--radius-xs")) || 4,
+  };
+}
 
 export type TopologyGraphProps = {
   model: TopologyModel;
@@ -44,6 +86,7 @@ type Live = {
   pathEdgeKeys: Set<string>;
   focusIds: ReadonlySet<string> | null;
   nodeById: Map<string, TopologyNode>;
+  theme: GraphTheme;
 };
 
 function pathEdgeKey(a: string, b: string): string {
@@ -87,6 +130,7 @@ export function TopologyGraph({
     pathEdgeKeys: new Set(),
     focusIds: null,
     nodeById: new Map(),
+    theme: readGraphTheme(),
   });
 
   useEffect(() => {
@@ -100,6 +144,8 @@ export function TopologyGraph({
     if (!container || !overlay) return;
     if (model.nodes.length === 0) return;
 
+    const theme = readGraphTheme();
+    liveRef.current.theme = theme;
     const positions = computeLayout(model.nodes, model.edges);
     const graph = new Graph({ multi: false, type: "undirected" });
     for (const node of model.nodes) {
@@ -140,15 +186,15 @@ export function TopologyGraph({
       zIndex: true,
       minCameraRatio: 0.15,
       maxCameraRatio: 6,
-      defaultNodeColor: "#7b8698",
-      defaultEdgeColor: EDGE_LAYER_META.mesh.color,
+      defaultNodeColor: theme.neutral,
+      defaultEdgeColor: theme.edge.mesh,
       nodeReducer: (nodeKey, data) => {
         const live = liveRef.current;
         const id = String(nodeKey);
         const dimmed = isDimmed(live, id);
         return {
           ...data,
-          color: dimmed ? dim(String(data.color)) : String(data.color),
+          color: dimmed ? dim(String(data.color), theme) : String(data.color),
           zIndex: live.selectedId === id || live.pathSet.has(id) ? 2 : (data.zIndex as number),
         };
       },
@@ -158,19 +204,17 @@ export function TopologyGraph({
         if (!live.layers.has(layer)) return { ...data, hidden: true };
         const [source, target] = graph.extremities(edgeKey as string);
         if (live.pathEdgeKeys.has(pathEdgeKey(source, target))) {
-          return { ...data, color: ACCENT, size: 2.4, zIndex: 3 };
+          return { ...data, color: theme.accent, size: 2.4, zIndex: 3 };
         }
         const touchesSelection =
           live.selectedId !== null &&
           (source === live.selectedId || target === live.selectedId);
         if (touchesSelection) {
-          return { ...data, color: "#5f7fae", size: 1.6, zIndex: 2 };
+          return { ...data, color: theme.fgMuted, size: 1.6, zIndex: 2 };
         }
         const dimmed = isDimmed(live, source) && isDimmed(live, target);
-        return {
-          ...data,
-          color: dimmed ? dim(EDGE_LAYER_META[layer].color) : EDGE_LAYER_META[layer].color,
-        };
+        const color = theme.edge[layer];
+        return { ...data, color: dimmed ? dim(color, theme) : color };
       },
     });
 
@@ -253,16 +297,10 @@ function isDimmed(live: Live, id: string): boolean {
   return false;
 }
 
-/** Mixes a colour most of the way to the canvas background — the dim state has
- * to stay legible as structure while clearly receding. */
-function dim(hex: string): string {
-  const rgba = hex.match(/^#([0-9a-f]{6})$/i);
-  if (!rgba) return "rgba(60, 68, 82, 0.55)";
-  const value = parseInt(rgba[1], 16);
-  const r = Math.round((((value >> 16) & 255) + 10 * 3) / 4);
-  const g = Math.round((((value >> 8) & 255) + 12 * 3) / 4);
-  const b = Math.round(((value & 255) + 16 * 3) / 4);
-  return `rgb(${r}, ${g}, ${b})`;
+/** Mixes a colour most of the way into the graph's background — the dim state
+ * has to stay legible as structure while clearly receding. */
+function dim(hex: string, theme: GraphTheme): string {
+  return mix(hex, theme.background, 0.25);
 }
 
 // --- overlay --------------------------------------------------------------
@@ -276,6 +314,7 @@ function drawOverlay(renderer: Sigma, canvas: HTMLCanvasElement, live: Live): vo
   }
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
+  const { theme } = live;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, width, height);
 
@@ -319,7 +358,7 @@ function drawOverlay(renderer: Sigma, canvas: HTMLCanvasElement, live: Live): vo
 
     if (isSelected || isHovered) {
       ctx.save();
-      ctx.strokeStyle = isSelected ? "#e7ecf3" : "rgba(231, 236, 243, 0.55)";
+      ctx.strokeStyle = isSelected ? theme.fg : withAlpha(theme.fg, 0.55);
       ctx.lineWidth = isSelected ? 1.6 : 1.2;
       ctx.beginPath();
       ctx.arc(x, y, radius + 6.5, 0, Math.PI * 2);
@@ -329,7 +368,7 @@ function drawOverlay(renderer: Sigma, canvas: HTMLCanvasElement, live: Live): vo
 
     if (inPath) {
       ctx.save();
-      ctx.strokeStyle = ACCENT;
+      ctx.strokeStyle = theme.accent;
       ctx.lineWidth = 1.8;
       ctx.beginPath();
       ctx.arc(x, y, radius + 5, 0, Math.PI * 2);
@@ -349,13 +388,16 @@ function drawOverlay(renderer: Sigma, canvas: HTMLCanvasElement, live: Live): vo
   // Labels last, so no node can be drawn over one — and collision-checked, so
   // a crowded ring degrades by dropping the least important label rather than
   // by stacking unreadable text.
-  ctx.font = "500 10px var(--font-geist-mono, ui-monospace), ui-monospace, monospace";
+  // Canvas cannot resolve CSS variables, so the family is the token's computed
+  // value — a `var(...)` font string would be rejected and fall back to 10px
+  // sans-serif.
+  ctx.font = `500 ${LABEL_SIZE}px ${theme.monoFont}`;
   ctx.textBaseline = "middle";
   const placed: Array<[number, number, number, number]> = [...obstacles];
   const centreX = width / 2;
   for (const item of [...labelled].sort((a, b) => b.priority - a.priority)) {
     const textWidth = ctx.measureText(item.id).width;
-    const boxWidth = textWidth + 8;
+    const boxWidth = textWidth + LABEL_PAD_X * 2;
     // Labels point away from the centre of the graph, so a ring of typed nodes
     // reads outward. The mirrored side and a small vertical nudge are tried in
     // turn before a label is given up on — a ring of 19 typed nodes otherwise
@@ -364,9 +406,14 @@ function drawOverlay(renderer: Sigma, canvas: HTMLCanvasElement, live: Live): vo
     const gap = item.radius + 6;
     let box: [number, number, number, number] | null = null;
     for (const dx of [outward, -outward]) {
-      for (const dy of [0, -15, 15]) {
+      for (const dy of [0, -(LABEL_HEIGHT + 1), LABEL_HEIGHT + 1]) {
         const boxX = dx < 0 ? item.x - gap - boxWidth : item.x + gap;
-        const candidate: [number, number, number, number] = [boxX, item.y - 7 + dy, boxWidth, 14];
+        const candidate: [number, number, number, number] = [
+          boxX,
+          item.y - LABEL_HEIGHT / 2 + dy,
+          boxWidth,
+          LABEL_HEIGHT,
+        ];
         // The selection and the hover target always get their label.
         if (item.priority === 3 || !placed.some((other) => overlaps(candidate, other))) {
           box = candidate;
@@ -377,11 +424,12 @@ function drawOverlay(renderer: Sigma, canvas: HTMLCanvasElement, live: Live): vo
     }
     if (!box) continue;
     placed.push(box);
-    ctx.fillStyle = LABEL_BG;
-    roundRect(ctx, box[0], box[1], box[2], box[3], 3);
+    ctx.fillStyle = theme.labelBackground;
+    roundRect(ctx, box[0], box[1], box[2], box[3], theme.radius);
     ctx.fill();
-    ctx.fillStyle = LABEL_FG;
-    ctx.fillText(item.id, box[0] + 4, box[1] + 7.5);
+    // Whatever the operator is looking at reads brightest.
+    ctx.fillStyle = item.priority >= 2 ? theme.fg : theme.fgMuted;
+    ctx.fillText(item.id, box[0] + LABEL_PAD_X, box[1] + LABEL_HEIGHT / 2 + 0.5);
   }
 
   // Attack-path step numbers: the path is an ordered claim, and a highlighted
@@ -392,15 +440,16 @@ function drawOverlay(renderer: Sigma, canvas: HTMLCanvasElement, live: Live): vo
       if (!data) return;
       const { x, y } = renderer.framedGraphToViewport(data);
       const radius = renderer.scaleSize(data.size);
+      const badgeY = y - radius - BADGE_RADIUS - 4;
       ctx.save();
-      ctx.fillStyle = ACCENT;
+      ctx.fillStyle = theme.accent;
       ctx.beginPath();
-      ctx.arc(x, y - radius - 11, 7, 0, Math.PI * 2);
+      ctx.arc(x, badgeY, BADGE_RADIUS, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = "#0a0c10";
-      ctx.font = "600 9px var(--font-geist-sans, ui-sans-serif), sans-serif";
+      ctx.fillStyle = theme.onAccent;
+      ctx.font = `600 ${LABEL_SIZE}px ${theme.sansFont}`;
       ctx.textAlign = "center";
-      ctx.fillText(String(index + 1), x, y - radius - 10.5);
+      ctx.fillText(String(index + 1), x, badgeY + 0.5);
       ctx.restore();
     });
     ctx.textAlign = "left";

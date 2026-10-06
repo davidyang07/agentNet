@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Panel } from "@/components/ui/Panel";
-import { ErrorState, Spinner } from "@/components/ui/States";
+import { ErrorState, Spinner, WarningBanner } from "@/components/ui/States";
 import type { ArmState } from "@/lib/comparison/useComparison";
 
 /**
@@ -46,10 +46,10 @@ export function ArmStatusCard({
       )}
 
       {arm.status === "done" && arm.incomplete && (
-        <p className="mt-3 text-2xs leading-4 text-warn">
+        <WarningBanner className="mt-3">
           This run&apos;s persisted log is marked incomplete — its metrics reflect only what was
           actually recorded, and should not be read as a final result.
-        </p>
+        </WarningBanner>
       )}
 
       {children && <div className="mt-3">{children}</div>}

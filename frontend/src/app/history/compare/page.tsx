@@ -9,7 +9,7 @@ import { MetricsDeltaTable } from "@/components/insights/MetricsComparison";
 import { PageHeader } from "@/components/shell/AppShell";
 import { Badge, ConfigChip } from "@/components/ui/Badge";
 import { Panel, PanelHeader } from "@/components/ui/Panel";
-import { Disclaimer, EmptyState, Spinner, WarningBanner } from "@/components/ui/States";
+import { Disclaimer, EmptyState, ErrorState, Spinner, WarningBanner } from "@/components/ui/States";
 import { getExperimentDetail, type ExperimentDetail } from "@/lib/api/client";
 import { useComparison } from "@/lib/comparison/useComparison";
 import { shortId } from "@/lib/format";
@@ -62,7 +62,7 @@ function ArmConfigSummary({ id, state }: { id: string; state: DetailState }) {
     );
   }
   if (state.status === "error") {
-    return <span className="text-2xs text-critical">{state.error}</span>;
+    return <ErrorState title="Could not load this run" detail={state.error} />;
   }
   const { detail } = state;
   return (
@@ -106,7 +106,7 @@ function CompareContent() {
         description={
           <>
             Select two rows on{" "}
-            <Link href="/history" className="text-accent hover:text-accent-hover">
+            <Link href="/history" className="text-fg underline underline-offset-2 hover:text-fg-muted">
               the runs list
             </Link>{" "}
             and choose Compare selected.

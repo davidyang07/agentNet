@@ -2,12 +2,14 @@
 
 import { useId, type InputHTMLAttributes, type ReactNode } from "react";
 
+import { IconChevronDown } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 
+// Inputs sit inset: one surface step *down* from the panel they live on.
 const CONTROL =
-  "h-8 w-full rounded-md border border-line bg-raised px-2 text-sm text-fg " +
+  "h-8 w-full rounded-md border border-line-strong bg-surface px-2.5 text-sm text-fg " +
   "transition-colors duration-100 placeholder:text-fg-subtle " +
-  "hover:border-line-strong focus:border-accent focus:outline-none " +
+  "hover:border-fg-subtle/60 focus:border-accent focus:outline-none " +
   "disabled:cursor-not-allowed disabled:opacity-40";
 
 function FieldFrame({
@@ -29,7 +31,7 @@ function FieldFrame({
         {label}
       </label>
       {children}
-      {hint && <p className="text-2xs leading-4 text-fg-subtle">{hint}</p>}
+      {hint && <p className="text-2xs text-fg-subtle">{hint}</p>}
     </div>
   );
 }
@@ -112,25 +114,22 @@ export function SelectField<T extends string>({
   const id = useId();
   return (
     <FieldFrame id={id} label={label} hint={hint} className={className}>
-      <select
-        id={id}
-        className={cn(CONTROL, "appearance-none pr-6")}
-        style={{
-          backgroundImage:
-            "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%2398a3b4' stroke-width='1.4'><path d='M3 4.5 6 7.5 9 4.5'/></svg>\")",
-          backgroundRepeat: "no-repeat",
-          backgroundPosition: "right 6px center",
-        }}
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.value as T)}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+      <div className="relative">
+        <select
+          id={id}
+          className={cn(CONTROL, "appearance-none pr-7")}
+          value={value}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.value as T)}
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <IconChevronDown className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 text-fg-subtle" />
+      </div>
     </FieldFrame>
   );
 }
@@ -154,8 +153,8 @@ export function ToggleField({
   return (
     <label
       className={cn(
-        "flex min-w-0 cursor-pointer select-none items-center gap-2.5 rounded-md border border-line bg-raised px-2.5 py-1.5",
-        "transition-colors duration-100 hover:border-line-strong",
+        "flex min-w-0 cursor-pointer select-none items-center gap-2.5 rounded-md border border-line-strong bg-surface px-2.5 py-1.5",
+        "transition-colors duration-100 hover:border-fg-subtle/60",
         disabled && "cursor-not-allowed opacity-40 hover:border-line",
         className,
       )}
@@ -177,14 +176,14 @@ export function ToggleField({
       >
         <span
           className={cn(
-            "absolute top-0.5 size-3 rounded-full bg-white transition-[left] duration-150",
+            "absolute top-0.5 size-3 rounded-full bg-fg transition-[left] duration-150",
             checked ? "left-3.5" : "left-0.5",
           )}
         />
       </span>
       <span className="min-w-0">
         <span className="block text-xs font-medium text-fg">{label}</span>
-        {hint && <span className="block text-2xs leading-4 text-fg-subtle">{hint}</span>}
+        {hint && <span className="block text-2xs text-fg-subtle">{hint}</span>}
       </span>
     </label>
   );
@@ -218,11 +217,11 @@ export function ChipMultiSelect<T extends string>({
             disabled={disabled}
             onClick={() => onToggle(option.value)}
             className={cn(
-              "rounded-md border px-2 py-1 text-xs font-medium transition-colors duration-100",
+              "h-7 rounded-md border px-2.5 text-xs font-medium transition-colors duration-100",
               "disabled:cursor-not-allowed disabled:opacity-40",
               active
-                ? "border-accent-line bg-accent-soft text-accent"
-                : "border-line bg-raised text-fg-muted hover:border-line-strong hover:text-fg",
+                ? "border-accent-line bg-accent-soft text-fg"
+                : "border-line-strong bg-surface text-fg-muted hover:border-fg-subtle/60 hover:text-fg",
             )}
           >
             {option.label}

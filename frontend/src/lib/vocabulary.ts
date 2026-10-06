@@ -220,24 +220,30 @@ export const EDGE_LAYER_OF: Record<GraphEdgeType, EdgeLayer> = {
   updates_threat_memory: "oversight",
 };
 
+/** Edge layers are structure, so their colours are neutral steps told apart by
+ * lightness (DESIGN.md › Graph edges). `token` is read by the WebGL renderer;
+ * `swatch` is the same token as a class, for the legend. */
 export const EDGE_LAYER_META: Record<
   EdgeLayer,
-  { label: string; hint: string; color: string }
+  { label: string; hint: string; token: `--color-${string}`; swatch: string }
 > = {
   mesh: {
     label: "Communication",
     hint: "Agent-to-agent messaging and trust — the path compromise propagates along.",
-    color: "#2b3340",
+    token: "--color-edge-mesh",
+    swatch: "bg-edge-mesh",
   },
   access: {
     label: "Access",
     hint: "Which agents can reach which tools, credentials and resources.",
-    color: "#3a4c63",
+    token: "--color-edge-access",
+    swatch: "bg-edge-access",
   },
   oversight: {
     label: "Oversight",
     hint: "Which sentinels monitor which agents, and who holds quarantine authority.",
-    color: "#3d3357",
+    token: "--color-edge-oversight",
+    swatch: "bg-edge-oversight",
   },
 };
 

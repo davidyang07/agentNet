@@ -6,10 +6,10 @@ import {
   metricSeverity,
   type MetricDescriptor,
 } from "@/components/insights/SecurityMetrics";
+import { SeverityDot } from "@/components/ui/Badge";
 import { Td, TableWrap, Th, Tr } from "@/components/ui/Table";
 import { cn } from "@/lib/cn";
 import type { MetricsResponse } from "@/lib/api/client";
-import { SEVERITY_TEXT } from "@/lib/severity";
 
 /** Whether a *decrease* in this metric is an improvement. */
 function lowerIsBetter(descriptor: MetricDescriptor): boolean {
@@ -79,32 +79,32 @@ export function MetricsDeltaTable({
             <Tr key={descriptor.key}>
               <Td className="text-fg">
                 <span className="block text-xs text-fg">{descriptor.label}</span>
-                <span className="block max-w-lg text-2xs leading-4 text-fg-subtle">
+                <span className="block max-w-lg text-2xs text-fg-subtle">
                   {descriptor.definition}
                 </span>
               </Td>
               <Td className="text-right font-mono text-fg-muted">
                 {before ? formatMetric(descriptor, beforeValue) : "—"}
               </Td>
-              <Td
-                className={cn(
-                  "text-right font-mono",
-                  afterValue !== null
-                    ? SEVERITY_TEXT[metricSeverity(descriptor, afterValue)]
-                    : "text-fg-muted",
-                )}
-              >
-                {after ? formatMetric(descriptor, afterValue) : "—"}
+              <Td className="text-right font-mono text-fg">
+                {/* State on the dot, value in ink (DESIGN.md › Colors › Ink). */}
+                <span className="inline-flex items-center gap-1.5">
+                  {afterValue !== null &&
+                    metricSeverity(descriptor, afterValue) !== "neutral" && (
+                      <SeverityDot severity={metricSeverity(descriptor, afterValue)} />
+                    )}
+                  {after ? formatMetric(descriptor, afterValue) : "—"}
+                </span>
               </Td>
               <Td className="text-right">
                 <span
                   className={cn(
-                    "font-mono text-2xs",
-                    direction === "better" && "text-ok",
-                    direction === "worse" && "text-critical",
-                    (direction === "same" || direction === "unknown") && "text-fg-subtle",
+                    "inline-flex items-center gap-1.5 font-mono text-2xs",
+                    direction === "same" || direction === "unknown" ? "text-fg-subtle" : "text-fg",
                   )}
                 >
+                  {direction === "better" && <SeverityDot severity="ok" />}
+                  {direction === "worse" && <SeverityDot severity="critical" />}
                   {formatDelta(descriptor, beforeValue, afterValue)}
                 </span>
               </Td>

@@ -64,7 +64,7 @@ function ActivityContent({ experimentId }: { experimentId: string }) {
         className="py-3"
       />
 
-      <div className="grid min-h-0 flex-1 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:p-5">
+      <div className="grid min-h-0 flex-1 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_--spacing(80)] lg:p-5">
         <Panel flush className="min-h-96 lg:min-h-0">
           <PanelHeader bordered title="Event log" />
           <EventFeed

@@ -11,6 +11,7 @@ import {
   metricSeverity,
 } from "@/components/insights/SecurityMetrics";
 import { ReplayTransport } from "@/components/run/ReplayTransport";
+import { SeverityDot } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/shell/AppShell";
 import { Button } from "@/components/ui/Button";
 import { IconArrowLeft, IconChevronDown, IconChevronRight } from "@/components/ui/icons";
@@ -20,7 +21,6 @@ import { shortId } from "@/lib/format";
 import { initialReplayControlState, replayControlReducer } from "@/lib/replay/controlReducer";
 import { useReplayStream } from "@/lib/replay/useReplayStream";
 import { useSecurityInsights } from "@/lib/security/useSecurityInsights";
-import { SEVERITY_TEXT } from "@/lib/severity";
 
 // The four headline metrics, shown as a strip so the replay keeps its vertical
 // space for the graph.
@@ -129,12 +129,15 @@ function ReplayContent({ experimentId }: { experimentId: string }) {
         <div className="flex shrink-0 flex-wrap items-center gap-x-6 gap-y-1 border-b border-line px-4 py-2">
           <span className="eyebrow">Final state</span>
           {strip.map(({ descriptor, value }) => (
-            <span key={descriptor.key} className="flex items-baseline gap-1.5" title={descriptor.definition}>
+            <span key={descriptor.key} className="flex items-center gap-1.5" title={descriptor.definition}>
               <span className="text-2xs text-fg-subtle">{descriptor.label}</span>
+              {value !== null && metricSeverity(descriptor, value) !== "neutral" && (
+                <SeverityDot severity={metricSeverity(descriptor, value)} />
+              )}
               <span
                 className={cn(
                   "font-mono text-xs tabular",
-                  value === null ? "text-fg-muted" : SEVERITY_TEXT[metricSeverity(descriptor, value)],
+                  value === null ? "text-fg-muted" : "text-fg",
                 )}
               >
                 {formatMetric(descriptor, value)}
@@ -150,7 +153,7 @@ function ReplayContent({ experimentId }: { experimentId: string }) {
       {/* A viewport-relative height rather than flex-1: the transport, the
           metric strip and the log all want space on this screen, and the graph
           losing the argument turns it into a strip. */}
-      <div className="flex h-[clamp(340px,52vh,720px)] flex-col">
+      <div className="flex h-[clamp(--spacing(85),52vh,--spacing(180))] flex-col">
         <TopologyWorkspace
           experimentId={experimentId}
           stream={state}

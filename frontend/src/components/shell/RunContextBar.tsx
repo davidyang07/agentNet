@@ -36,11 +36,11 @@ export function RunContextBar() {
   const progress = config ? Math.min(1, stream.tick / config.max_ticks) : 0;
 
   return (
-    <div className="shrink-0 border-b border-line bg-surface">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2 lg:px-4">
+    <div className="shrink-0 border-b border-line">
+      <div className="flex min-h-12 flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2 lg:px-4">
         <Link href="/" className="flex items-center gap-2 text-fg lg:hidden">
-          <BrandMark className="text-accent" />
-          <span className="text-sm font-semibold tracking-tight">AgentShield</span>
+          <BrandMark className="size-4.5" />
+          <span className="text-sm font-semibold">AgentShield</span>
         </Link>
 
         {hydrating ? (
@@ -62,7 +62,7 @@ export function RunContextBar() {
             <div className="flex min-w-32 max-w-56 flex-1 items-center gap-2">
               <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-line">
                 <div
-                  className="h-full rounded-full bg-accent transition-[width] duration-300"
+                  className="h-full rounded-full bg-fg-subtle transition-[width] duration-300"
                   style={{ width: `${progress * 100}%` }}
                 />
               </div>
@@ -118,7 +118,7 @@ export function RunContextBar() {
             <div className="ml-auto">
               <Link
                 href="/"
-                className="text-xs font-medium text-accent transition-colors hover:text-accent-hover"
+                className="text-xs font-medium text-fg-muted transition-colors hover:text-fg"
               >
                 Go to launch →
               </Link>
@@ -130,7 +130,7 @@ export function RunContextBar() {
       {(control.error || schemaError) && (
         <p
           role="alert"
-          className="border-t border-critical/25 bg-critical-soft px-4 py-1.5 text-2xs text-critical"
+          className="border-t border-critical-line bg-critical-soft px-4 py-1.5 text-2xs text-fg"
         >
           {schemaError ?? control.error}
         </p>

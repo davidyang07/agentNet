@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { IconCheck } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
 
 export type StageState = "done" | "active" | "pending";
@@ -35,16 +36,18 @@ export function WorkflowTracker({ stages }: { stages: readonly Stage[] }) {
             )}
           >
             <span className="flex items-center gap-1.5">
+              {/* Workflow progress is not a security state, so "done" is
+                  neutral; the accent marks where the operator is now. */}
               <span
                 aria-hidden
                 className={cn(
-                  "flex size-4 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold",
-                  stage.state === "done" && "bg-ok-soft text-ok",
-                  stage.state === "active" && "bg-accent text-white",
-                  stage.state === "pending" && "border border-line text-fg-subtle",
+                  "flex size-5 shrink-0 items-center justify-center rounded-full text-2xs font-semibold",
+                  stage.state === "done" && "bg-overlay text-fg-muted",
+                  stage.state === "active" && "bg-accent text-on-accent",
+                  stage.state === "pending" && "border border-line-strong text-fg-subtle",
                 )}
               >
-                {stage.state === "done" ? "✓" : index + 1}
+                {stage.state === "done" ? <IconCheck className="size-3" /> : index + 1}
               </span>
               <span
                 className={cn(
@@ -55,7 +58,7 @@ export function WorkflowTracker({ stages }: { stages: readonly Stage[] }) {
                 {stage.label}
               </span>
             </span>
-            <span className="line-clamp-2 text-2xs leading-4 text-fg-subtle">
+            <span className="line-clamp-2 text-2xs text-fg-subtle">
               {stage.description}
             </span>
           </Link>

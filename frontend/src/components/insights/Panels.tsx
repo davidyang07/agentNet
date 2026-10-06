@@ -8,7 +8,12 @@ import type { CriticalNodeView, SecurityGraphView } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
 import { nodeShape } from "@/lib/graph/model";
 import { summarizeNonAgentNodes } from "@/lib/security/summary";
-import { SECURITY_STATE_LABEL, SECURITY_STATE_SEVERITY, type SecurityState } from "@/lib/severity";
+import {
+  SECURITY_STATE_LABEL,
+  SECURITY_STATE_SEVERITY,
+  SEVERITY_SURFACE,
+  type SecurityState,
+} from "@/lib/severity";
 import type { selectMetrics } from "@/lib/stream/reducer";
 import { nodeTypeMeta } from "@/lib/vocabulary";
 
@@ -25,7 +30,7 @@ export function FleetBreakdown({ metrics }: { metrics: StreamMetrics }) {
   return (
     <div>
       <div className="mb-2 flex items-baseline justify-between gap-2">
-        <span className="text-2xl font-semibold tracking-tight tabular text-fg">
+        <span className="text-2xl font-semibold tabular text-fg">
           {metrics.total}
         </span>
         <span className="text-xs text-fg-subtle">agents under test</span>
@@ -75,13 +80,10 @@ export function AttackSurfacePanel({
             <div className="flex items-baseline gap-2">
               <ShapeGlyph shape={nodeShape(nodeType)} className="shrink-0 text-fg-subtle" />
               <span className="text-xs font-medium text-fg">{meta.plural}</span>
-              <span aria-hidden className="min-w-2 flex-1 border-b border-dotted border-line" />
+              <span aria-hidden className="relative -top-1 min-w-2 flex-1 border-b border-dotted border-line-strong" />
+              {/* The meter below carries the state; the count stays ink. */}
               <span className="font-mono text-xs tabular text-fg">
-                {compromised > 0 ? (
-                  <span className="text-critical">{compromised}</span>
-                ) : (
-                  <span className="text-ok">0</span>
-                )}
+                {compromised}
                 <span className="text-fg-subtle">/{total}</span>
               </span>
               <span className="text-2xs text-fg-subtle">compromised</span>
@@ -102,8 +104,9 @@ export function AttackSurfacePanel({
                         disabled={!onSelectNode}
                         onClick={() => onSelectNode?.(node.id)}
                         className={cn(
-                          "rounded-sm bg-critical-soft px-1.5 py-0.5 font-mono text-2xs text-critical ring-1 ring-inset ring-critical/25",
-                          onSelectNode && "transition-colors hover:ring-critical/60",
+                          "flex h-5 items-center gap-1.5 rounded-xs border px-1.5 font-mono text-2xs text-fg",
+                          SEVERITY_SURFACE.critical,
+                          onSelectNode && "transition-colors hover:border-critical",
                         )}
                       >
                         {node.id}
@@ -150,11 +153,11 @@ export function CriticalNodesPanel({
               disabled={!onSelectNode}
               onClick={() => onSelectNode?.(node.id)}
               className={cn(
-                "flex w-full items-baseline gap-2 rounded-sm px-1 py-0.5 text-left",
-                onSelectNode && "transition-colors hover:bg-raised",
+                "flex w-full items-center gap-2 rounded-sm px-1 py-0.5 text-left",
+                onSelectNode && "transition-colors hover:bg-overlay",
               )}
             >
-              <SeverityDot severity={severity} className="translate-y-[-1px]" />
+              <SeverityDot severity={severity} />
               <span className="truncate font-mono text-xs text-fg">{node.id}</span>
               {state && state !== "healthy" && (
                 <span className="shrink-0 text-2xs text-fg-subtle">

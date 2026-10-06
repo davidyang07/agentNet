@@ -1,67 +1,84 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------------------
-   AgentShield design tokens.
+   AgentShield design tokens — the values in DESIGN.md, which is the source of
+   truth. Change a value there first, then here.
 
-   One dark theme, deliberately: this is an operator console, and a single
-   well-tuned surface ramp reads more credible than a half-tuned pair. Every
-   colour below belongs to exactly one of three families and they never mix:
+   Every colour belongs to exactly one family and they never mix:
 
-     surface/line/fg  — structural chrome, always neutral
-     accent           — interaction only (focus, selection, primary action)
-     severity         — meaning only (security state, finding severity)
+     canvas/surface/raised/overlay, line, fg  — structure, always neutral
+     accent                                   — interaction only (focus, the
+                                                primary action, selection)
+     critical/high/warn/contained/ok/neutral  — security state and severity
 
-   Nothing decorative gets a severity colour, and nothing severity-bearing
-   gets the accent. That separation is what keeps a dense screen readable.
+   Tailwind's default palette is switched off (`--color-*: initial`), so a
+   utility like `text-white` or `bg-red-500` does not exist here — only tokens.
+   `static` emits every token as a CSS variable even when no utility uses it:
+   the graph's WebGL/canvas renderers read them at runtime (lib/theme.ts).
 --------------------------------------------------------------------------- */
 
-@theme {
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+@theme static {
+  --color-*: initial;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", monospace;
 
-  /* Surfaces, darkest (page) to lightest (popover/hover). */
-  --color-canvas: #0a0c10;
-  --color-surface: #10131a;
-  --color-raised: #161a22;
-  --color-overlay: #1c212b;
+  /* Surface ladder, darkest (app frame) to lightest (hover/popover). */
+  --color-canvas: #08090a;
+  --color-surface: #0f1011;
+  --color-raised: #151618;
+  --color-overlay: #1c1d20;
 
-  /* Hairlines. `line` is the default border everywhere; `line-strong` is for
-     controls that need to read as interactive without a fill. */
-  --color-line: #212734;
-  --color-line-strong: #2d3546;
+  /* Hairlines. `line` is the default border; `line-strong` is for controls. */
+  --color-line: #23252a;
+  --color-line-strong: #34343a;
 
-  /* Foreground ramp. */
-  --color-fg: #e7ecf3;
-  --color-fg-muted: #98a3b4;
-  --color-fg-subtle: #68738a;
+  /* Ink. All three pass WCAG AA on every surface. */
+  --color-fg: #f7f8f8;
+  --color-fg-muted: #9ba1ab;
+  --color-fg-subtle: #7d838c;
 
-  /* Interaction. */
-  --color-accent: #4d8dfd;
-  --color-accent-hover: #6ba0ff;
-  --color-accent-soft: #16233b;
-  --color-accent-line: #2b4675;
+  /* Interaction. Never encodes security meaning. */
+  --color-accent: #5e6ad2;
+  --color-accent-hover: #5560c8;
+  --color-accent-soft: #181b28;
+  --color-accent-line: #2b2f55;
+  --color-on-accent: #ffffff;
 
-  /* Severity / security state. Also used for the graph, which is why
-     `neutral` (healthy) is a real colour and not just muted foreground. */
-  --color-critical: #f2555f;
-  --color-critical-soft: #2c1418;
-  --color-high: #f5834e;
-  --color-high-soft: #2a1a12;
-  --color-warn: #e0b341;
-  --color-warn-soft: #272013;
-  --color-contained: #a273f2;
-  --color-contained-soft: #211a33;
-  --color-ok: #3fb87a;
-  --color-ok-soft: #10241b;
-  --color-neutral: #7b8698;
-  --color-neutral-soft: #1a1f28;
+  /* Security state / severity. Healthy = neutral, suspicious = warn,
+     compromised = critical, quarantined = contained, recovered = ok. Validated
+     for colour-vision deficiency against the canvas — see DESIGN.md. `-soft`
+     and `-line` are 12% / 35% mixes into `surface`. */
+  --color-critical: #d33a3e;
+  --color-critical-soft: #271516;
+  --color-critical-line: #541f21;
+  --color-high: #e8742a;
+  --color-high-soft: #291c14;
+  --color-high-line: #5b331a;
+  --color-warn: #ecaa0b;
+  --color-warn-soft: #2a2210;
+  --color-warn-line: #5c460f;
+  --color-contained: #21a3bc;
+  --color-contained-soft: #112226;
+  --color-contained-line: #15434d;
+  --color-ok: #7df1cb;
+  --color-ok-soft: #1c2b27;
+  --color-ok-line: #365f52;
+  --color-neutral: #80858e;
+  --color-neutral-soft: #1d1e20;
+  --color-neutral-line: #37393d;
 
-  --radius-xs: 3px;
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
+  /* Graph edge layers — structure, so neutral steps told apart by lightness. */
+  --color-edge-mesh: #2c2e33;
+  --color-edge-access: #3e4047;
+  --color-edge-oversight: #565961;
 
-  /* Dense-UI type scale. 13px is the workhorse body size. */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Console type scale. 13px is the working size; nothing renders below 11px. */
   --text-2xs: 0.6875rem;
   --text-2xs--line-height: 1rem;
   --text-xs: 0.75rem;
@@ -74,13 +91,18 @@
   --text-lg--line-height: 1.5rem;
   --text-xl: 1.125rem;
   --text-xl--line-height: 1.625rem;
+  --text-xl--letter-spacing: -0.0125rem;
   --text-2xl: 1.5rem;
   --text-2xl--line-height: 1.875rem;
+  --text-2xl--letter-spacing: -0.025rem;
   --text-3xl: 1.875rem;
-  --text-3xl--line-height: 2.125rem;
+  --text-3xl--line-height: 2.25rem;
+  --text-3xl--letter-spacing: -0.04rem;
 
-  --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.4);
-  --shadow-pop: 0 12px 32px -8px rgb(0 0 0 / 0.7), 0 0 0 1px var(--color-line);
+  /* No drop shadows on dark: a panel's depth is its surface step plus a 1px
+     top-edge highlight. Only popovers float. */
+  --shadow-panel: inset 0 1px 0 rgb(255 255 255 / 0.03);
+  --shadow-pop: 0 12px 32px -8px rgb(0 0 0 / 0.7), 0 0 0 1px var(--color-line-strong);
 }
 
 @layer base {
@@ -95,6 +117,7 @@
     font-size: var(--text-base);
     line-height: var(--text-base--line-height);
     -webkit-font-smoothing: antialiased;
+    font-feature-settings: "cv11", "ss01";
   }
 
   /* Numbers in tables, metrics and logs must not jitter as they tick. */
@@ -128,56 +151,23 @@
     background-color: var(--color-line-strong);
     border: 3px solid transparent;
     background-clip: content-box;
-    border-radius: 999px;
+    border-radius: 9999px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background-color: #3c465a;
+    background-color: var(--color-fg-subtle);
   }
 }
 
 @layer components {
-  /* The uppercase micro-label used for every section heading and column
-     header. Defined once so the letter-spacing never drifts between screens. */
+  /* Section label for every panel group and column header — Linear's sidebar
+     header voice: sentence case, 12px, medium, subtle. Defined once so it
+     never drifts between screens. */
   .eyebrow {
-    font-size: var(--text-2xs);
-    line-height: var(--text-2xs--line-height);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
     font-weight: 500;
     color: var(--color-fg-subtle);
-  }
-}
-
-@utility scrim-y {
-  /* Fades a scrolling list into its container instead of cutting it off. */
-  mask-image: linear-gradient(
-    to bottom,
-    transparent 0,
-    black 12px,
-    black calc(100% - 12px),
-    transparent 100%
-  );
-}
-
-@keyframes pulse-ring {
-  0% {
-    box-shadow: 0 0 0 0 currentColor;
-    opacity: 0.7;
-  }
-  70% {
-    box-shadow: 0 0 0 5px transparent;
-    opacity: 0;
-  }
-  100% {
-    box-shadow: 0 0 0 0 transparent;
-    opacity: 0;
-  }
-}
-
-@keyframes shimmer {
-  100% {
-    transform: translateX(100%);
   }
 }
 

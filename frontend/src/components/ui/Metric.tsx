@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
-import { SEVERITY_BG, SEVERITY_TEXT, type Severity } from "@/lib/severity";
+import { SeverityDot } from "@/components/ui/Badge";
+import { SEVERITY_BG, type Severity } from "@/lib/severity";
 
 /**
- * The headline KPI tile. Value dominates, label sits above it small and quiet,
- * and the meter underneath carries the severity — so a screen of tiles can be
- * read at a glance by colour alone, then in detail by number.
+ * The headline KPI tile. Value dominates in ink, the label sits above it small
+ * and quiet, and the meter underneath carries the severity — colour on the
+ * mark, never on the number (DESIGN.md › Components).
  */
 export function MetricTile({
   label,
@@ -27,25 +28,20 @@ export function MetricTile({
   footnote?: ReactNode;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-line bg-surface p-3.5">
-      <div className="flex items-baseline justify-between gap-2">
+    <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-line bg-raised p-3.5 shadow-panel">
+      <div className="flex items-center justify-between gap-2">
         <span className="eyebrow truncate" title={hint ?? label}>
           {label}
         </span>
+        {/* Without a meter, the dot is where the state shows. */}
+        {fraction === undefined && severity !== "neutral" && <SeverityDot severity={severity} />}
       </div>
       <div className="flex items-baseline gap-1">
-        <span
-          className={cn(
-            "text-2xl font-semibold tracking-tight tabular",
-            severity === "neutral" ? "text-fg" : SEVERITY_TEXT[severity],
-          )}
-        >
-          {value}
-        </span>
+        <span className="text-2xl font-semibold text-fg tabular">{value}</span>
         {unit && <span className="text-xs text-fg-subtle">{unit}</span>}
       </div>
       {fraction !== undefined && <Meter fraction={fraction} severity={severity} />}
-      {footnote && <p className="text-2xs leading-4 text-fg-subtle">{footnote}</p>}
+      {footnote && <p className="text-2xs text-fg-subtle">{footnote}</p>}
     </div>
   );
 }
@@ -92,13 +88,9 @@ export function StatRow({
   return (
     <div className="flex items-baseline gap-2 py-1" title={hint}>
       <dt className="shrink-0 text-xs text-fg-muted">{label}</dt>
-      <span aria-hidden className="min-w-3 flex-1 translate-y-[-3px] border-b border-dotted border-line" />
-      <dd
-        className={cn(
-          "shrink-0 font-mono text-xs tabular",
-          severity ? SEVERITY_TEXT[severity] : "text-fg",
-        )}
-      >
+      <span aria-hidden className="relative -top-1 min-w-3 flex-1 border-b border-dotted border-line-strong" />
+      <dd className="flex shrink-0 items-center gap-1.5 font-mono text-xs text-fg tabular">
+        {severity && severity !== "neutral" && <SeverityDot severity={severity} />}
         {value}
       </dd>
     </div>
@@ -106,7 +98,7 @@ export function StatRow({
 }
 
 export function StatList({ children, className }: { children: ReactNode; className?: string }) {
-  return <dl className={cn("divide-y divide-line/60", className)}>{children}</dl>;
+  return <dl className={cn("divide-y divide-line", className)}>{children}</dl>;
 }
 
 /**
@@ -126,7 +118,7 @@ export function StackedBar({
     return <div className={cn("h-2 w-full rounded-full bg-line", className)} />;
   }
   return (
-    <div className={cn("flex h-2 w-full gap-px overflow-hidden rounded-full bg-line", className)}>
+    <div className={cn("flex h-2 w-full gap-0.5 overflow-hidden rounded-full bg-line", className)}>
       {segments
         .filter((s) => s.value > 0)
         .map((s) => (

@@ -23,7 +23,7 @@ export function Th({
     <th
       scope="col"
       className={cn(
-        "sticky top-0 z-10 whitespace-nowrap border-b border-line bg-surface px-3 py-2",
+        "sticky top-0 z-10 whitespace-nowrap border-b border-line bg-raised px-3 py-2",
         "eyebrow text-left",
         className,
       )}
@@ -40,7 +40,7 @@ export function Td({
   ...rest
 }: TdHTMLAttributes<HTMLTableCellElement> & { children?: ReactNode }) {
   return (
-    <td className={cn("border-b border-line/60 px-3 py-2 align-middle text-fg-muted", className)} {...rest}>
+    <td className={cn("h-9 border-b border-line px-3 py-1.5 align-middle text-fg-muted", className)} {...rest}>
       {children}
     </td>
   );
@@ -63,7 +63,7 @@ export function Tr({
       className={cn(
         "transition-colors duration-75",
         onClick && "cursor-pointer",
-        selected ? "bg-accent-soft" : onClick && "hover:bg-raised",
+        selected ? "bg-accent-soft" : onClick && "hover:bg-overlay",
         className,
       )}
     >

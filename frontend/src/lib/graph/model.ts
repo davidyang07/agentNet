@@ -1,6 +1,7 @@
 import type { SecurityGraphView } from "@/lib/api/client";
 import type { GraphState, NodeView } from "@/lib/stream/reducer";
-import { SECURITY_STATE_SEVERITY, SEVERITY_HEX, type SecurityState } from "@/lib/severity";
+import { SECURITY_STATE_SEVERITY, type SecurityState } from "@/lib/severity";
+import { severityColor } from "@/lib/theme";
 import { EDGE_LAYER_OF, type EdgeLayer, type GraphEdgeType } from "@/lib/vocabulary";
 
 export type TopologyNode = {
@@ -128,8 +129,10 @@ export function nodeSize(node: TopologyNode): number {
   return base;
 }
 
+/** A node's fill is its security state — read from the design tokens, since
+ * Sigma's WebGL program needs a literal colour. */
 export function nodeColor(node: TopologyNode): string {
-  return SEVERITY_HEX[SECURITY_STATE_SEVERITY[node.securityState] ?? "neutral"];
+  return severityColor(SECURITY_STATE_SEVERITY[node.securityState] ?? "neutral");
 }
 
 export function edgeLayer(edgeType: string): EdgeLayer {

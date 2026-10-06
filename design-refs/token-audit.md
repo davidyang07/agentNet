@@ -1,5 +1,14 @@
 # Hardcoded design values audit: `frontend/src`
 
+> **Status:** this is the record from *before* the redesign. The redesign pass removed every
+> colour literal, default-palette class, sub-11px text size and arbitrary Tailwind spacing value
+> listed here. Colours now come from `DESIGN.md` via `globals.css`, and the canvas/WebGL renderers
+> read them through `frontend/src/lib/theme.ts`, which also fixes the ignored canvas fonts.
+> What remains is renderer geometry: graph ring offsets, node sizes and chart padding. It stays
+> in `TopologyGraph.tsx`, `lib/graph/model.ts` and `OutbreakChart.tsx`, with the values that size
+> text named.
+> Line numbers refer to the pre-redesign code.
+
 **Scope:** every `.ts`, `.tsx` and `.css` file under `frontend/src`, excluding `frontend/src/lib/api/schema.d.ts`. All component, app, `lib/graph`, `severity.ts` and `vocabulary.ts` files were read in full. I also ran ripgrep sweeps for hex, rgb/hsl/oklch, default-palette classes, `[..]` arbitrary values, `style=`, font props, Sigma settings, SVG/canvas attributes and px/rem units.
 
 **Reference:** design tokens are defined in `@theme` at `frontend/src/app/globals.css` L18–L84. I did not count anything inside that block.

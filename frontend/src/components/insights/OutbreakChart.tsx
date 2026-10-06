@@ -2,20 +2,23 @@
 
 import { useMemo, useState } from "react";
 
-import { SEVERITY_HEX } from "@/lib/severity";
+import { cn } from "@/lib/cn";
+import { SEVERITY_BG, SEVERITY_FILL } from "@/lib/severity";
 import type { OutbreakSample } from "@/lib/stream/useOutbreakSeries";
 import { useElementSize } from "@/lib/useElementSize";
 import { EmptyState } from "@/components/ui/States";
 
-const PAD = { top: 10, right: 46, bottom: 18, left: 30 };
+// Plot margins, sized for the 11px axis labels.
+const PAD = { top: 10, right: 46, bottom: 20, left: 32 };
 // A 2px surface gap separates touching stacked bands — the separation is
 // negative space, never a stroke around the mark.
 const BAND_GAP = 2;
-const SURFACE = "#10131a";
+// The hover readout's width, used to keep it inside the plot.
+const TOOLTIP_WIDTH = 132;
 
 const SERIES = [
-  { key: "compromised" as const, label: "Compromised", color: SEVERITY_HEX.critical },
-  { key: "quarantined" as const, label: "Quarantined", color: SEVERITY_HEX.contained },
+  { key: "compromised" as const, label: "Compromised", severity: "critical" as const },
+  { key: "quarantined" as const, label: "Quarantined", severity: "contained" as const },
 ];
 
 /**
@@ -119,13 +122,13 @@ export function OutbreakChart({
               x2={PAD.left + innerWidth}
               y1={PAD.top + innerHeight * (1 - fraction)}
               y2={PAD.top + innerHeight * (1 - fraction)}
-              stroke="#1c222c"
+              className="stroke-line"
               strokeWidth="1"
             />
           ))}
 
-          <path d={geometry.compromisedPath} fill={SEVERITY_HEX.critical} fillOpacity="0.85" />
-          <path d={geometry.quarantinedPath} fill={SEVERITY_HEX.contained} fillOpacity="0.85" />
+          <path d={geometry.compromisedPath} className={SEVERITY_FILL.critical} />
+          <path d={geometry.quarantinedPath} className={SEVERITY_FILL.contained} />
 
           {hovered && (
             <>
@@ -134,36 +137,34 @@ export function OutbreakChart({
                 x2={hovered.x}
                 y1={PAD.top}
                 y2={geometry.baseline}
-                stroke="#4d5b73"
+                className="stroke-line-strong"
                 strokeWidth="1"
               />
               <circle
                 cx={hovered.x}
                 cy={hovered.yCompromised}
                 r="3.5"
-                fill={SEVERITY_HEX.critical}
-                stroke={SURFACE}
+                className={cn(SEVERITY_FILL.critical, "stroke-raised")}
                 strokeWidth="2"
               />
               <circle
                 cx={hovered.x}
                 cy={hovered.yStacked}
                 r="3.5"
-                fill={SEVERITY_HEX.contained}
-                stroke={SURFACE}
+                className={cn(SEVERITY_FILL.contained, "stroke-raised")}
                 strokeWidth="2"
               />
             </>
           )}
 
-          <text x={PAD.left - 6} y={PAD.top + 4} textAnchor="end" className="fill-fg-subtle text-[9px]">
+          <text x={PAD.left - 6} y={PAD.top + 4} textAnchor="end" className="fill-fg-subtle text-2xs">
             {total}
           </text>
           <text
             x={PAD.left - 6}
             y={geometry.baseline}
             textAnchor="end"
-            className="fill-fg-subtle text-[9px]"
+            className="fill-fg-subtle text-2xs"
           >
             0
           </text>
@@ -171,7 +172,7 @@ export function OutbreakChart({
             x={PAD.left + innerWidth}
             y={size.height - 4}
             textAnchor="end"
-            className="fill-fg-subtle text-[9px]"
+            className="fill-fg-subtle text-2xs"
           >
             tick {lastTick} of {maxTicks}
           </text>
@@ -181,7 +182,7 @@ export function OutbreakChart({
             <text
               x={geometry.points[geometry.points.length - 1].x + 6}
               y={geometry.yOf(last.compromised / 2)}
-              className="fill-fg-muted text-[10px]"
+              className="fill-fg-muted text-2xs"
               dominantBaseline="middle"
             >
               {last.compromised}
@@ -191,7 +192,7 @@ export function OutbreakChart({
             <text
               x={geometry.points[geometry.points.length - 1].x + 6}
               y={geometry.yOf(last.compromised + last.quarantined / 2)}
-              className="fill-fg-muted text-[10px]"
+              className="fill-fg-muted text-2xs"
               dominantBaseline="middle"
             >
               {last.quarantined}
@@ -204,7 +205,10 @@ export function OutbreakChart({
         <div
           className="pointer-events-none absolute top-2 rounded-md border border-line bg-overlay px-2 py-1.5 shadow-pop"
           style={{
-            left: Math.min(Math.max(hovered.x - 60, 4), Math.max(4, size.width - 130)),
+            left: Math.min(
+              Math.max(hovered.x - TOOLTIP_WIDTH / 2, 4),
+              Math.max(4, size.width - TOOLTIP_WIDTH),
+            ),
           }}
         >
           <p className="mb-1 font-mono text-2xs text-fg-subtle">tick {hovered.sample.tick}</p>
@@ -212,8 +216,7 @@ export function OutbreakChart({
             <p key={s.key} className="flex items-baseline gap-2 text-2xs">
               <span
                 aria-hidden
-                className="h-0.5 w-3 shrink-0 rounded-full"
-                style={{ background: s.color }}
+                className={cn("h-0.5 w-3 shrink-0 rounded-full", SEVERITY_BG[s.severity])}
               />
               <span className="font-mono tabular font-medium text-fg">
                 {hovered.sample[s.key]}
@@ -229,28 +232,33 @@ export function OutbreakChart({
         </div>
       )}
 
-      {/* Reachable without hovering, and the accessible fallback for the plot. */}
-      <table className="sr-only">
-        <caption>Agents by security state per simulated tick</caption>
-        <thead>
-          <tr>
-            <th scope="col">Tick</th>
-            <th scope="col">Compromised</th>
-            <th scope="col">Quarantined</th>
-            <th scope="col">Healthy</th>
-          </tr>
-        </thead>
-        <tbody>
-          {series.map((sample) => (
-            <tr key={sample.tick}>
-              <td>{sample.tick}</td>
-              <td>{sample.compromised}</td>
-              <td>{sample.quarantined}</td>
-              <td>{sample.healthy}</td>
+      {/* Reachable without hovering, and the accessible fallback for the plot.
+          `sr-only` sits on a wrapper: a <table> ignores the 1px box sr-only
+          relies on, and would otherwise stretch the page's scroll height by
+          its full, invisible length. */}
+      <div className="sr-only">
+        <table>
+          <caption>Agents by security state per simulated tick</caption>
+          <thead>
+            <tr>
+              <th scope="col">Tick</th>
+              <th scope="col">Compromised</th>
+              <th scope="col">Quarantined</th>
+              <th scope="col">Healthy</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {series.map((sample) => (
+              <tr key={sample.tick}>
+                <td>{sample.tick}</td>
+                <td>{sample.compromised}</td>
+                <td>{sample.quarantined}</td>
+                <td>{sample.healthy}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -260,11 +268,7 @@ export function OutbreakLegend() {
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
       {SERIES.map((s) => (
         <span key={s.key} className="flex items-center gap-1.5 text-2xs text-fg-muted">
-          <span
-            aria-hidden
-            className="size-2 shrink-0 rounded-xs"
-            style={{ background: s.color }}
-          />
+          <span aria-hidden className={cn("size-2 shrink-0 rounded-xs", SEVERITY_BG[s.severity])} />
           {s.label}
         </span>
       ))}

@@ -175,7 +175,7 @@ export function TopologyWorkspace({
               <button
                 type="button"
                 onClick={() => setPath(null)}
-                className="text-2xs font-medium text-accent hover:text-accent-hover"
+                className="text-xs font-medium text-fg-muted transition-colors hover:text-fg"
               >
                 Clear
               </button>

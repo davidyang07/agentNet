@@ -6,7 +6,7 @@ import {
   SECURITY_STATE_HINT,
   SECURITY_STATE_LABEL,
   SECURITY_STATE_SEVERITY,
-  SEVERITY_HEX,
+  SEVERITY_BG,
   type SecurityState,
 } from "@/lib/severity";
 import { EDGE_LAYER_META, nodeTypeMeta, type EdgeLayer } from "@/lib/vocabulary";
@@ -73,8 +73,7 @@ export function GraphLegend({
             title={SECURITY_STATE_HINT[state]}
           >
             <span
-              className="size-2 shrink-0 rounded-full"
-              style={{ background: SEVERITY_HEX[SECURITY_STATE_SEVERITY[state]] }}
+              className={cn("size-2 shrink-0 rounded-full", SEVERITY_BG[SECURITY_STATE_SEVERITY[state]])}
             />
             {SECURITY_STATE_LABEL[state]}
           </li>
@@ -126,15 +125,14 @@ export function LayerToggles({
             title={meta.hint}
             onClick={() => onToggle(layer)}
             className={cn(
-              "flex items-center gap-1.5 rounded-md border px-2 py-1 text-2xs font-medium transition-colors duration-100",
+              "flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors duration-100",
               active
-                ? "border-line-strong bg-raised text-fg"
+                ? "border-line-strong bg-overlay text-fg"
                 : "border-line bg-transparent text-fg-subtle hover:text-fg-muted",
             )}
           >
             <span
-              className="h-px w-3.5 shrink-0"
-              style={{ background: active ? meta.color : "#2a3040" }}
+              className={cn("h-0.5 w-3.5 shrink-0 rounded-full", active ? meta.swatch : "bg-line")}
             />
             {meta.label}
           </button>

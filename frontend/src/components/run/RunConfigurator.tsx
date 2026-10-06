@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Panel, PanelDivider } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { ChipMultiSelect, NumberField, SelectField, ToggleField } from "@/components/ui/Field";
-import { IconSpark } from "@/components/ui/icons";
+import { IconInfo } from "@/components/ui/icons";
 import { WarningBanner } from "@/components/ui/States";
 import type { ExperimentConfig } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
@@ -97,11 +97,11 @@ export function RunConfigurator({
                 setPresetId(preset.id);
               }}
               className={cn(
-                "rounded-md border px-2 py-1 text-xs font-medium transition-colors duration-100",
+                "h-7 rounded-md border px-2.5 text-xs font-medium transition-colors duration-100",
                 "disabled:cursor-not-allowed disabled:opacity-40",
                 presetId === preset.id
-                  ? "border-accent-line bg-accent-soft text-accent"
-                  : "border-line bg-raised text-fg-muted hover:border-line-strong hover:text-fg",
+                  ? "border-accent-line bg-accent-soft text-fg"
+                  : "border-line-strong bg-surface text-fg-muted hover:border-fg-subtle/60 hover:text-fg",
               )}
             >
               {preset.label}
@@ -110,7 +110,7 @@ export function RunConfigurator({
         </div>
         {presetId && (
           <p className="-mt-2 mb-4 flex items-start gap-2 text-xs leading-5 text-fg-subtle">
-            <IconSpark className="mt-0.5 size-3.5 shrink-0 text-fg-subtle" />
+            <IconInfo className="mt-0.5 size-3.5 shrink-0 text-fg-subtle" />
             {PRESETS.find((p) => p.id === presetId)?.description}
           </p>
         )}
@@ -205,8 +205,8 @@ export function RunConfigurator({
         />
         <ul className="mt-2.5 flex flex-col gap-1">
           {scenarios.map((value) => (
-            <li key={value} className="flex items-start gap-2 text-2xs leading-4 text-fg-subtle">
-              <span aria-hidden className="mt-[5px] size-1 shrink-0 rounded-full bg-accent/70" />
+            <li key={value} className="flex items-start gap-2 text-2xs text-fg-subtle">
+              <span aria-hidden className="mt-1.5 size-1 shrink-0 rounded-full bg-fg-subtle" />
               <span>
                 <span className="font-medium text-fg-muted">{scenarioMeta(value).label}</span>{" "}
                 — {scenarioMeta(value).hint}
@@ -214,8 +214,10 @@ export function RunConfigurator({
             </li>
           ))}
           {scenarios.length === 0 && (
-            <li className="text-2xs text-warn">
-              No scenario selected — the system will be built and observed, but never attacked.
+            <li>
+              <WarningBanner>
+                No scenario selected — the system will be built and observed, but never attacked.
+              </WarningBanner>
             </li>
           )}
         </ul>
@@ -393,7 +395,7 @@ export function RunConfigurator({
         )}
 
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-          <p className="text-2xs leading-4 text-fg-subtle">
+          <p className="text-2xs text-fg-subtle">
             Backend <span className="font-mono">Field(...)</span> bounds are the source of truth;
             these inputs mirror them for convenience and the backend re-validates every value.
           </p>

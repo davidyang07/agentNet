@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist_Mono, Inter } from "next/font/google";
 
 import { AppShell } from "@/components/shell/AppShell";
 import { ExperimentProvider } from "@/lib/experiment/ExperimentProvider";
 
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Inter is the Linear-recommended substitute (DESIGN.md › Typography); Geist
+// Mono carries identifiers, ticks and log values.
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
@@ -26,7 +28,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${geistMono.variable} h-full antialiased`}
     >
       {/* Browser extensions routinely add attributes to <body> before React
           hydrates; without this every page logs a hydration mismatch that has

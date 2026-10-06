@@ -96,7 +96,7 @@ export function EventFeed({
           action={events.length === 0 ? emptyAction : undefined}
         />
       ) : (
-        <ul className="min-h-0 flex-1 divide-y divide-line/50 overflow-y-auto px-3 py-1">
+        <ul className="min-h-0 flex-1 divide-y divide-line overflow-y-auto px-3">
           {[...filtered].reverse().map((event) => (
             <EventRow key={event.event_id} event={event} onSelectAgent={onSelectAgent} />
           ))}

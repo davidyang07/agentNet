@@ -47,7 +47,7 @@ export default function DefensesPage() {
             }
             actions={
               !control.activeConfig && (
-                <Link href="/" className="text-2xs font-medium text-accent hover:text-accent-hover">
+                <Link href="/" className="text-xs font-medium text-fg-muted transition-colors hover:text-fg">
                   Launch an assessment →
                 </Link>
               )
@@ -83,7 +83,7 @@ export default function DefensesPage() {
               title="No comparison run yet"
               description="Running the comparison launches two fresh experiments and waits for both to complete. Nothing about the currently active assessment changes."
               action={
-                <Button variant="primary" size="sm" onClick={() => runComparison(baseConfig)}>
+                <Button size="sm" onClick={() => runComparison(baseConfig)}>
                   Run comparison
                 </Button>
               }
