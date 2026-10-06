@@ -13,7 +13,8 @@ from dataclasses import replace
 
 from app.agents.prompts import INJECTION_PAYLOAD, build_system_prompt, response_leaked_token
 from app.engine import strains
-from app.engine.state import SecurityState, WorldState
+from app.engine.rng import rng
+from app.engine.state import SecurityState, WorldState, is_infected, is_susceptible
 from app.gateway.gateway import ModelGateway
 from app.gateway.schemas import ModelRequest
 from app.schemas.events import EventDraft, EventType
@@ -37,7 +38,7 @@ async def real_agent_step(
     sources = sorted(
         node_id
         for node_id, node in state.nodes.items()
-        if node.agent_kind == "real" and node.security_state == SecurityState.COMPROMISED
+        if node.agent_kind == "real" and is_infected(node)
     )
 
     # (source, target, probability, request) in deterministic sorted order --
@@ -45,23 +46,32 @@ async def real_agent_step(
     # emission order deterministic under the mock provider (asyncio.gather
     # preserves input order in its results list regardless of completion
     # timing, so no manual reordering is needed after the gather below).
-    # A request of None is an attempt immune memory blocked (docs/PLAN.md
-    # §14.4 C.4): it never reaches the model, so it costs no budget.
-    attempts: list[tuple[str, str, float, ModelRequest | None]] = []
+    # A request of None is an attempt stopped before the model: blocked by
+    # immune memory (docs/PLAN.md §14.4 C.4), or a SUSPICIOUS source's
+    # message throttled under graduated response (C.5). It costs no budget.
+    attempts: list[tuple[str, str, float, ModelRequest | None, str | None]] = []
     for source in sources:
         source_node = state.nodes[source]
         targets = sorted(
             t
             for t in source_node.neighbors
-            if state.nodes[t].agent_kind == "real"
-            and state.nodes[t].security_state == SecurityState.HEALTHY
+            if state.nodes[t].agent_kind == "real" and is_susceptible(state.nodes[t])
         )
         for target in targets:
             target_node = state.nodes[target]
             same = target_node.software_type == source_node.software_type
             probability = config.p_same if same else config.p_cross
             if immunity.blocks(state, config, target, source_node.strain, tick):
-                attempts.append((source, target, probability, None))
+                attempts.append((source, target, probability, None, "blocked_by_signature"))
+                continue
+            # A model's output can't be scaled, so a SUSPICIOUS source's
+            # attempt gets through with probability
+            # suspicious_transmission_factor instead.
+            if source_node.security_state == SecurityState.SUSPICIOUS and (
+                rng(config.seed, tick, target, f"suspicious:{source}").random()
+                >= config.suspicious_transmission_factor
+            ):
+                attempts.append((source, target, probability, None, "throttled_suspicious"))
                 continue
             request = ModelRequest(
                 agent_id=target,
@@ -74,7 +84,7 @@ async def real_agent_step(
                 purpose="propagation",
                 source_agent_id=source,
             )
-            attempts.append((source, target, probability, request))
+            attempts.append((source, target, probability, request, None))
 
     if not attempts:
         return state, []
@@ -90,19 +100,27 @@ async def real_agent_step(
     claimed_strains: dict[str, int] = {}
     track_strains = strains.tracked(config)
 
-    for source, target, probability, request in attempts:
+    for source, target, probability, request, stopped_by in attempts:
         if request is None:
-            metadata = {"probability": probability, "real_agent": True}
+            attempted = {"probability": probability, "real_agent": True}
             drafts.append(
                 EventDraft(
                     sim_tick=tick,
                     event_type=EventType.COMPROMISE_ATTEMPTED,
                     source_agent_id=source,
                     target_agent_id=target,
-                    metadata=metadata,
+                    metadata=dict(attempted),
                 )
             )
-            drafts.append(immunity.blocked_draft(tick, source, target, metadata))
+            drafts.append(
+                EventDraft(
+                    sim_tick=tick,
+                    event_type=EventType.COMPROMISE_FAILED,
+                    source_agent_id=source,
+                    target_agent_id=target,
+                    metadata={**attempted, stopped_by: True},
+                )
+            )
             continue
         result = next(results)
         # One per provider call, retries and failed calls included, so the
@@ -221,6 +239,7 @@ async def real_agent_step(
             compromised_by=source,
             tick_compromised=tick,
             strain=claimed_strains.get(target),
+            suspicious_since=None,
         )
     new_state = replace(state, nodes=new_nodes)
     return new_state, drafts

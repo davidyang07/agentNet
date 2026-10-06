@@ -20,7 +20,7 @@ Defaults to a strict no-op (attestation_replay_rate == 0.0).
 from __future__ import annotations
 
 from app.engine.rng import rng
-from app.engine.state import SecurityState, WorldState
+from app.engine.state import WorldState, is_infected
 from app.graph.builder import build_security_graph
 from app.graph.types import NodeType
 from app.schemas.events import EventDraft, EventType
@@ -41,7 +41,7 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
     compromised_agents = sorted(
         node_id
         for node_id, node in state.nodes.items()
-        if node.security_state == SecurityState.COMPROMISED
+        if is_infected(node)
     )
 
     drafts: list[EventDraft] = []

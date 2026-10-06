@@ -33,7 +33,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 
-from app.engine.state import SecurityState, WorldState
+from app.engine.state import SecurityState, WorldState, is_infected
 from app.graph.analysis import blast_radius
 from app.graph.security_graph import SecurityGraph
 from app.graph.types import NodeType
@@ -44,20 +44,20 @@ from app.schemas.events import Event
 def compromise_fraction(state: WorldState) -> float:
     if not state.nodes:
         return 0.0
-    compromised = sum(
-        1 for node in state.nodes.values() if node.security_state == SecurityState.COMPROMISED
-    )
+    # Infected agents, including SUSPICIOUS ones under graduated response.
+    compromised = sum(1 for node in state.nodes.values() if is_infected(node))
     return compromised / len(state.nodes)
 
 
 def retained_utility(state: WorldState) -> float:
-    """Fraction of agents neither COMPROMISED nor QUARANTINED."""
+    """Fraction of agents neither infected nor QUARANTINED. A SUSPICIOUS
+    agent that isn't infected (a false positive) still works."""
     if not state.nodes:
         return 0.0
     unaffected = sum(
         1
         for node in state.nodes.values()
-        if node.security_state not in (SecurityState.COMPROMISED, SecurityState.QUARANTINED)
+        if not is_infected(node) and node.security_state != SecurityState.QUARANTINED
     )
     return unaffected / len(state.nodes)
 
@@ -131,6 +131,9 @@ class EventLogTally:
     participant_ids: set[str] = field(default_factory=set)
     legitimate_adopted: bool = False
     blocked_by_signature: int = 0
+    # Graduated response (PLAN 14.4 C.5): detection and quarantine are
+    # separate steps, so containment latency carries information.
+    graduated: bool = False
 
     def snapshot(self) -> EventLogTally:
         """An independent copy, safe to read off the event loop while the
@@ -177,13 +180,16 @@ class EventLogTally:
                 if e.metadata.get("legitimate"):
                     self.legitimate_adopted = True
             elif etype == "ANOMALY_DETECTED":
-                if e.agent_id is not None:
+                if "response" in e.metadata:
+                    self.graduated = True
+                # A false positive detected nothing (PLAN 14.4 C.5).
+                if e.agent_id is not None and not e.metadata.get("false_positive"):
                     self.first_detected.setdefault(e.agent_id, e.sim_tick)
             elif etype == "AGENT_QUARANTINED":
                 self.quarantined += 1
                 if e.metadata.get("legitimate") is False:
                     self.false_quarantined += 1
-                elif e.agent_id is not None:
+                elif e.agent_id is not None and not e.metadata.get("false_positive"):
                     self.first_quarantined.setdefault(e.agent_id, e.sim_tick)
                 if e.agent_id is not None:
                     self.infectious_ids.discard(e.agent_id)
@@ -282,10 +288,10 @@ def all_metrics(
         "attack_success_rate": tally.attack_success_rate(),
         "false_quarantine_rate": tally.false_quarantine_rate(),
         "detection_latency": tally.detection_latency(state),
-        # Detection and quarantine happen in the same tick in quarantine mode,
-        # the only response mode until graduated response (PLAN 14.4 C.5), so
-        # this gap is always 0 and says nothing -- reported as None (D1).
-        "containment_latency": None,
+        # In quarantine mode detection and quarantine happen in the same
+        # tick, so this gap is always 0 and says nothing -- reported as None
+        # (D1). Graduated response (PLAN 14.4 C.5) separates them.
+        "containment_latency": tally.containment_latency() if tally.graduated else None,
         "gateway_failure_count": tally.gateway_failures,
         **epidemic.epidemic_metrics(state, tally),
     }

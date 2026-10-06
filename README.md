@@ -89,6 +89,11 @@ edges — and scenarios are pluggable via the `active_scenarios` config field.
   periphery) adopt it after `signature_delay_ticks`, and block attacks whose strain is within
   `signature_radius` bits. A wider radius catches more variants and blocks more benign traffic
   (`benign_block_rate`). A subverted sentinel's poisoned signatures now cost real benign traffic.
+- **Realistic detection** — `detector_ramp_ticks` makes detection probability rise after compromise,
+  and `detector_false_positive_rate` adds the detector's own errors on uninfected agents.
+  `response_mode: "graduated"` makes a first detection advisory: the agent turns `SUSPICIOUS` and
+  transmits at `suspicious_transmission_factor`. A second detection quarantines it, and with none
+  within `review_ticks` it is released.
 - **Analysis** — `GET /api/experiments/{id}/graph` and
   `.../analysis/{attack-paths,blast-radius,critical-nodes,provenance}` compute reachability, blast
   radius, choke points, and compromise provenance on demand from the live experiment.

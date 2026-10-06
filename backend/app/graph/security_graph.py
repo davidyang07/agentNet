@@ -74,4 +74,10 @@ class SecurityGraph:
         return view
 
     def compromised_ids(self) -> set[str]:
-        return {n.id for n in self._nodes.values() if n.security_state == SecurityState.COMPROMISED}
+        """COMPROMISED nodes, plus agents that are infected but only flagged
+        SUSPICIOUS (graduated response, docs/PLAN.md §14.4 C.5)."""
+        return {
+            n.id
+            for n in self._nodes.values()
+            if n.security_state == SecurityState.COMPROMISED or n.attrs.get("infected")
+        }

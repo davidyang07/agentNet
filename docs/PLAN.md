@@ -298,15 +298,15 @@ batch as it happens, and replay folds its reconstructed log.
 
 | Metric | Exact definition |
 |---|---|
-| `compromise_fraction` | `COMPROMISED` agents ÷ all agents |
-| `retained_utility` | agents neither `COMPROMISED` nor `QUARANTINED` ÷ all agents |
+| `compromise_fraction` | infected agents ÷ all agents. Infected means `COMPROMISED`, or `SUSPICIOUS` with `tick_compromised` set (graduated response, §14.4 C.5) |
+| `retained_utility` | agents neither infected nor `QUARANTINED` ÷ all agents; an uninfected `SUSPICIOUS` agent (a false positive) still counts as working |
 | `blast_radius_fraction` | agents reachable from a `COMPROMISED` node over propagation-capable edges (`COMMUNICATES_WITH`, `DELEGATES_TO`, `CAN_ACCESS`, `USES_CREDENTIAL`), never into or through a `QUARANTINED` node ÷ all agents |
 | `privileged_exposure` | `CREDENTIAL`/`RESOURCE` nodes inside that same blast radius |
 | `security_plane_integrity` | `HEALTHY` sentinel and security-control nodes ÷ all of them (1.0 when there are none) |
 | `attack_success_rate` | new compromises ÷ `COMPROMISE_ATTEMPTED`. A new compromise is a `COMPROMISE_SUCCEEDED` without `initial_compromise` (the seeded node) or `already_compromised` (a second same-tick win on a claimed target) |
 | `false_quarantine_rate` | `AGENT_QUARANTINED` with `metadata.legitimate == false` ÷ all `AGENT_QUARANTINED` |
 | `detection_latency` | mean ticks from a node's `tick_compromised` to its first `ANOMALY_DETECTED`; `None` if no compromised node has been detected |
-| `containment_latency` | **reported as `None`** (D1): in quarantine mode, detection and quarantine happen in the same tick, so the gap is always 0. Becomes the mean ticks from first detection to first legitimate quarantine once graduated response exists (§14.4 C.5) |
+| `containment_latency` | mean ticks from a node's first true `ANOMALY_DETECTED` to its first legitimate `AGENT_QUARANTINED`, in graduated mode (§14.4 C.5). **Reported as `None`** in quarantine mode (D1), where both happen in the same tick and the gap is always 0. Detector false positives count toward neither latency |
 | `gateway_failure_count` | real-agent attempts that never reached the model (`COMPROMISE_FAILED` with `gateway_error`) — kept out of the success rate's denominator |
 | `r0_estimate` | mean offspring of generations 0 and 1 of the infection tree (below); `None` with no infection |
 | `serial_interval` | mean ticks from a source's `tick_compromised` to its target's; `None` with no transmission. A gap from the seed can be 0, since the seed attacks from tick 0 (SPEC §3.4 rule 7); every other gap is at least 1 |
@@ -1276,6 +1276,41 @@ transmission path, real agents included; Phase C is backend and API only, per D6
       radius 6 blocks 78% (final size 0.14) at a 23% benign block rate. These are 8-seed means.
     - Pre-seeding at full coverage holds the outbreak to patient zero.
     - Poisoning with no detection blocks benign traffic and no worm.
+- **C.5 — done.** SPEC §3.2 and §3.4 record the extension; metric definitions are in §6.
+  - **Infected and susceptible.** Infected means `COMPROMISED`, or `SUSPICIOUS` with
+    `tick_compromised`. Susceptible means `HEALTHY`, or `SUSPICIOUS` without it.
+    - Infected agents are sources and count in compromise metrics and the blast radius, which
+      `GraphNode.attrs.infected` marks.
+    - Susceptible agents can be attacked, and are screened for benign probes.
+    - The security-plane scenarios also treat infected `SUSPICIOUS` agents as compromised.
+  - **Detector false positives.**
+    - `ANOMALY_DETECTED {false_positive}`, and in quarantine mode `AGENT_QUARANTINED
+      {false_positive}`.
+    - They are the detector's error, so they are not the false-quarantine attack and count toward
+      neither latency.
+    - With immune memory on, a false positive publishes a benign vector, from which autoimmunity
+      emerges.
+  - **Graduated response.**
+    - `ANOMALY_DETECTED.response` is `suspicious` or `quarantine`.
+    - A release is `AGENT_RELEASED {from: suspicious, to}`.
+    - A suspicious real agent can't have its model's output scaled. Its attempt instead gets
+      through with probability `suspicious_transmission_factor`, a keyed draw before the model
+      call, and otherwise fails `{throttled_suspicious}` without spending budget.
+  - **Frontend.** It doesn't yet render `SUSPICIOUS` transitions or releases from events; showing
+    them is Phase D's.
+  - **Measured** (60 agents, detection sensitivity 0.4, 10-seed means; final size / retained
+    utility):
+
+    | Detection setting | Final size | Retained utility | Notes |
+    |---|---|---|---|
+    | Quarantine on first detection | 0.23 | 0.77 | |
+    | Graduated, factor 0.5 | 0.52 | 0.49 | Containment latency 2.5 ticks |
+    | Graduated, factor 0 | 0.27 | 0.73 | |
+    | 4-tick ramp | 0.58 | — | Detection latency 2.0 → 3.6 |
+    | False positives, rate 0.02 | — | 0.77 → 0.68 under quarantine, 0.49 → 0.47 when graduated | |
+
+    Advisory flagging is only as safe as the throttling behind it. A ramp costs more than its
+    latency suggests. Graduated response absorbs false positives cheaply.
   - `strains_observed` counts distinct strains among infected agents. Validation keeps
     `strain_benign_distance` and `mutation_bits` within `signature_bits`.
 

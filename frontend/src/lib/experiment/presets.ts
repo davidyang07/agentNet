@@ -46,6 +46,11 @@ export const DEFAULT_CONFIG: ExperimentConfig = {
   signature_delay_ticks: 1,
   preseed_patient_zero_signature: false,
   benign_probes_per_tick: 1,
+  detector_ramp_ticks: 0,
+  detector_false_positive_rate: 0,
+  response_mode: "quarantine",
+  suspicious_transmission_factor: 0.5,
+  review_ticks: 5,
 };
 
 /**

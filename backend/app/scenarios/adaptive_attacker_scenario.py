@@ -24,9 +24,9 @@ from __future__ import annotations
 from dataclasses import replace
 
 from app.engine import strains
-from app.engine.propagation import is_active_source
+from app.engine.propagation import is_active_source, transmission_probability
 from app.engine.rng import rng
-from app.engine.state import SecurityState, WorldState
+from app.engine.state import SecurityState, WorldState, is_infected, is_susceptible
 from app.schemas.events import EventDraft, EventType
 from app.schemas.experiment import ExperimentConfig
 from app.security import immunity
@@ -37,7 +37,7 @@ def _detection_rate(state: WorldState) -> float:
         node
         for node in state.nodes.values()
         if node.compromised_by is not None
-        and node.security_state in (SecurityState.COMPROMISED, SecurityState.QUARANTINED)
+        and (is_infected(node) or node.security_state == SecurityState.QUARANTINED)
     ]
     if not attacked:
         return 0.0
@@ -70,7 +70,7 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
         healthy_neighbors = sorted(
             t
             for t in source_node.neighbors
-            if state.nodes[t].security_state == SecurityState.HEALTHY
+            if is_susceptible(state.nodes[t])
             and not (source_node.agent_kind == "real" and state.nodes[t].agent_kind == "real")
         )
         if not healthy_neighbors:
@@ -82,8 +82,8 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
         else:
             target = sorted(healthy_neighbors, key=lambda t: (degree[t], t))[0]
 
-        same = state.nodes[target].software_type == source_node.software_type
-        p = config.p_same if same else config.p_cross
+        p, base_metadata = transmission_probability(source_node, state.nodes[target], config)
+        base_metadata["strategy"] = strategy
 
         drafts.append(
             EventDraft(
@@ -91,22 +91,18 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
                 event_type=EventType.COMPROMISE_ATTEMPTED,
                 source_agent_id=source,
                 target_agent_id=target,
-                metadata={"probability": p, "strategy": strategy},
+                metadata=dict(base_metadata),
             )
         )
 
         if immunity.blocks(state, config, target, source_node.strain, state.tick):
-            drafts.append(
-                immunity.blocked_draft(
-                    state.tick, source, target, {"probability": p, "strategy": strategy}
-                )
-            )
+            drafts.append(immunity.blocked_draft(state.tick, source, target, base_metadata))
             continue
 
         draw = rng(config.seed, state.tick, target, f"adaptive:{source}").random()
         if draw < p:
             already_claimed = target in claims
-            metadata: dict[str, object] = {"probability": p, "strategy": strategy}
+            metadata: dict[str, object] = dict(base_metadata)
             if track_strains:
                 strain, mutated = strains.transmit(config, state.tick, source_node, target)
                 metadata.update(strains.success_metadata(config, strain, mutated))
@@ -132,7 +128,7 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
                     event_type=EventType.COMPROMISE_FAILED,
                     source_agent_id=source,
                     target_agent_id=target,
-                    metadata={"probability": p, "strategy": strategy},
+                    metadata=dict(base_metadata),
                 )
             )
 
@@ -144,6 +140,7 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
             compromised_by=source,
             tick_compromised=state.tick,
             strain=claimed_strains.get(target),
+            suspicious_since=None,
         )
 
     new_state = replace(state, tick=state.tick + 1, nodes=new_nodes)

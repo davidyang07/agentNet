@@ -66,6 +66,21 @@ CONFIGS: dict[str, ExperimentConfig] = {
         sentinel_compromise_rate=0.3,
         active_scenarios=["propagation", "sentinel_compromise", "prompt_injection"],
     ),
+    # docs/PLAN.md §14.4 C.5: graduated response with a ramp, false
+    # positives that feed immune memory, and real agents
+    "graduated_response": ExperimentConfig(
+        seed=14,
+        response_mode="graduated",
+        detector_sensitivity=0.4,
+        detector_ramp_ticks=3,
+        detector_false_positive_rate=0.02,
+        review_ticks=4,
+        immunity_enabled=True,
+        signature_radius=2,
+        real_agent_count=6,
+        p_same=0.5,
+        p_cross=0.2,
+    ),
 }
 
 DETERMINISM_FIELDS = (

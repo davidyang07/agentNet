@@ -25,7 +25,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from app.engine.rng import rng
-from app.engine.state import SecurityState, WorldState
+from app.engine.state import WorldState, is_infected
 from app.graph.builder import build_security_graph
 from app.graph.types import EdgeType, NodeType
 from app.schemas.events import EventDraft, EventType
@@ -47,7 +47,7 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
     compromised_agents = {
         node_id
         for node_id, node in state.nodes.items()
-        if node.security_state == SecurityState.COMPROMISED
+        if is_infected(node)
     }
     monitors = graph.edges(frozenset({EdgeType.MONITORS}))
     monitored_by: dict[str, set[str]] = {}

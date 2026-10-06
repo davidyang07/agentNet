@@ -280,8 +280,16 @@ def test_history_endpoints_503_when_pool_unavailable():
             "sentinel_compromise_rate": 0.5,
             "active_scenarios": ["propagation", "sentinel_compromise"],
         },
+        # Graduated response with a ramp and false positives (C.5).
+        {
+            "response_mode": "graduated",
+            "detector_sensitivity": 0.5,
+            "detector_ramp_ticks": 2,
+            "detector_false_positive_rate": 0.03,
+            "review_ticks": 3,
+        },
     ],
-    ids=["default", "immune_memory"],
+    ids=["default", "immune_memory", "graduated_response"],
 )
 def test_replay_graph_metrics_remediation_match_a_live_equivalent_run(extra):
     # Same config run twice: once through the live path (registry + /graph,
@@ -343,9 +351,11 @@ def test_replay_graph_metrics_remediation_match_a_live_equivalent_run(extra):
             assert replay_remediation.json() == live_remediation
             assert replay_epidemic.json() == live_epidemic
             assert live_epidemic["prevalence"], "the comparison must cover a real curve"
-            if extra:
+            if extra.get("immunity_enabled"):
                 assert live_metrics["immunity_coverage"] is not None
                 assert any(p["immune"] for p in live_epidemic["prevalence"])
+            if extra.get("response_mode") == "graduated":
+                assert live_metrics["containment_latency"] is not None
     finally:
         asyncio.run(_cleanup(runner.experiment_id))
 

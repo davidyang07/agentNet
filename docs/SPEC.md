@@ -131,7 +131,7 @@ class WorldState:
     edges: tuple[tuple[str, str], ...]
 ```
 
-M0 uses only `HEALTHY` and `COMPROMISED`. The other three members exist and stay unused — per §3 of the brief, security state is never scattered booleans.
+M0 uses only `HEALTHY` and `COMPROMISED`. The other three members exist and stay unused — per §3 of the brief, security state is never scattered booleans. *PLAN §14.4 C.5 (approved under D7) uses `SUSPICIOUS` for graduated response, with `AgentNode.suspicious_since`. A `SUSPICIOUS` agent with `tick_compromised` set is still infected; one without is still susceptible.*
 
 *Opt-in extensions (PLAN §14.4 C.2–C.4, approved under D7):* `AgentNode.strain: int | None` (C.3), `AgentNode.immune_participant: bool = False`, and on `WorldState` the immune-memory registry `signatures: tuple[Signature, ...]` and the counters `benign_probes`/`benign_blocked` (C.4). `AgentNode.inference_capable: bool = True`. A compromised agent that can't run inference is a dead end — it can be compromised but never attacks (§3.4). Capability is a property of the agent, not a security state.
 
@@ -180,6 +180,10 @@ The rule, executed against a frozen snapshot of tick-N state so that within-tick
   - Its `COMPROMISE_SUCCEEDED` gains `metadata.strain` (zero-padded hex) and `metadata.mutated`.
   - The first winner's carried strain becomes the target's.
   - The same holds for the adaptive attacker and real agents.
+
+*Opt-in graduated response (PLAN §14.4 C.5, approved under D7), only while `config.response_mode == "graduated"`:*
+- **Sources.** An infected `SUSPICIOUS` agent is a source in rule 1. Its `p` in rule 3 is scaled by `suspicious_transmission_factor`, and its events carry `metadata.suspicious_source`.
+- **Targets.** In rule 2, targets also include uninfected `SUSPICIOUS` agents.
 
 *Opt-in immune memory (PLAN §14.4 C.4, approved under D7), only while `config.immunity_enabled`:*
 - **Precondition.** Before the draw in rule 4, an attempt on a participating target holding a signature within `signature_radius` bits of the source's strain is blocked. It emits `COMPROMISE_FAILED` with `metadata.blocked_by_signature` after its `COMPROMISE_ATTEMPTED`, and draws nothing. The same holds for the adaptive attacker, and for real agents before any model call.

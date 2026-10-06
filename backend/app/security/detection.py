@@ -1,7 +1,7 @@
 from dataclasses import replace
 
 from app.engine.rng import rng
-from app.engine.state import SecurityState, WorldState
+from app.engine.state import AgentNode, SecurityState, WorldState, is_infected, is_susceptible
 from app.graph.builder import build_security_graph
 from app.graph.types import EdgeType, NodeType
 from app.schemas.events import EventDraft, EventType
@@ -32,54 +32,127 @@ def _suppressed_by_compromised_sentinels(state: WorldState, config: ExperimentCo
     }
 
 
+def detection_probability(node: AgentNode, config: ExperimentConfig, tick: int) -> float:
+    """detector_sensitivity, ramped up linearly over detector_ramp_ticks after
+    compromise (docs/PLAN.md §14.4 C.5): change-point detection needs
+    evidence to accumulate. Without a ramp, today's flat sensitivity."""
+    if config.detector_ramp_ticks <= 0 or node.tick_compromised is None:
+        return config.detector_sensitivity
+    age = max(0, tick - node.tick_compromised)
+    return config.detector_sensitivity * min(1.0, age / config.detector_ramp_ticks)
+
+
 def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[EventDraft]]:
     """Advance detection/quarantine for one tick. Pure, synchronous, total.
 
     Same (state, config) in -> same (state', drafts) out, always.
+
+    docs/PLAN.md §14.4 C.5 adds, all opt-in: a detection ramp; the
+    detector's own false positives on uninfected agents (distinct from the
+    false-quarantine attack below); and graduated response, where a first
+    detection makes an agent SUSPICIOUS, a second quarantines it, and an
+    agent not detected again within review_ticks is released.
     """
     if not config.defense_enabled:
         return state, []
 
+    tick = state.tick
+    graduated = config.response_mode == "graduated"
     suppressed = _suppressed_by_compromised_sentinels(state, config)
 
-    compromised = sorted(
-        node_id
-        for node_id, node in state.nodes.items()
-        if node.security_state == SecurityState.COMPROMISED and node_id not in suppressed
-    )
+    # (agent, false positive, probability): true detections first, then the
+    # detector's false positives, each in sorted id order.
+    detections: list[tuple[str, bool, float]] = []
+    for node_id in sorted(
+        n for n, node in state.nodes.items() if is_infected(node) and n not in suppressed
+    ):
+        probability = detection_probability(state.nodes[node_id], config, tick)
+        if rng(config.seed, tick, node_id, "detect").random() < probability:
+            detections.append((node_id, False, probability))
+    if config.detector_false_positive_rate > 0.0:
+        for node_id in sorted(n for n, node in state.nodes.items() if is_susceptible(node)):
+            draw = rng(config.seed, tick, node_id, "false_positive").random()
+            if draw < config.detector_false_positive_rate:
+                detections.append((node_id, True, config.detector_false_positive_rate))
 
     drafts: list[EventDraft] = []
-    quarantined: set[str] = set()
+    new_states: dict[str, SecurityState] = {}
+    suspicious_since: dict[str, int | None] = {}
     signatures = list(state.signatures)
 
-    for node_id in compromised:
-        draw = rng(config.seed, state.tick, node_id, "detect").random()
-        if draw < config.detector_sensitivity:
-            quarantined.add(node_id)
-            drafts.append(
-                EventDraft(
-                    sim_tick=state.tick,
-                    event_type=EventType.ANOMALY_DETECTED,
-                    agent_id=node_id,
-                    metadata={"sensitivity": config.detector_sensitivity},
-                )
+    for node_id, false_positive, probability in detections:
+        node = state.nodes[node_id]
+        quarantine = not graduated or node.security_state == SecurityState.SUSPICIOUS
+        metadata: dict[str, object] = {"sensitivity": config.detector_sensitivity}
+        if config.detector_ramp_ticks > 0 and not false_positive:
+            metadata["detection_probability"] = probability
+        if false_positive:
+            metadata["false_positive"] = True
+        if graduated:
+            metadata["response"] = "quarantine" if quarantine else "suspicious"
+        drafts.append(
+            EventDraft(
+                sim_tick=tick,
+                event_type=EventType.ANOMALY_DETECTED,
+                agent_id=node_id,
+                metadata=metadata,
             )
-            # Shared immune memory (docs/PLAN.md §14.4 C.4): a detection
-            # publishes the detected strain.
-            strain = state.nodes[node_id].strain
-            if config.immunity_enabled and strain is not None:
+        )
+        # Shared immune memory (docs/PLAN.md §14.4 C.4): a detection
+        # publishes the detected strain -- or, for a false positive, the
+        # agent's benign behaviour, which is how autoimmunity emerges (C.5).
+        if config.immunity_enabled:
+            vector = (
+                immunity.benign_vector(config, tick, node_id, "false_positive_signature")
+                if false_positive
+                else node.strain
+            )
+            if vector is not None:
                 published = immunity.publish(
-                    signatures, config, state.tick, strain, legitimate=True, agent_id=node_id
+                    signatures, config, tick, vector, legitimate=True, agent_id=node_id
                 )
                 if published is not None:
                     drafts.append(published)
+        if quarantine:
             drafts.append(
                 EventDraft(
-                    sim_tick=state.tick,
+                    sim_tick=tick,
                     event_type=EventType.AGENT_QUARANTINED,
                     agent_id=node_id,
+                    metadata={"false_positive": True} if false_positive else {},
                 )
             )
+            new_states[node_id] = SecurityState.QUARANTINED
+        else:
+            new_states[node_id] = SecurityState.SUSPICIOUS
+            suspicious_since[node_id] = tick
+
+    # Graduated response: an agent not detected again within review_ticks
+    # goes back to what it was -- still COMPROMISED if it is infected.
+    if graduated:
+        for node_id in sorted(
+            n
+            for n, node in state.nodes.items()
+            if node.security_state == SecurityState.SUSPICIOUS and n not in new_states
+        ):
+            node = state.nodes[node_id]
+            if node.suspicious_since is None or tick - node.suspicious_since < config.review_ticks:
+                continue
+            restored = (
+                SecurityState.COMPROMISED
+                if node.tick_compromised is not None
+                else SecurityState.HEALTHY
+            )
+            drafts.append(
+                EventDraft(
+                    sim_tick=tick,
+                    event_type=EventType.AGENT_RELEASED,
+                    agent_id=node_id,
+                    metadata={"from": SecurityState.SUSPICIOUS.value, "to": restored.value},
+                )
+            )
+            new_states[node_id] = restored
+            suspicious_since[node_id] = None
 
     # Byzantine/security-plane attack (docs/PLAN.md §5): a subverted
     # quarantine authority falsely reporting a HEALTHY node. Defaults to 0.0,
@@ -89,31 +162,29 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
     # metadata.legitimate=false and no preceding ANOMALY_DETECTED on that
     # target -- exactly what distinguishes it from the legitimate path above.
     if config.false_quarantine_rate > 0.0:
-        healthy = sorted(
-            node_id
-            for node_id, node in state.nodes.items()
-            if node.security_state == SecurityState.HEALTHY
-        )
+        healthy = sorted(node_id for node_id, node in state.nodes.items() if is_susceptible(node))
         for node_id in healthy:
-            draw = rng(config.seed, state.tick, node_id, "false_quarantine").random()
+            draw = rng(config.seed, tick, node_id, "false_quarantine").random()
             if draw < config.false_quarantine_rate:
-                quarantined.add(node_id)
+                new_states[node_id] = SecurityState.QUARANTINED
                 drafts.append(
                     EventDraft(
-                        sim_tick=state.tick,
+                        sim_tick=tick,
                         event_type=EventType.AGENT_QUARANTINED,
                         agent_id=node_id,
                         metadata={"legitimate": False},
                     )
                 )
 
-    if not quarantined:
+    if not new_states:
         return state, drafts
 
     new_nodes = dict(state.nodes)
-    for node_id in quarantined:
+    for node_id, security_state in new_states.items():
         new_nodes[node_id] = replace(
-            new_nodes[node_id], security_state=SecurityState.QUARANTINED
+            new_nodes[node_id],
+            security_state=security_state,
+            suspicious_since=suspicious_since.get(node_id, new_nodes[node_id].suspicious_since),
         )
 
     new_state = replace(state, nodes=new_nodes, signatures=tuple(signatures))
