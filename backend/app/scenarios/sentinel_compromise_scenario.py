@@ -22,6 +22,8 @@ test's expected output changes.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from app.engine.rng import rng
 from app.engine.state import SecurityState, WorldState
 from app.graph.builder import build_security_graph
@@ -87,12 +89,7 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
     if newly_compromised == state.compromised_graph_nodes:
         return state, drafts
 
-    new_state = WorldState(
-        tick=state.tick,
-        nodes=state.nodes,
-        edges=state.edges,
-        compromised_graph_nodes=frozenset(newly_compromised),
-    )
+    new_state = replace(state, compromised_graph_nodes=frozenset(newly_compromised))
     return new_state, drafts
 
 

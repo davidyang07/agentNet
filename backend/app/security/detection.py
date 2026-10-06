@@ -105,10 +105,5 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
             new_nodes[node_id], security_state=SecurityState.QUARANTINED
         )
 
-    new_state = WorldState(
-        tick=state.tick,
-        nodes=new_nodes,
-        edges=state.edges,
-        compromised_graph_nodes=state.compromised_graph_nodes,
-    )
+    new_state = replace(state, nodes=new_nodes)
     return new_state, drafts

@@ -200,10 +200,5 @@ async def real_agent_step(
             tick_compromised=tick,
             strain=claimed_strains.get(target),
         )
-    new_state = WorldState(
-        tick=state.tick,
-        nodes=new_nodes,
-        edges=state.edges,
-        compromised_graph_nodes=state.compromised_graph_nodes,
-    )
+    new_state = replace(state, nodes=new_nodes)
     return new_state, drafts
