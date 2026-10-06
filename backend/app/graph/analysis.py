@@ -46,6 +46,11 @@ def attack_paths(
     view = _reachability_view(graph, keep=(source, target))
     if source not in view or target not in view:
         return []
+    # A linear-time reachability check first: without it, an unreachable
+    # target made the depth-bounded DFS below exhaust every short path from
+    # the source -- ~5 s on the largest graph the API allows.
+    if not nx.has_path(view, source, target):
+        return []
     paths: list[list[str]] = []
     for path in nx.all_simple_paths(view, source, target, cutoff=MAX_PATH_HOPS):
         paths.append(path)

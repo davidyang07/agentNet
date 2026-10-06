@@ -31,7 +31,7 @@ value from an on-demand, possibly-empty event window.
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from app.engine.state import SecurityState, WorldState
 from app.graph.analysis import blast_radius
@@ -115,6 +115,15 @@ class EventLogTally:
     # tick, per agent -- insertion order is first-occurrence order.
     first_detected: dict[str, int] = field(default_factory=dict)
     first_quarantined: dict[str, int] = field(default_factory=dict)
+
+    def snapshot(self) -> EventLogTally:
+        """An independent copy, safe to read off the event loop while the
+        live runner keeps folding new events into this one."""
+        return replace(
+            self,
+            first_detected=dict(self.first_detected),
+            first_quarantined=dict(self.first_quarantined),
+        )
 
     @classmethod
     def of(cls, events: Iterable[Event]) -> EventLogTally:

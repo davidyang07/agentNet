@@ -6,6 +6,7 @@ question, not resolved here -- see docs/PHASE_1_5_PLAN.md §17)."""
 
 import asyncio
 import base64
+import functools
 import json
 from datetime import datetime
 from typing import Literal
@@ -15,9 +16,11 @@ import asyncpg
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.engine.replay import ReplayUnsupportedError, reconstruct_final_state
+from app.engine.state import WorldState
 from app.engine.topology import build_world
 from app.graph.analysis import attack_paths, blast_radius, critical_nodes, provenance
 from app.graph.builder import build_security_graph
+from app.graph.security_graph import SecurityGraph
 from app.metrics import compute as metrics
 from app.remediation.analyze import recommend
 from app.schemas.events import INCIDENT_EVENT_TYPES, Event
@@ -288,6 +291,20 @@ async def _load_replay_target(
     return ExperimentConfig(**json.loads(row["config"])), row["final_sim_tick"]
 
 
+@functools.lru_cache(maxsize=32)
+def _replay_world(
+    config_json: str, target_tick: int
+) -> tuple[WorldState, SecurityGraph, metrics.EventLogTally]:
+    """A finished run's final world, graph and event tally, reconstructed once
+    per (config, final tick) -- a persisted run never changes, and a replay
+    page fires several /replay/* requests. Caches the O(agents) tally, not
+    the event list, which can run to hundreds of MB. Callers must not mutate
+    the results."""
+    config = ExperimentConfig.model_validate_json(config_json)
+    world, events = reconstruct_final_state(config, target_tick)
+    return world, build_security_graph(world, config), metrics.EventLogTally.of(events)
+
+
 async def _reconstruct_for_replay(pool: asyncpg.Pool, experiment_id: UUID):
     config, target_tick = await _load_replay_target(pool, experiment_id)
     try:
@@ -295,11 +312,12 @@ async def _reconstruct_for_replay(pool: asyncpg.Pool, experiment_id: UUID):
         # replay through asyncio.run(), which raises inside this route's
         # already-running loop, and a full re-simulation would otherwise
         # stall every live run and WebSocket for its whole duration.
-        world, events = await asyncio.to_thread(reconstruct_final_state, config, target_tick)
+        world, graph, tally = await asyncio.to_thread(
+            _replay_world, config.model_dump_json(), target_tick
+        )
     except ReplayUnsupportedError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    graph = build_security_graph(world, config)
-    return world, config, graph, events
+    return world, config, graph, tally
 
 
 @router.get("/{experiment_id}/replay/graph", response_model=SecurityGraphView)
@@ -328,7 +346,9 @@ async def get_replay_attack_paths(
 ) -> AttackPathsResponse:
     pool = _get_pool(request)
     _, _, graph, _ = await _reconstruct_for_replay(pool, experiment_id)
-    return AttackPathsResponse(paths=attack_paths(graph, source, target))
+    return AttackPathsResponse(
+        paths=await asyncio.to_thread(attack_paths, graph, source, target)
+    )
 
 
 @router.get(
@@ -337,10 +357,12 @@ async def get_replay_attack_paths(
 async def get_replay_blast_radius(experiment_id: UUID, request: Request) -> BlastRadiusResponse:
     pool = _get_pool(request)
     _, _, graph, _ = await _reconstruct_for_replay(pool, experiment_id)
-    compromised = sorted(graph.compromised_ids())
-    reachable = sorted(blast_radius(graph))
-    fraction = metrics.blast_radius_fraction(graph)
-    return BlastRadiusResponse(compromised=compromised, reachable=reachable, fraction=fraction)
+    reachable = await asyncio.to_thread(blast_radius, graph)
+    return BlastRadiusResponse(
+        compromised=sorted(graph.compromised_ids()),
+        reachable=sorted(reachable),
+        fraction=await asyncio.to_thread(metrics.blast_radius_fraction, graph),
+    )
 
 
 @router.get(
@@ -351,7 +373,7 @@ async def get_replay_critical_nodes(
 ) -> CriticalNodesResponse:
     pool = _get_pool(request)
     _, _, graph, _ = await _reconstruct_for_replay(pool, experiment_id)
-    ranked = critical_nodes(graph, top_n=top_n)
+    ranked = await asyncio.to_thread(lambda: critical_nodes(graph, top_n=top_n))
     return CriticalNodesResponse(
         nodes=[CriticalNodeView(id=node_id, betweenness=score) for node_id, score in ranked]
     )
@@ -374,9 +396,9 @@ async def get_replay_provenance(
 @router.get("/{experiment_id}/replay/metrics", response_model=MetricsResponse)
 async def get_replay_metrics(experiment_id: UUID, request: Request) -> MetricsResponse:
     pool = _get_pool(request)
-    world, _, graph, events = await _reconstruct_for_replay(pool, experiment_id)
+    world, _, graph, tally = await _reconstruct_for_replay(pool, experiment_id)
     return MetricsResponse(
-        **metrics.all_metrics(world, graph, metrics.EventLogTally.of(events))
+        **await asyncio.to_thread(metrics.all_metrics, world, graph, tally)
     )
 
 
