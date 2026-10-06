@@ -881,3 +881,357 @@ candidates reproduce byte-identically before and after them.
 Verified against a real Postgres: backend `ruff` + `pytest` (all passing), `verify_determinism.py`,
 frontend lint/test/typecheck, and the schema-drift check — this also closes §9's note that
 persistence tests had not been re-run locally.
+
+## 14. Next phases (PROPOSED 2026-10-06 — not yet approved for implementation)
+
+> **Status: proposal.** Nothing in this section is approved to build yet (`CLAUDE.md`: implement only
+> the phase explicitly requested). Order: **A → B → C → D**. Each phase lists its exit criteria;
+> §14.7 lists the decisions needed before each one starts.
+
+Two inputs drive this section. First, the repository review behind §13 left medium/low findings
+open — some make displayed numbers wrong, others leak resources or block the server — and all were
+re-confirmed on `main` after §13 merged. Second, the published work AgentShield cites as inspiration
+(Michael Barnathan's two papers, §14.8) shows that AgentShield models how compromise *spreads*
+about as well as its sources do, but not the *defenses* those sources are about.
+
+### 14.1 Where AgentShield stands against the prompt-worm literature
+
+**Already at parity or beyond:**
+- **Spread model.** Same SI core as Barnathan's own `rac-simulator`: per-tick, per-edge attempts on
+  scale-free graphs, with hubs as superspreaders. The defaults even coincide (`p_same=0.15` vs his
+  per-attempt 0.15).
+- **Attacks on the defenders themselves.** Sentinel subversion, attestation replay, Byzantine
+  collusion and false quarantine go beyond both papers.
+- **Replay, comparison and remediation.** The loop around experiments goes further than either
+  paper's tooling.
+
+**Missing — the defensive substance of "Semantic Immunity" and "Stopping Agent Smith":**
+- **Detection.** It is a per-tick probability draw (`detector_sensitivity`); no behaviour is
+  observed.
+- **Threat signatures.** Only *fake* ones exist (from subverted sentinels), and nothing consumes
+  them. `THREAT_SIGNATURE_RECEIVED` is never emitted.
+- **No population immunity of any kind:** no vaccination, crowd defense or waning.
+- **No worm strains or mutation.**
+- **No reproduction numbers.** Neither R0 nor Reff is measured.
+- **No inference-capability distinction.** Every compromised agent spreads.
+- **No detector false positives,** and quarantine is permanent: `SUSPICIOUS`, `AGENT_RELEASED` and
+  `AGENT_RECOVERED` are declared but unused.
+
+"Semantic Immunity" has no experiments. Its stated future work is "deploying Semantic Immunity in a
+controlled agent network with synthetic worm injection, measuring detection latency, false positive
+rates, and the rate at which signature accumulation drives Reff below 1" — the experiment
+AgentShield exists to run. Phase C adds the mechanisms needed to run it on an abstract model of
+those defenses. It does not evaluate the AEGIS SDK itself.
+
+### 14.2 Phase A — Correct the metrics (backend)
+
+Every item below was reproduced on `main` at `7ce9d89`.
+
+1. **Blast radius walks through quarantined agents.** On the chain C–Q–H–H it reports a fraction of
+   1.00; the correct value is 0.25. **Fix:** traversal (`analysis.blast_radius`, and intermediate
+   hops in `attack_paths`) stops at `QUARANTINED` agents, which the engine never lets relay. The
+   blast-radius endpoints (live and replay) reuse `metrics.blast_radius_fraction`; they currently
+   divide *all* reachable nodes by the agent count and can exceed 1.0.
+2. **Attack success rate counts non-attacks.** With p=0 it reads 0.0028 because the seeded
+   compromise counts as a success; duplicate same-tick wins and gateway errors are also counted.
+   **Proposed definition:** new compromises (`COMPROMISE_SUCCEEDED` without `initial_compromise` or
+   `already_compromised`) / `COMPROMISE_ATTEMPTED`. Gateway errors emit no `COMPROMISE_ATTEMPTED`,
+   so they drop out of the denominator; count them in a separate `gateway_failure_count`.
+3. **Containment latency is always 0.0.** Detection and quarantine happen in the same tick, so the
+   metric carries no information. It only becomes meaningful with C.5's graduated response (D1).
+4. **Remediation recommends `sentinel_count` with the defense disabled,** where sentinels cannot
+   help. **Fix:** recommend `defense_enabled` first, and apply the sentinel rule only when the
+   defense is on. `test_remediation.py:71` pins the current order, so that test changes (D2).
+5. **Mock provider draws are keyed without the source.** Several attackers hitting one target
+   always succeed or fail together (P = 0.30 vs 0.50 independent). **Fix:** key per source, as SPEC
+   §3.4 rule 4 does for `infect:{source}`. This moves real-agent results and the golden demo
+   numbers (D2).
+6. **Adaptive attacker attacks real–real edges too.** Propagation skips them, and PHASE_2 said each
+   edge has exactly one attack path. **Fix:** apply the same skip.
+7. **Real-agent compromises spread a tick early.** Async drafts are stamped with the
+   post-increment tick, so a node compromised by a real agent at T is already a source at T.
+   **Fix:** apply SPEC §3.4 rule 7 (new compromises become sources from the next tick).
+8. **Attestation at tick 0.** A tick-0 "replay" presents nonce 0 — the current tick — yet is
+   flagged `replayed`. **Fix:** never flag a nonce equal to the current tick.
+
+**Exit:**
+- §6's metric table is rewritten with the exact definitions, and every definition has a test on a
+  hand-built world.
+- The golden demo and the agentshield gate are re-pinned deliberately.
+- A before/after digest comparison (as in §13) shows only the intended changes.
+
+### 14.3 Phase B — Stability, deployment, reproducibility
+
+1. **WebSockets.**
+   - Detect client disconnects while the stream is idle (a concurrent receive), and end streams for
+     terminal runs.
+   - Bound subscriber queues: on overflow, close with a resync code so the client reconnects and
+     receives a fresh snapshot.
+   - Today idle connections never exit, which leaks the subscriber and the runner and hangs server
+     shutdown.
+2. **Run lifecycle.** Evict finished and stopped runs from memory after a TTL (history stays in
+   Postgres), and cap concurrently running experiments (429).
+3. **Heavy work off the event loop.**
+   - Today one attack-paths query to an unreachable target takes **5.0 s** and blocks every live
+     run and WebSocket.
+   - Run analysis queries via `asyncio.to_thread`, bounded by a `has_path` pre-check and a cap on
+     paths returned.
+   - Cache replay reconstructions per finished run.
+4. **Database.**
+   - Give the pool acquire and command timeouts.
+   - Make `writer.start()` time-bounded, so a hung database can never block `POST /api/experiments`.
+   - Bound the writer queue; overflow marks the run incomplete instead of growing without limit.
+5. **Model gateway.**
+   - The budget counts provider attempts, not calls (today a budget of 2 made 8 HTTP calls).
+   - Retry only on timeouts, 429 and 5xx — not 4xx.
+   - Enforce a total per-call deadline.
+   - Emit `MODEL_REQUESTED` per attempt.
+6. **Input validation.**
+   - `seed` within BIGINT.
+   - `since_seq` bounded.
+   - `top_n ≥ 1`.
+   - `replay-snapshot` reports a live run's actual status.
+7. **Docker.**
+   - The backend image copies `migrations/`, runs without `--reload`, and runs as non-root.
+   - The frontend image runs `next build`/`next start`.
+   - Hot reload moves to a compose dev override.
+8. **Reproducibility.**
+   - Set `GIT_SHA` at build time and in CI.
+   - Replay warns when a run's `app_version` differs from the server's.
+   - Add a backend lockfile (D3) — topology generation depends on `networkx`.
+9. **Test isolation.**
+   - `conftest.py` pins the app's database to `agentnet_test` before the app is imported; today
+     bare `pytest` can write into the dev database.
+   - In CI, an unreachable Postgres fails the run instead of silently skipping 23 tests.
+10. **Docs.**
+    - Remove dead references: the missing README section, and the gitignored `*_PLAN.md` files
+      cited in about 60 code comments.
+    - Reword the README's "real LLM-backed agents" claim for the default mock provider.
+
+**Exit:** every review finding is closed or explicitly waived in this section; tests cover WebSocket
+disconnect, eviction and the database-hang path; CI is green.
+
+### 14.4 Phase C — Epidemiology and population immunity (the prompt-worm defenses)
+
+Design rules:
+- Every new config field defaults to a strict no-op. Default and existing configs stay
+  byte-identical, checked with the §13 digest comparison.
+- Every new random draw uses `rng(seed, tick, id, purpose)` with a new, distinct purpose.
+- New behaviour is expressed in existing event types plus new metadata keys. Those keys are emitted
+  only while the feature is enabled.
+- No new dependencies.
+
+**C.1 Epidemic metrics** — sources §14.8 [S1], [S2]. Computed from provenance already in the
+state (`compromised_by`, `tick_compromised`), so live and replay agree.
+- **Generation:** the seeded node is generation 0; every other infection is its source's
+  generation + 1.
+- **Offspring:** the number of nodes a node infected. Each infection has exactly one source, the
+  first winner (SPEC §3.4 rule 6).
+- **R(t):** the mean offspring of nodes infected at tick t. A cohort is flagged `censored` while any
+  member is still infectious at run end.
+- **R0 estimate:** the mean offspring of generations 0–1.
+- **Serial interval:** the mean tick gap between a source's and its target's infection.
+- **Final size:** the fraction ever infected.
+- **Peak prevalence and peak tick:** per-tick counts are folded into `EventLogTally` — O(ticks)
+  memory, at most 2,000 entries.
+
+**C.2 Inference capability and topology** — [S2] "only inference-capable nodes propagate".
+- Add `AgentNode.inference_capable` (default true). A compromised node that cannot run inference
+  is a dead end: never a source in propagation, the adaptive attacker or the real-agent step.
+  Real agents are always capable.
+- The seeded node is always capable, so every run has at least one propagator.
+- Config `inference_fraction` (default 1.0) and `inference_placement` ∈ {`random`, `hubs`,
+  `periphery`}.
+- Config `topology` ∈ {`barabasi_albert` (default), `erdos_renyi`}. Erdős–Rényi uses
+  `networkx.gnm_random_graph` with the same edge count as BA (`edge_density × (n − edge_density)`),
+  so `edge_density` keeps one meaning.
+
+**C.3 Worm strains and mutation** — [S1] "worms are inherently polymorphic".
+- **Strain:** a k-bit vector (`signature_bits`, default 64), an abstract stand-in for [S1]'s SimHash
+  codes. Hamming distance stands for semantic distance.
+- **Patient zero's strain** sits `strain_benign_distance` bits from a shared "benign behaviour"
+  centroid. This sets how disguised the worm is: [S1]'s "topically-adjacent" injections are small
+  distances.
+- **Mutation:** each successful transmission mutates with probability `mutation_rate` (default 0),
+  flipping `mutation_bits` keyed bit positions.
+- `COMPROMISE_SUCCEEDED` carries `strain` / `mutated` metadata while the feature is on.
+
+**C.4 Shared immune memory** — [S1] signature database, [S2] crowd defense and SIRVS.
+`immunity_enabled` defaults to false.
+- **Publication.** A detection publishes a legitimate signature, which is the detected agent's
+  strain: `THREAT_SIGNATURE_PUBLISHED` with `{legitimate: true, signature}`.
+- **Adoption.**
+  - Participating agents adopt a signature after `signature_delay_ticks`.
+  - Participation is set by `immunity_coverage` v and `immunity_placement` (random / hubs /
+    periphery).
+  - Holdings live in the state, with one aggregated `THREAT_SIGNATURE_RECEIVED {signature,
+    adopters}` per signature per tick to bound event volume.
+  - `preseed_patient_zero_signature` models [S1]'s red-team pre-seeding.
+- **Protection.** Before a transmission draw, a participating target holding any signature within
+  `signature_radius` of the attacking strain blocks it: `COMPROMISE_FAILED {blocked_by_signature}`,
+  with no draw.
+  - Mutation that escapes every radius is the waning δ of [S2]'s SIRVS model, so it emerges here
+    rather than being an input.
+- **Autoimmunity.**
+  - Each tick every participating healthy agent receives `benign_probes_per_tick` benign vectors
+    drawn near the centroid; a probe within the radius of a held signature is blocked.
+  - Blocked and total counts live in state counters, not events. This makes [S1]'s trade-off
+    measurable: a wider radius catches more variants and blocks more legitimate traffic.
+- **Poisoning becomes causal.** Today a subverted sentinel's false signatures (existing
+  `sentinel_compromise`) have no effect. With immunity on, agents adopt them, and they cost only
+  benign traffic — an autoimmune attack on the immune system itself.
+
+**C.5 Realistic detection and graduated response** — [S1] BOCPD needs evidence; "autoimmune"
+false positives.
+- **`detector_ramp_ticks`** (default 0 = today's behaviour). Detection probability rises to
+  `detector_sensitivity` over that many ticks after compromise.
+- **`detector_false_positive_rate`** (default 0). This is the detector's own error on healthy
+  agents (`ANOMALY_DETECTED {false_positive}`), distinct from the false-quarantine *attack*. A false
+  positive publishes a signature of benign behaviour, so autoimmunity emerges from it.
+- **`response_mode`** ∈ {`quarantine` (default), `graduated`}. In graduated mode:
+  - A first detection puts the agent in `SUSPICIOUS` (advisory). Its transmission is scaled by
+    `suspicious_transmission_factor`.
+  - A second detection quarantines it.
+  - With no repeat detection within `review_ticks`, the agent is released (`AGENT_RELEASED`) back
+    to `COMPROMISED` if infected (`tick_compromised` set), else `HEALTHY`.
+  - Containment latency (A.3) becomes meaningful, and compromise metrics count infected
+    `SUSPICIOUS` agents.
+
+**C.6 Benchmarks, gate, docs.** A new `epidemiology` benchmark suite:
+1. **[S2] threshold reproduction.** Sweep `inference_fraction` across topology × placement, defense
+   off, 30 ticks, 10 seeds, 180 nodes via `BenchmarkConfig`. Expect a sharp rise near
+   ρc ≈ 1/⟨k⟩ on ER, near-zero threshold with hub placement on BA, and small outbreaks with
+   periphery-only placement. [S2]'s ER graph (⟨k⟩ = 5) has no exact `edge_density` equivalent, so
+   the suite brackets it with ⟨k⟩ ≈ 4 and ≈ 6 and checks the qualitative threshold, not his exact
+   table.
+2. **[S1] trade-off sweep.** Immunity coverage × signature radius × mutation rate, reporting Reff,
+   final size and benign block rate.
+3. **Signature delay vs Reff.**
+4. **Hub-first vs periphery immunity placement** (the [S2] Fig. 6–7 analogue).
+5. **Immune-memory poisoning:** `sentinel_compromise` with immunity on.
+
+The agentshield gate gains one strict check: on the canonical immunity case, immune memory drives
+Reff below 1, and a zero-coverage control does not. It gets the same break-the-mechanism negative
+tests as §13.
+
+**API (additive; flows through the existing typegen and drift check):**
+```
+GET /api/experiments/{id}/epidemic            (+ /replay/epidemic twin)
+    → EpidemicResponse { prevalence: [{tick, infectious, quarantined, immune}],
+                         r_effective: [{tick, value, censored}],
+                         generations: [{generation, nodes, mean_offspring}] }
+MetricsResponse += r0_estimate, serial_interval, final_size, peak_prevalence, peak_tick,
+                   immunity_coverage, signature_block_rate, benign_block_rate,
+                   strains_observed, gateway_failure_count     (None when not applicable)
+```
+
+**Config (additive, all no-op by default):**
+```python
+inference_fraction: float = Field(1.0, ge=0.0, le=1.0)
+inference_placement: Literal["random", "hubs", "periphery"] = "random"
+topology: Literal["barabasi_albert", "erdos_renyi"] = "barabasi_albert"
+signature_bits: int = Field(64, ge=8, le=256)
+strain_benign_distance: int = Field(32, ge=0, le=256)        # ≤ signature_bits, validated
+mutation_rate: float = Field(0.0, ge=0.0, le=1.0)
+mutation_bits: int = Field(1, ge=1, le=64)
+immunity_enabled: bool = False
+immunity_coverage: float = Field(1.0, ge=0.0, le=1.0)
+immunity_placement: Literal["random", "hubs", "periphery"] = "random"
+signature_radius: int = Field(0, ge=0, le=256)              # ≤ signature_bits, validated
+signature_delay_ticks: int = Field(1, ge=0, le=50)
+preseed_patient_zero_signature: bool = False
+benign_probes_per_tick: int = Field(1, ge=0, le=10)
+detector_ramp_ticks: int = Field(0, ge=0, le=50)
+detector_false_positive_rate: float = Field(0.0, ge=0.0, le=1.0)
+response_mode: Literal["quarantine", "graduated"] = "quarantine"
+suspicious_transmission_factor: float = Field(0.5, ge=0.0, le=1.0)
+review_ticks: int = Field(5, ge=1, le=100)
+```
+
+**SPEC impact (needs explicit approval, D7).** All of these are opt-in extensions; none replaces a
+SPEC mechanism.
+- **§3.3:** an alternative Erdős–Rényi generator. BA stays the default.
+- **§3.4:** two opt-in preconditions on an attempt — the source must be inference-capable, and the
+  target's signatures may block it before the draw. With defaults, rules 1–7 are unchanged.
+- **§3.2:** additive `AgentNode`/`WorldState` fields, and `SUSPICIOUS` used in graduated mode, as
+  SPEC already reserves it.
+- **§3.5:** the event schema is unchanged; only new metadata keys and new RNG purposes are added.
+
+**Testing:**
+- Unit tests per mechanism on hand-built worlds.
+- **Property tests:**
+  - Higher immunity coverage → smaller final size, at mutation 0.
+  - Wider radius → more blocked strains and more benign blocks.
+  - ρ below threshold → small outbreaks.
+- Cross-`PYTHONHASHSEED` determinism for every new feature. `verify_determinism.py` becomes a
+  config matrix, closing the review's gap that it only checks the default config.
+- A digest check that defaults stay byte-identical.
+
+**PRs:** one each for C.1, C.2, C.3, C.4, C.5 and C.6, in that order. Each is mergeable on its
+own.
+
+**Exit:** the epidemiology suite runs in CI-gated form; its measured results are documented here,
+including any that contradict the papers' predictions.
+
+### 14.5 Phase D — UI redesign (scope to be agreed before starting)
+
+Inputs, beyond the user's own goals for the redesign:
+- **Frontend defects from the review:**
+  - An unknown `schema_version` crashes the whole app (no error boundary).
+  - A sequence-gap reconnect opens duplicate sockets and can orphan one.
+  - Comparison and validate-fix runs poll forever and cannot be cancelled.
+  - Re-run remounts every page.
+  - The outbreak curve undersamples within a tick and resets on navigation.
+  - The provenance panel can show stale data.
+- **New backend concepts to present:**
+  - the epidemic curve with R(t) and generations;
+  - strains, and immunity coverage and blocks;
+  - the `SUSPICIOUS` state and release events;
+  - 422 and 409 messages;
+  - runs stopped with `reason: error`;
+  - observe-only runs.
+
+### 14.6 Deferred (named so they aren't forgotten; not part of A–D)
+
+- **Tier 2 — realism:**
+  - Memory, RAG and skill stores as infection reservoirs, defended by taint tracking, TTL expiry and
+    schema-constrained writes ([S1] L5; Morris II). This uses the declared `MEMORY_STORE` node and
+    `MEMORY_READ`/`MEMORY_WRITE` events.
+  - A real self-replicating payload: check that the target's own output carries the payload and
+    forward that output, rather than flipping state.
+  - Adaptive system-prompt hardening for real agents ([S1] "vaccination").
+  - An optional embedding detector plug-in (sentence-transformer + BOCPD + SimHash on real outputs).
+    These are heavy dependencies, so it would be opt-in only.
+- **Tier 3 — the RAC frontier ([S2]):**
+  - Agent self-instantiation with the capability tuple ⟨P, R, I, S⟩.
+  - Hayflick and attestation-depth limits.
+  - Thymic selection by BFT vote.
+  - Multi-step attack chains (the pⁿ reliability threshold).
+  - Inference honeypots and canary tokens.
+  - Economic friction as a fail-closed layer.
+
+### 14.7 Decisions needed
+
+| # | Decision | Recommendation |
+|---|---|---|
+| D1 | Containment latency until C.5 lands | Return `None` in `quarantine` mode, and document why, rather than a constant 0 |
+| D2 | Accept that A.2, A.4 and A.5 change reported numbers and the tests pinning them (ASR drops; real-agent and golden-demo numbers move) | Yes — they are wrong today |
+| D3 | Backend lockfile tool | `uv pip compile` → `requirements.lock`, installed in CI and Docker |
+| D4 | Signature model | Abstract bit vectors now (deterministic, no dependencies); real embeddings stay Tier 2 |
+| D5 | Benign-traffic model for autoimmunity (centroid + worm distance) | Accept as the false-positive model for C.4/C.5 |
+| D6 | When to start the UI redesign | After Phase C, so the redesign shows the immunity concepts once |
+| D7 | The SPEC extensions listed in §14.4 | Approve as opt-in extensions |
+
+### 14.8 Sources
+
+- **[S1]** M. Barnathan, "Semantic Immunity: Embedding-Based Epidemiological Defense Against Prompt
+  Worms in Autonomous Agent Networks", Feb 2026 — https://gaiarobotics.com/Semantic_Immunity.pdf
+- **[S2]** M. Barnathan, "Stopping Agent Smith: Mitigating Recursive Hacking Through Inference
+  Shaping", Gaia Robotics, Apr 2026 — https://gaiarobotics.com/RAC.pdf (simulator:
+  https://github.com/gaiarobotics/rac-simulator)
+- Cohen, Bitton & Nassi, "Here Comes The AI Worm" (Morris II) — https://arxiv.org/abs/2403.02817
+- Lee & Tiwari, "Prompt Infection: LLM-to-LLM Prompt Injection within Multi-Agent Systems" —
+  https://arxiv.org/abs/2410.07283
+
+The AEGIS SDK repository itself was not read, because this session lacked permission to clone it.
+§14 is therefore built on the papers, not on that implementation.
