@@ -5,8 +5,13 @@ computable on demand exactly like the analysis endpoints, no event log
 required (compromise_fraction, blast_radius_fraction, retained_utility,
 privileged_exposure, security_plane_integrity).
 
-Event-log metrics (attack_success_rate, false_quarantine_rate) count
-occurrences across a run's whole event log. Both families of event-log
+Event-log metrics (attack_success_rate, false_quarantine_rate,
+gateway_failure_count) count occurrences across a run's whole event log.
+attack_success_rate is new compromises -- COMPROMISE_SUCCEEDED that won a
+target, excluding the seeded compromise and a second same-tick success on an
+already-won target -- per COMPROMISE_ATTEMPTED. A model-gateway failure emits
+no COMPROMISE_ATTEMPTED (the attempt never reached the model), so it is
+counted in gateway_failure_count rather than as a defended attack. Both families of event-log
 metric are computed by folding events into an EventLogTally, whose memory is
 O(agents) rather than O(events): a live runner folds each batch as it
 publishes (ExperimentRunner.event_tally), so its metrics cover the whole run
@@ -101,8 +106,9 @@ class EventLogTally:
     events. Feeding it a log in any batching gives the same result as
     feeding it the whole log at once."""
 
-    succeeded: int = 0
-    failed: int = 0
+    attempted: int = 0
+    new_compromises: int = 0
+    gateway_failures: int = 0
     quarantined: int = 0
     false_quarantined: int = 0
     # First ANOMALY_DETECTED tick, and first legitimate AGENT_QUARANTINED
@@ -119,10 +125,16 @@ class EventLogTally:
     def add(self, events: Iterable[Event]) -> None:
         for e in events:
             etype = e.event_type.value
-            if etype == "COMPROMISE_SUCCEEDED":
-                self.succeeded += 1
+            if etype == "COMPROMISE_ATTEMPTED":
+                self.attempted += 1
+            elif etype == "COMPROMISE_SUCCEEDED":
+                if not (
+                    e.metadata.get("initial_compromise") or e.metadata.get("already_compromised")
+                ):
+                    self.new_compromises += 1
             elif etype == "COMPROMISE_FAILED":
-                self.failed += 1
+                if e.metadata.get("gateway_error"):
+                    self.gateway_failures += 1
             elif etype == "ANOMALY_DETECTED":
                 if e.agent_id is not None:
                     self.first_detected.setdefault(e.agent_id, e.sim_tick)
@@ -134,8 +146,7 @@ class EventLogTally:
                     self.first_quarantined.setdefault(e.agent_id, e.sim_tick)
 
     def attack_success_rate(self) -> float:
-        total = self.succeeded + self.failed
-        return (self.succeeded / total) if total else 0.0
+        return (self.new_compromises / self.attempted) if self.attempted else 0.0
 
     def false_quarantine_rate(self) -> float:
         if not self.quarantined:
@@ -185,3 +196,25 @@ def detection_latency(state: WorldState, events: Sequence[Event]) -> float | Non
 
 def containment_latency(events: Sequence[Event]) -> float | None:
     return EventLogTally.of(events).containment_latency()
+
+
+def all_metrics(
+    state: WorldState, graph: SecurityGraph, tally: EventLogTally
+) -> dict[str, float | int | None]:
+    """Every metric MetricsResponse reports, computed one way for the live
+    endpoint, replay and the benchmarks."""
+    return {
+        "compromise_fraction": compromise_fraction(state),
+        "retained_utility": retained_utility(state),
+        "blast_radius_fraction": blast_radius_fraction(graph),
+        "privileged_exposure": privileged_exposure(graph),
+        "security_plane_integrity": security_plane_integrity(graph),
+        "attack_success_rate": tally.attack_success_rate(),
+        "false_quarantine_rate": tally.false_quarantine_rate(),
+        "detection_latency": tally.detection_latency(state),
+        # Detection and quarantine happen in the same tick in quarantine mode,
+        # the only response mode until graduated response (PLAN 14.4 C.5), so
+        # this gap is always 0 and says nothing -- reported as None (D1).
+        "containment_latency": None,
+        "gateway_failure_count": tally.gateway_failures,
+    }

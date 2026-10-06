@@ -69,6 +69,7 @@ function fakeMetrics(overrides: Partial<MetricsResponse> = {}): MetricsResponse 
     false_quarantine_rate: 0,
     detection_latency: 1,
     containment_latency: 1,
+    gateway_failure_count: 0,
     ...overrides,
   };
 }

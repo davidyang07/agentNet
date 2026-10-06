@@ -54,17 +54,7 @@ def _uses_async_scenario(config: ExperimentConfig) -> bool:
 
 
 def _compute_metrics(state: WorldState, graph: SecurityGraph, events: list[Event]) -> dict:
-    return {
-        "compromise_fraction": metrics.compromise_fraction(state),
-        "retained_utility": metrics.retained_utility(state),
-        "blast_radius_fraction": metrics.blast_radius_fraction(graph),
-        "privileged_exposure": metrics.privileged_exposure(graph),
-        "security_plane_integrity": metrics.security_plane_integrity(graph),
-        "attack_success_rate": metrics.attack_success_rate(events),
-        "false_quarantine_rate": metrics.false_quarantine_rate(events),
-        "detection_latency": metrics.detection_latency(state, events),
-        "containment_latency": metrics.containment_latency(events),
-    }
+    return metrics.all_metrics(state, graph, metrics.EventLogTally.of(events))
 
 
 def _drafts_to_events(drafts: list[EventDraft]) -> list[Event]:

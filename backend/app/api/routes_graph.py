@@ -104,18 +104,7 @@ async def get_metrics(experiment_id: UUID) -> MetricsResponse:
     graph = build_security_graph(runner.state, runner.config)
     # The runner's whole-run tally, not the EventBus ring: the ring stops
     # holding a long run's start, which silently zeroed these metrics.
-    tally = runner.event_tally
-    return MetricsResponse(
-        compromise_fraction=metrics.compromise_fraction(runner.state),
-        retained_utility=metrics.retained_utility(runner.state),
-        blast_radius_fraction=metrics.blast_radius_fraction(graph),
-        privileged_exposure=metrics.privileged_exposure(graph),
-        security_plane_integrity=metrics.security_plane_integrity(graph),
-        attack_success_rate=tally.attack_success_rate(),
-        false_quarantine_rate=tally.false_quarantine_rate(),
-        detection_latency=tally.detection_latency(runner.state),
-        containment_latency=tally.containment_latency(),
-    )
+    return MetricsResponse(**metrics.all_metrics(runner.state, graph, runner.event_tally))
 
 
 @router.get("/{experiment_id}/remediation", response_model=RemediationResponse)

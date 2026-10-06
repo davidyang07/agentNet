@@ -850,6 +850,11 @@ export interface components {
             detection_latency?: number | null;
             /** Containment Latency */
             containment_latency?: number | null;
+            /**
+             * Gateway Failure Count
+             * @default 0
+             */
+            gateway_failure_count: number;
         };
         /**
          * NodeType

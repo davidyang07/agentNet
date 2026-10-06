@@ -376,15 +376,7 @@ async def get_replay_metrics(experiment_id: UUID, request: Request) -> MetricsRe
     pool = _get_pool(request)
     world, _, graph, events = await _reconstruct_for_replay(pool, experiment_id)
     return MetricsResponse(
-        compromise_fraction=metrics.compromise_fraction(world),
-        retained_utility=metrics.retained_utility(world),
-        blast_radius_fraction=metrics.blast_radius_fraction(graph),
-        privileged_exposure=metrics.privileged_exposure(graph),
-        security_plane_integrity=metrics.security_plane_integrity(graph),
-        attack_success_rate=metrics.attack_success_rate(events),
-        false_quarantine_rate=metrics.false_quarantine_rate(events),
-        detection_latency=metrics.detection_latency(world, events),
-        containment_latency=metrics.containment_latency(events),
+        **metrics.all_metrics(world, graph, metrics.EventLogTally.of(events))
     )
 
 

@@ -20,6 +20,7 @@ const METRICS_RESPONSE: MetricsResponse = {
   false_quarantine_rate: 0,
   detection_latency: 1,
   containment_latency: 2,
+  gateway_failure_count: 0,
 };
 
 describe("loadHistoricalArm", () => {
