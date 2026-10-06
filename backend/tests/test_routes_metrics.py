@@ -78,4 +78,18 @@ def test_live_event_log_metrics_cover_the_whole_run_after_the_event_ring_wraps()
     assert body["false_quarantine_rate"] == compute.false_quarantine_rate(events)
     assert body["detection_latency"] == compute.detection_latency(runner.state, events)
     assert body["detection_latency"] is not None
-    assert body["containment_latency"] == compute.containment_latency(events)
+    # Withheld in quarantine mode, where detection and quarantine coincide (D1).
+    assert body["containment_latency"] is None
+
+
+def test_attack_success_rate_is_zero_when_no_attack_can_succeed():
+    # p=0: every attempt fails. The seeded compromise used to count as a
+    # success, so this read 1.0 before any tick ran, and stayed above 0.
+    with TestClient(app) as client:
+        exp_id = _start_experiment(
+            client, p_same=0.0, p_cross=0.0, defense_enabled=False, max_ticks=5
+        )["experiment_id"]
+        body = client.get(f"/api/experiments/{exp_id}/metrics").json()
+    assert body["attack_success_rate"] == 0.0
+    assert body["gateway_failure_count"] == 0
+    assert body["containment_latency"] is None

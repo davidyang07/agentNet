@@ -289,27 +289,25 @@ Built on the graph model from §2.2 — each is a scenario:
 
 ---
 
-## 6. Metrics (priority 5 — `app/metrics/compute.py`, pure functions over `WorldState` +
-`SecurityGraph` + a bounded live event buffer; no new persistence, computed on demand like the
-analysis endpoints — **implemented**, see §9 for exact scope)
+## 6. Metrics (`app/metrics/compute.py` — one definition, `all_metrics()`, shared by the live
+endpoint, replay and the benchmarks; definitions corrected in Phase A, §14.2)
 
-| Metric | Definition | Status |
-|---|---|---|
-| Compromise fraction | `compromise_fraction(state)` = compromised agents / all agents | done |
-| Retained utility | `retained_utility(state)` = agents neither compromised nor quarantined / all agents | done |
-| Blast radius fraction | `blast_radius_fraction(graph)` = agent nodes in `analysis.blast_radius(graph)` / all agents | done |
-| Privileged exposure | `privileged_exposure(graph)` = credential/resource nodes in `analysis.blast_radius(graph)` | done |
-| Security-plane integrity | `security_plane_integrity(graph)` = healthy sentinel/security-control nodes / all such nodes | done |
-| Attack success rate | `attack_success_rate(events)` = `COMPROMISE_SUCCEEDED` / (`COMPROMISE_SUCCEEDED` + `COMPROMISE_FAILED`) | done |
-| False quarantine rate | `false_quarantine_rate(events)` = `AGENT_QUARANTINED` with `metadata.legitimate == false` / total `AGENT_QUARANTINED` | done |
-| Detection latency | ticks between a node's `tick_compromised` and its `ANOMALY_DETECTED` | not implemented |
-| Containment latency | ticks between `ANOMALY_DETECTED` and `AGENT_QUARANTINED` | not implemented |
-| Retained utility | fraction of agents neither `COMPROMISED` nor `QUARANTINED` at run end |
-| Privileged exposure | count of `RESOURCE`/`CREDENTIAL` nodes reachable (via `analysis.attack_paths`) from any currently-compromised agent |
-| Security-plane integrity | fraction of `SENTINEL`/`SECURITY_CONTROL` nodes with `security_state == HEALTHY` |
+State/graph metrics read the current `WorldState`/`SecurityGraph`. Event-log metrics fold the run's
+**whole** event log through `EventLogTally` (O(agents) memory): live runs fold each published
+batch as it happens, and replay folds its reconstructed log.
 
-These reuse the existing `MetricsPanel.tsx` pattern once frontend integration (priority 8) wires
-them in; the backend functions and an API endpoint are implementable and independently testable now.
+| Metric | Exact definition |
+|---|---|
+| `compromise_fraction` | `COMPROMISED` agents ÷ all agents |
+| `retained_utility` | agents neither `COMPROMISED` nor `QUARANTINED` ÷ all agents |
+| `blast_radius_fraction` | agents reachable from a `COMPROMISED` node over propagation-capable edges (`COMMUNICATES_WITH`, `DELEGATES_TO`, `CAN_ACCESS`, `USES_CREDENTIAL`), never into or through a `QUARANTINED` node ÷ all agents |
+| `privileged_exposure` | `CREDENTIAL`/`RESOURCE` nodes inside that same blast radius |
+| `security_plane_integrity` | `HEALTHY` sentinel and security-control nodes ÷ all of them (1.0 when there are none) |
+| `attack_success_rate` | new compromises ÷ `COMPROMISE_ATTEMPTED`. A new compromise is a `COMPROMISE_SUCCEEDED` without `initial_compromise` (the seeded node) or `already_compromised` (a second same-tick win on a claimed target) |
+| `false_quarantine_rate` | `AGENT_QUARANTINED` with `metadata.legitimate == false` ÷ all `AGENT_QUARANTINED` |
+| `detection_latency` | mean ticks from a node's `tick_compromised` to its first `ANOMALY_DETECTED`; `None` if no compromised node has been detected |
+| `containment_latency` | **reported as `None`** (D1): in quarantine mode, detection and quarantine happen in the same tick, so the gap is always 0. Becomes the mean ticks from first detection to first legitimate quarantine once graduated response exists (§14.4 C.5) |
+| `gateway_failure_count` | real-agent attempts that never reached the model (`COMPROMISE_FAILED` with `gateway_error`) — kept out of the success rate's denominator |
 
 ---
 
@@ -960,6 +958,24 @@ Every item below was reproduced on `main` at `7ce9d89`.
   hand-built world.
 - The golden demo and the agentshield gate are re-pinned deliberately.
 - A before/after digest comparison (as in §13) shows only the intended changes.
+
+**Phase A — done (2026-10-06).** Each fix has its own commit and a regression test that fails
+on the old code; the pinned tests changed under D2 are named in their commits.
+- **Events.** Synthetic-only runs (default, dense, adaptive, Byzantine, random seed) produce
+  byte-identical event streams before and after; only their metric values change. Runs with real
+  agents (A.5–A.7) and tick-0 attestation (A.8) change as intended.
+- **Corrected values,** for example:
+  - blast radius 1.0 → 0.017 on the random-seed run and 1.0 → 0.53 on the Byzantine combined run;
+  - attack success rate 0.17 → 0.0 on the adaptive run, whose only "success" was the seeded node.
+- **Remediation audit.** Still 119 configurations and 30 re-tested candidates; 4 changed.
+  - Three defense-off configs now get "enable the defense" instead of "add a sentinel".
+    `adaptive_plus_byzantine__defense_off` goes from no gain (integrity 0.667 → 0.571) to retained
+    utility 0 → 0.925 and integrity 0.667 → 0.833; the other two no longer lower integrity.
+  - The audit's 2 retained-utility regressions are unchanged: `adaptive_plus_byzantine` with the
+    defense on, i.e. the sentinel lever itself (§11).
+- **Golden demo.** Verdict unchanged: integrity 0.80 → 0.67 on re-test. Its baseline compromise is
+  now 0.975 instead of 1.0, and the narrative now shows a legitimate quarantine at tick 1 and real
+  strategy switches.
 
 ### 14.3 Phase B — Stability, deployment, reproducibility
 

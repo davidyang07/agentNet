@@ -154,3 +154,30 @@ def test_no_compromised_source_produces_no_drafts():
 
     assert drafts == []
     assert new_world.tick == world.tick + 1
+
+
+def test_adaptive_attacker_leaves_real_to_real_edges_to_the_llm_path():
+    # Each edge is attacked by exactly one path: propagation already skips
+    # real-real edges, which agents.runtime owns (PLAN 14.2 A.6).
+    real = dict(software_type="sw-a", agent_kind="real", confidential_token="TOKEN-x")
+    world = WorldState(
+        tick=1,
+        nodes={
+            "agent-000": AgentNode(
+                id="agent-000",
+                security_state=SecurityState.COMPROMISED,
+                neighbors=("agent-001",),
+                tick_compromised=0,
+                **real,
+            ),
+            "agent-001": AgentNode(
+                id="agent-001",
+                security_state=SecurityState.HEALTHY,
+                neighbors=("agent-000",),
+                **real,
+            ),
+        },
+        edges=(("agent-000", "agent-001"),),
+    )
+    _, drafts = step(world, ExperimentConfig(seed=1, p_same=1.0, p_cross=1.0))
+    assert drafts == []

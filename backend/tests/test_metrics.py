@@ -3,10 +3,12 @@ from uuid import uuid4
 from app.engine.simulate import simulate
 from app.engine.state import AgentNode, SecurityState, WorldState
 from app.events.emitter import EventEmitter
+from app.graph.builder import build_security_graph
 from app.graph.security_graph import SecurityGraph
 from app.graph.types import EdgeType, GraphEdge, GraphNode, NodeType
 from app.metrics.compute import (
     EventLogTally,
+    all_metrics,
     attack_success_rate,
     blast_radius_fraction,
     compromise_fraction,
@@ -19,6 +21,7 @@ from app.metrics.compute import (
 )
 from app.schemas.events import Event, EventType
 from app.schemas.experiment import ExperimentConfig
+from app.schemas.metrics import MetricsResponse
 
 
 def _event(
@@ -116,14 +119,31 @@ def test_security_plane_integrity_reflects_compromised_sentinels():
     assert security_plane_integrity(graph) == 0.5
 
 
-def test_attack_success_rate():
+def test_attack_success_rate_is_new_compromises_per_attempt():
+    """Successes are attempts that won a new target: the seeded compromise
+    (no attempt behind it) and a second success on a target already won that
+    tick don't count, and a gateway failure (the attempt never reached the
+    model, so no COMPROMISE_ATTEMPTED) is counted separately instead of as a
+    defended attack. The old definition, successes / (successes + failures),
+    read 0.0028 on a run where no attack could succeed (PLAN 14.2 A.2)."""
     events = [
+        _event(EventType.COMPROMISE_SUCCEEDED, initial_compromise=True),
+        _event(EventType.COMPROMISE_ATTEMPTED),
         _event(EventType.COMPROMISE_SUCCEEDED),
-        _event(EventType.COMPROMISE_SUCCEEDED),
+        _event(EventType.COMPROMISE_ATTEMPTED),
+        _event(EventType.COMPROMISE_SUCCEEDED, already_compromised=True),
+        _event(EventType.COMPROMISE_ATTEMPTED),
         _event(EventType.COMPROMISE_FAILED),
+        _event(EventType.COMPROMISE_FAILED, gateway_error=True, real_agent=True),
         _event(EventType.AGENT_CREATED),
     ]
-    assert attack_success_rate(events) == 2 / 3
+    assert attack_success_rate(events) == 1 / 3
+    assert EventLogTally.of(events).gateway_failures == 1
+
+
+def test_attack_success_rate_ignores_the_seeded_compromise():
+    events = [_event(EventType.COMPROMISE_SUCCEEDED, initial_compromise=True)]
+    assert attack_success_rate(events) == 0.0
 
 
 def test_attack_success_rate_zero_with_no_attempts():
@@ -234,3 +254,20 @@ def test_event_log_tally_folded_per_batch_matches_the_whole_log_functions():
     assert tally.containment_latency() == containment_latency(events)
     assert false_quarantine_rate(events) > 0.0
     assert detection_latency(final, events) is not None
+
+
+def test_all_metrics_covers_the_response_and_withholds_containment_latency():
+    """One definition of every reported metric, shared by the live endpoint,
+    replay and benchmarks. Detection and quarantine happen in the same tick
+    in quarantine mode (the only mode until PLAN 14.4 C.5), so the
+    detection-to-quarantine gap is always 0 and is reported as None (D1)."""
+    config = ExperimentConfig(seed=7, node_count=60)
+    final, drafts = simulate(config)
+    events = EventEmitter(uuid4()).emit(drafts)
+
+    reported = all_metrics(final, build_security_graph(final, config), EventLogTally.of(events))
+
+    assert set(reported) == set(MetricsResponse.model_fields)
+    assert containment_latency(events) == 0.0
+    assert reported["containment_latency"] is None
+    assert reported["attack_success_rate"] == attack_success_rate(events)

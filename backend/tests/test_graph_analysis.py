@@ -116,3 +116,39 @@ def test_provenance_single_node_with_no_source():
 def test_provenance_is_cycle_safe():
     compromised_by = {"a": "b", "b": "a"}
     assert provenance(compromised_by, "a") == ["a", "b"]
+
+
+def _bidirectional_chain(*states: SecurityState) -> SecurityGraph:
+    """n0 - n1 - ... with communication edges both ways, as the builder adds
+    them between agents."""
+    graph = SecurityGraph()
+    ids = [f"n{i}" for i in range(len(states))]
+    for node_id, state in zip(ids, states, strict=True):
+        _agent(graph, node_id, state)
+    for a, b in zip(ids, ids[1:], strict=False):
+        for source, target in ((a, b), (b, a)):
+            graph.add_edge(
+                GraphEdge(source=source, target=target, edge_type=EdgeType.COMMUNICATES_WITH)
+            )
+    return graph
+
+
+def test_blast_radius_stops_at_a_quarantined_agent():
+    # The engine never lets a quarantined agent send or receive, so nothing
+    # past it -- nor the quarantined agent itself -- is at risk. Traversal used
+    # to walk straight through, reporting the whole chain.
+    S = SecurityState
+    graph = _bidirectional_chain(S.COMPROMISED, S.QUARANTINED, S.HEALTHY, S.HEALTHY)
+    assert blast_radius(graph) == {"n0"}
+
+
+def test_attack_paths_do_not_route_through_a_quarantined_agent():
+    graph = _diamond()
+    graph.node("b").security_state = SecurityState.QUARANTINED
+    assert attack_paths(graph, "a", "d") == [["a", "c", "d"]]
+
+
+def test_attack_paths_still_answer_for_a_quarantined_endpoint():
+    graph = _diamond()
+    graph.node("d").security_state = SecurityState.QUARANTINED
+    assert sorted(attack_paths(graph, "a", "d")) == [["a", "b", "d"], ["a", "c", "d"]]

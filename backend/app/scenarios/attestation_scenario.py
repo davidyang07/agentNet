@@ -47,7 +47,8 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
     drafts: list[EventDraft] = []
     for agent_id in compromised_agents:
         draw = rng(config.seed, state.tick, agent_id, "attestation_replay").random()
-        replayed = draw < config.attestation_replay_rate
+        # Tick 0 has no earlier nonce to replay: nonce 0 is the fresh one.
+        replayed = state.tick > 0 and draw < config.attestation_replay_rate
         nonce = max(0, state.tick - 1) if replayed else state.tick
         drafts.append(
             EventDraft(

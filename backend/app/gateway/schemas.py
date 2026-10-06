@@ -22,6 +22,10 @@ class ModelRequest(BaseModel):
     # a real model decides its own output.
     mock_leak_probability: float
     purpose: str = "propagation"
+    # The attacking agent. MockProvider keys its draw on it, so attacks from
+    # different sources on one target are independent, like propagation's
+    # infect:{source} draws (SPEC §3.4 rule 4). Real providers ignore it.
+    source_agent_id: str | None = None
 
 
 class ModelResponse(BaseModel):

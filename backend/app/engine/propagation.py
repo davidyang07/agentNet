@@ -1,9 +1,21 @@
 from dataclasses import replace
 
 from app.engine.rng import rng
-from app.engine.state import SecurityState, WorldState
+from app.engine.state import AgentNode, SecurityState, WorldState
 from app.schemas.events import EventDraft, EventType
 from app.schemas.experiment import ExperimentConfig
+
+
+def is_active_source(node: AgentNode, tick: int) -> bool:
+    """SPEC §3.4 rule 7: a newly compromised agent attacks only from the next
+    tick. The seeded compromise (no source) attacks from tick 0. Real-agent
+    compromises are stamped with the post-increment tick, so without this
+    they would attack in the same tick they were compromised."""
+    return node.security_state == SecurityState.COMPROMISED and (
+        node.compromised_by is None
+        or node.tick_compromised is None
+        or node.tick_compromised < tick
+    )
 
 
 def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[EventDraft]]:
@@ -12,9 +24,7 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
     Same (state, config) in -> same (state', drafts) out, always.
     """
     sources = sorted(
-        node_id
-        for node_id, node in state.nodes.items()
-        if node.security_state == SecurityState.COMPROMISED
+        node_id for node_id, node in state.nodes.items() if is_active_source(node, state.tick)
     )
 
     drafts: list[EventDraft] = []

@@ -109,3 +109,16 @@ def test_is_deterministic_across_calls():
     _, drafts_b = step(world, config)
 
     assert drafts_a == drafts_b
+
+
+def test_tick_zero_cannot_replay_a_stale_nonce():
+    # There is no earlier nonce at tick 0: presenting nonce 0 is the fresh
+    # one, so it must not be flagged as a replay (PLAN 14.2 A.8).
+    world = _world(tick=0)
+    config = ExperimentConfig(seed=42, sentinel_count=1, attestation_replay_rate=1.0)
+
+    _, drafts = step(world, config)
+
+    verified = [d for d in drafts if d.event_type.value == "ATTESTATION_VERIFIED"]
+    assert verified
+    assert all(d.metadata["replayed"] is False for d in verified)

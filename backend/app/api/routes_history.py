@@ -18,7 +18,6 @@ from app.engine.replay import ReplayUnsupportedError, reconstruct_final_state
 from app.engine.topology import build_world
 from app.graph.analysis import attack_paths, blast_radius, critical_nodes, provenance
 from app.graph.builder import build_security_graph
-from app.graph.types import NodeType
 from app.metrics import compute as metrics
 from app.remediation.analyze import recommend
 from app.schemas.events import INCIDENT_EVENT_TYPES, Event
@@ -340,8 +339,7 @@ async def get_replay_blast_radius(experiment_id: UUID, request: Request) -> Blas
     _, _, graph, _ = await _reconstruct_for_replay(pool, experiment_id)
     compromised = sorted(graph.compromised_ids())
     reachable = sorted(blast_radius(graph))
-    total_agents = len(graph.nodes_of_type(NodeType.AGENT))
-    fraction = (len(reachable) / total_agents) if total_agents else 0.0
+    fraction = metrics.blast_radius_fraction(graph)
     return BlastRadiusResponse(compromised=compromised, reachable=reachable, fraction=fraction)
 
 
@@ -378,15 +376,7 @@ async def get_replay_metrics(experiment_id: UUID, request: Request) -> MetricsRe
     pool = _get_pool(request)
     world, _, graph, events = await _reconstruct_for_replay(pool, experiment_id)
     return MetricsResponse(
-        compromise_fraction=metrics.compromise_fraction(world),
-        retained_utility=metrics.retained_utility(world),
-        blast_radius_fraction=metrics.blast_radius_fraction(graph),
-        privileged_exposure=metrics.privileged_exposure(graph),
-        security_plane_integrity=metrics.security_plane_integrity(graph),
-        attack_success_rate=metrics.attack_success_rate(events),
-        false_quarantine_rate=metrics.false_quarantine_rate(events),
-        detection_latency=metrics.detection_latency(world, events),
-        containment_latency=metrics.containment_latency(events),
+        **metrics.all_metrics(world, graph, metrics.EventLogTally.of(events))
     )
 
 

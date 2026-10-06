@@ -20,7 +20,10 @@ class MockProvider:
     "leaked" text instead, via `expected_leak_text`)."""
 
     async def complete(self, request: ModelRequest) -> ModelResponse:
-        draw = rng(request.seed, request.tick, request.agent_id, f"model:{request.purpose}")
+        purpose = f"model:{request.purpose}"
+        if request.source_agent_id is not None:
+            purpose = f"{purpose}:{request.source_agent_id}"
+        draw = rng(request.seed, request.tick, request.agent_id, purpose)
         r = draw.random()
         if not (0.0 <= request.mock_leak_probability <= 1.0):
             raise ModelProviderError(
