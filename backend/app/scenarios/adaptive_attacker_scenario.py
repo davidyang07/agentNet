@@ -23,6 +23,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from app.engine import strains
 from app.engine.propagation import is_active_source
 from app.engine.rng import rng
 from app.engine.state import SecurityState, WorldState
@@ -58,6 +59,8 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
 
     drafts: list[EventDraft] = []
     claims: dict[str, str] = {}
+    claimed_strains: dict[str, int] = {}
+    track_strains = strains.tracked(config)
 
     for source in sources:
         source_node = state.nodes[source]
@@ -95,10 +98,15 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
         if draw < p:
             already_claimed = target in claims
             metadata: dict[str, object] = {"probability": p, "strategy": strategy}
+            if track_strains:
+                strain, mutated = strains.transmit(config, state.tick, source_node, target)
+                metadata.update(strains.success_metadata(config, strain, mutated))
             if already_claimed:
                 metadata["already_compromised"] = True
             else:
                 claims[target] = source
+                if track_strains:
+                    claimed_strains[target] = strain
             drafts.append(
                 EventDraft(
                     sim_tick=state.tick,
@@ -126,6 +134,7 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
             security_state=SecurityState.COMPROMISED,
             compromised_by=source,
             tick_compromised=state.tick,
+            strain=claimed_strains.get(target),
         )
 
     new_state = WorldState(

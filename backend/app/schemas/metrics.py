@@ -22,3 +22,6 @@ class MetricsResponse(BaseModel):
     final_size: float = 0.0
     peak_prevalence: float | None = None
     peak_tick: int | None = None
+    # Distinct worm strains among infected agents (§14.4 C.3); None unless
+    # strains are tracked.
+    strains_observed: int | None = None

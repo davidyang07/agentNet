@@ -1,7 +1,7 @@
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.engine.state import SecurityState
 
@@ -89,6 +89,23 @@ class ExperimentConfig(BaseModel):
     # erdos_renyi draws the same number of edges barabasi_albert would, so
     # edge_density keeps one meaning across both.
     topology: Literal["barabasi_albert", "erdos_renyi"] = "barabasi_albert"
+
+    # Worm strains (docs/PLAN.md §14.4 C.3, after [S1]): k-bit vectors, with
+    # Hamming distance standing for semantic distance. Patient zero sits
+    # strain_benign_distance bits from the benign centroid; each successful
+    # transmission flips mutation_bits keyed bits with probability
+    # mutation_rate. Strains are tracked only while mutation_rate > 0.
+    signature_bits: int = Field(64, ge=8, le=256)
+    strain_benign_distance: int = Field(32, ge=0, le=256)
+    mutation_rate: float = Field(0.0, ge=0.0, le=1.0)
+    mutation_bits: int = Field(1, ge=1, le=64)
+
+    @model_validator(mode="after")
+    def _distances_fit_the_strain_length(self) -> "ExperimentConfig":
+        for name in ("strain_benign_distance", "mutation_bits"):
+            if getattr(self, name) > self.signature_bits:
+                raise ValueError(f"{name} cannot exceed signature_bits ({self.signature_bits})")
+        return self
 
 
 class NodeView(BaseModel):

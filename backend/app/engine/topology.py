@@ -1,5 +1,6 @@
 import networkx as nx
 
+from app.engine import strains
 from app.engine.rng import rng
 from app.engine.state import AgentNode, SecurityState, WorldState
 from app.schemas.events import EventDraft, EventType
@@ -92,6 +93,7 @@ def build_world_from_agents(
     capable = _select_inference_capable(
         sorted_ids, degree, config, always={seed_node} | real_agent_ids
     )
+    patient_zero = strains.patient_zero_strain(config) if strains.tracked(config) else None
 
     nodes: dict[str, AgentNode] = {}
     for n in sorted_ids:
@@ -107,6 +109,7 @@ def build_world_from_agents(
             agent_kind="real" if is_real else "simulated",
             confidential_token=_generate_confidential_token(config.seed, n) if is_real else None,
             inference_capable=n in capable,
+            strain=patient_zero if n == seed_node else None,
         )
 
     world = WorldState(tick=0, nodes=nodes, edges=tuple(sorted(edge_set)))

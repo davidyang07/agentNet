@@ -174,6 +174,13 @@ The rule, executed against a frozen snapshot of tick-N state so that within-tick
 
 *Opt-in precondition (PLAN §14.4 C.2, approved under D7):* a source must be `inference_capable`. With every agent capable (the default), rule 1 is unchanged.
 
+*Opt-in strains (PLAN §14.4 C.3, approved under D7), tracked only while `config.mutation_rate > 0`:*
+- **Patient zero.** Its `AgentNode.strain` is a `signature_bits`-bit vector. It is a benign centroid drawn from `rng(seed, 0, "strain", "benign_centroid")`, with `strain_benign_distance` positions from `rng(seed, 0, "strain", "patient_zero")` flipped.
+- **Transmission.** Every success in rules 5–6 carries the source's strain, mutated with probability `mutation_rate` by flipping `mutation_bits` positions from `rng(seed, tick, target_id, f"mutate:{source_id}")`.
+  - Its `COMPROMISE_SUCCEEDED` gains `metadata.strain` (zero-padded hex) and `metadata.mutated`.
+  - The first winner's carried strain becomes the target's.
+  - The same holds for the adaptive attacker and real agents.
+
 `p_same > p_cross` is a **simulation parameter, not a finding** (§4). Every propagation event sets `metadata.probability`, so any number that ends up on screen is traceable to the input that produced it.
 
 The run ends when `config.max_ticks` is reached, or when no `HEALTHY` node borders a `COMPROMISED` one that can run inference (with every agent capable, any `COMPROMISED` one).

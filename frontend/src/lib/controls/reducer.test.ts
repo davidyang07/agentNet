@@ -47,6 +47,10 @@ const FIXTURE_CONFIG_A: ExperimentConfig = {
   inference_fraction: 1,
   inference_placement: "random",
   topology: "barabasi_albert",
+  signature_bits: 64,
+  strain_benign_distance: 32,
+  mutation_rate: 0,
+  mutation_bits: 1,
 };
 
 const FIXTURE_CONFIG_B: ExperimentConfig = {
@@ -80,6 +84,10 @@ const FIXTURE_CONFIG_B: ExperimentConfig = {
   inference_fraction: 1,
   inference_placement: "random",
   topology: "barabasi_albert",
+  signature_bits: 64,
+  strain_benign_distance: 32,
+  mutation_rate: 0,
+  mutation_bits: 1,
 };
 
 function running(overrides: Partial<ControlState> = {}): ControlState {

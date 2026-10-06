@@ -1248,6 +1248,13 @@ transmission path, real agents included; Phase C is backend and API only, per D6
     nothing can spread rather than idling to `max_ticks`.
   - `verify_determinism.py` is now a config matrix, each config run under two `PYTHONHASHSEED`
     values. Each feature adds its config there; a set-order bug planted in placement was caught.
+- **C.3 — done.** SPEC §3.4 records the extension.
+  - Strains are tracked only while `mutation_rate > 0` (C.4 adds immunity as a second reason), so a
+    default run draws nothing.
+  - Every success carries `strain`/`mutated`, including a losing same-tick win. The winner's strain
+    becomes the target's.
+  - `strains_observed` counts distinct strains among infected agents. Validation keeps
+    `strain_benign_distance` and `mutation_bits` within `signature_bits`.
 
 ### 14.5 Phase D — UI redesign (scope to be agreed before starting)
 

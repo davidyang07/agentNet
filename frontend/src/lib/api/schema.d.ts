@@ -784,6 +784,26 @@ export interface components {
              * @enum {string}
              */
             topology: "barabasi_albert" | "erdos_renyi";
+            /**
+             * Signature Bits
+             * @default 64
+             */
+            signature_bits: number;
+            /**
+             * Strain Benign Distance
+             * @default 32
+             */
+            strain_benign_distance: number;
+            /**
+             * Mutation Rate
+             * @default 0
+             */
+            mutation_rate: number;
+            /**
+             * Mutation Bits
+             * @default 1
+             */
+            mutation_bits: number;
         };
         /** ExperimentDetail */
         ExperimentDetail: {
@@ -940,6 +960,8 @@ export interface components {
             peak_prevalence?: number | null;
             /** Peak Tick */
             peak_tick?: number | null;
+            /** Strains Observed */
+            strains_observed?: number | null;
         };
         /**
          * NodeType
