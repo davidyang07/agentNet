@@ -308,6 +308,25 @@ batch as it happens, and replay folds its reconstructed log.
 | `detection_latency` | mean ticks from a node's `tick_compromised` to its first `ANOMALY_DETECTED`; `None` if no compromised node has been detected |
 | `containment_latency` | **reported as `None`** (D1): in quarantine mode, detection and quarantine happen in the same tick, so the gap is always 0. Becomes the mean ticks from first detection to first legitimate quarantine once graduated response exists (§14.4 C.5) |
 | `gateway_failure_count` | real-agent attempts that never reached the model (`COMPROMISE_FAILED` with `gateway_error`) — kept out of the success rate's denominator |
+| `r0_estimate` | mean offspring of generations 0 and 1 of the infection tree (below); `None` with no infection |
+| `serial_interval` | mean ticks from a source's `tick_compromised` to its target's; `None` with no transmission. A gap from the seed can be 0, since the seed attacks from tick 0 (SPEC §3.4 rule 7); every other gap is at least 1 |
+| `final_size` | agents ever infected (`tick_compromised` set) ÷ all agents |
+| `peak_prevalence`, `peak_tick` | the largest fraction of agents `COMPROMISED` at the end of a tick, and the first tick it was reached; `None` before any event |
+
+**Epidemic metrics (§14.4 C.1).** Every infected agent's `compromised_by` is its one source, the
+first winner (SPEC §3.4 rule 6), so infections form a tree. An infected agent with no source (the
+seeded compromise) is generation 0, and every other agent is its source's generation + 1. Offspring
+is the number of agents an agent infected. Except for prevalence, everything is read from that tree
+in the state, so live and replay agree by construction. Prevalence needs history, so
+`EventLogTally` folds the agents infectious and quarantined at the end of each tick from the event
+log: one row per tick, so O(ticks) memory. `GET /api/experiments/{id}/epidemic` and its
+`/replay/epidemic` twin return:
+- `prevalence`: per tick, the agents infectious (`COMPROMISED`) and quarantined. An `immune` count
+  arrives with immune memory (C.4).
+- `r_effective`: per tick on which anyone was infected, that cohort's mean offspring. The cohort is
+  `censored` while a member can still infect: still `COMPROMISED` and bordering a `HEALTHY` agent.
+  A compromised agent with no healthy neighbour left has its final offspring count.
+- `generations`: per generation, its size and mean offspring.
 
 ---
 
@@ -1215,6 +1234,13 @@ own.
 
 **Exit:** the epidemiology suite runs in CI-gated form; its measured results are documented here,
 including any that contradict the papers' predictions.
+
+**Status** (scope agreed 2026-10-06: each PR merges on green; the mechanics apply to every
+transmission path, real agents included; Phase C is backend and API only, per D6):
+- **C.1 — done.** Definitions are in §6.
+  - Censoring is stated precisely there: a member that is still `COMPROMISED` but has no healthy
+    neighbour left has final offspring, so it doesn't censor its cohort.
+  - `prevalence` has no `immune` count until C.4 defines immunity.
 
 ### 14.5 Phase D — UI redesign (scope to be agreed before starting)
 

@@ -37,6 +37,7 @@ from app.engine.state import SecurityState, WorldState
 from app.graph.analysis import blast_radius
 from app.graph.security_graph import SecurityGraph
 from app.graph.types import NodeType
+from app.metrics import epidemic
 from app.schemas.events import Event
 
 
@@ -115,6 +116,14 @@ class EventLogTally:
     # tick, per agent -- insertion order is first-occurrence order.
     first_detected: dict[str, int] = field(default_factory=dict)
     first_quarantined: dict[str, int] = field(default_factory=dict)
+    # Prevalence (PLAN 14.4 C.1): the agents infectious and quarantined right
+    # now, and one closed (tick, infectious, quarantined) row per earlier
+    # tick -- O(agents + ticks), never O(events). Event ticks never decrease,
+    # so a tick's row is final once an event from a later tick arrives.
+    infectious_ids: set[str] = field(default_factory=set)
+    quarantined_ids: set[str] = field(default_factory=set)
+    prevalence_rows: list[tuple[int, int, int]] = field(default_factory=list)
+    open_tick: int | None = None
 
     def snapshot(self) -> EventLogTally:
         """An independent copy, safe to read off the event loop while the
@@ -123,6 +132,9 @@ class EventLogTally:
             self,
             first_detected=dict(self.first_detected),
             first_quarantined=dict(self.first_quarantined),
+            infectious_ids=set(self.infectious_ids),
+            quarantined_ids=set(self.quarantined_ids),
+            prevalence_rows=list(self.prevalence_rows),
         )
 
     @classmethod
@@ -133,14 +145,16 @@ class EventLogTally:
 
     def add(self, events: Iterable[Event]) -> None:
         for e in events:
+            self._advance_to(e.sim_tick)
             etype = e.event_type.value
             if etype == "COMPROMISE_ATTEMPTED":
                 self.attempted += 1
             elif etype == "COMPROMISE_SUCCEEDED":
-                if not (
-                    e.metadata.get("initial_compromise") or e.metadata.get("already_compromised")
-                ):
-                    self.new_compromises += 1
+                if not e.metadata.get("already_compromised"):
+                    if not e.metadata.get("initial_compromise"):
+                        self.new_compromises += 1
+                    if e.target_agent_id is not None:
+                        self.infectious_ids.add(e.target_agent_id)
             elif etype == "COMPROMISE_FAILED":
                 if e.metadata.get("gateway_error"):
                     self.gateway_failures += 1
@@ -153,6 +167,29 @@ class EventLogTally:
                     self.false_quarantined += 1
                 elif e.agent_id is not None:
                     self.first_quarantined.setdefault(e.agent_id, e.sim_tick)
+                if e.agent_id is not None:
+                    self.infectious_ids.discard(e.agent_id)
+                    self.quarantined_ids.add(e.agent_id)
+
+    def _advance_to(self, tick: int) -> None:
+        if self.open_tick is None:
+            self.open_tick = tick
+            return
+        for closed in range(self.open_tick, tick):
+            self.prevalence_rows.append(
+                (closed, len(self.infectious_ids), len(self.quarantined_ids))
+            )
+        self.open_tick = max(self.open_tick, tick)
+
+    def prevalence(self, final_tick: int) -> list[tuple[int, int, int]]:
+        """(tick, infectious, quarantined) at the end of every tick through
+        final_tick. A tick with no events repeats the one before it."""
+        if self.open_tick is None:
+            return []
+        current = (len(self.infectious_ids), len(self.quarantined_ids))
+        return self.prevalence_rows + [
+            (tick, *current) for tick in range(self.open_tick, max(self.open_tick, final_tick) + 1)
+        ]
 
     def attack_success_rate(self) -> float:
         return (self.new_compromises / self.attempted) if self.attempted else 0.0
@@ -226,4 +263,5 @@ def all_metrics(
         # this gap is always 0 and says nothing -- reported as None (D1).
         "containment_latency": None,
         "gateway_failure_count": tally.gateway_failures,
+        **epidemic.epidemic_metrics(state, tally),
     }

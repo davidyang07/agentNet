@@ -84,8 +84,10 @@ edges — and scenarios are pluggable via the `active_scenarios` config field.
   radius, choke points, and compromise provenance on demand from the live experiment.
 - **Metrics** — `.../metrics` returns compromise fraction, retained utility, blast-radius fraction,
   privileged exposure, security-plane integrity, attack success rate, false-quarantine rate,
-  detection latency, containment latency, and model-gateway failures — each with an exact
-  definition in `docs/PLAN.md` §6.
+  detection latency, containment latency, model-gateway failures, and epidemic measures (R0
+  estimate, serial interval, final size, peak prevalence) — each with an exact definition in
+  `docs/PLAN.md` §6. `.../epidemic` returns the epidemic curve, R(t) per infection cohort, and
+  the infection tree by generation.
 - **Remediation** — `.../remediation` returns deterministic, rule-based recommendations (raise
   `detector_sensitivity`, enable `defense_enabled`, raise `sentinel_count`) whenever the relevant
   metric degrades. Re-testing one is just another experiment plus the comparison view.

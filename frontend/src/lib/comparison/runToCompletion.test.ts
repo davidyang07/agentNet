@@ -48,6 +48,7 @@ const METRICS_RESPONSE: MetricsResponse = {
   detection_latency: 2,
   containment_latency: 1,
   gateway_failure_count: 0,
+  final_size: 0,
 };
 
 function okResponse(body: unknown) {

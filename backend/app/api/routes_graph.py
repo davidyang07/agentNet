@@ -13,9 +13,11 @@ from app.graph.analysis import attack_paths, blast_radius, critical_nodes, prove
 from app.graph.builder import build_security_graph
 from app.graph.security_graph import SecurityGraph
 from app.metrics import compute as metrics
+from app.metrics import epidemic
 from app.orchestrator.registry import registry
 from app.orchestrator.runner import ExperimentRunner
 from app.remediation.analyze import recommend
+from app.schemas.epidemic import EpidemicResponse
 from app.schemas.graph import (
     AttackPathsResponse,
     BlastRadiusResponse,
@@ -127,6 +129,13 @@ async def get_metrics(experiment_id: UUID) -> MetricsResponse:
         lambda: metrics.all_metrics(state, build_security_graph(state, config), tally)
     )
     return MetricsResponse(**reported)
+
+
+@router.get("/{experiment_id}/epidemic", response_model=EpidemicResponse)
+async def get_epidemic(experiment_id: UUID) -> EpidemicResponse:
+    runner = _runner_for(experiment_id)
+    state, tally = runner.state, runner.event_tally.snapshot()
+    return EpidemicResponse(**await asyncio.to_thread(epidemic.epidemic_report, state, tally))
 
 
 @router.get("/{experiment_id}/remediation", response_model=RemediationResponse)

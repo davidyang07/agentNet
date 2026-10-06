@@ -216,6 +216,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/experiments/{experiment_id}/epidemic": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Epidemic */
+        get: operations["get_epidemic_api_experiments__experiment_id__epidemic_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/experiments/{experiment_id}/remediation": {
         parameters: {
             query?: never;
@@ -403,6 +420,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/experiments/{experiment_id}/replay/epidemic": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Replay Epidemic */
+        get: operations["get_replay_epidemic_api_experiments__experiment_id__replay_epidemic_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/experiments/{experiment_id}/replay/remediation": {
         parameters: {
             query?: never;
@@ -518,6 +552,18 @@ export interface components {
             source: string;
             /** Target */
             target: string;
+        };
+        /**
+         * EpidemicResponse
+         * @description docs/PLAN.md §14.4 C.1: the run's epidemic curve and infection tree.
+         */
+        EpidemicResponse: {
+            /** Prevalence */
+            prevalence: components["schemas"]["PrevalencePoint"][];
+            /** R Effective */
+            r_effective: components["schemas"]["REffectivePoint"][];
+            /** Generations */
+            generations: components["schemas"]["GenerationStats"][];
         };
         /**
          * Event
@@ -801,6 +847,15 @@ export interface components {
             last_seq: number;
             config: components["schemas"]["ExperimentConfig"];
         };
+        /** GenerationStats */
+        GenerationStats: {
+            /** Generation */
+            generation: number;
+            /** Nodes */
+            nodes: number;
+            /** Mean Offspring */
+            mean_offspring: number;
+        };
         /** GraphEdgeView */
         GraphEdgeView: {
             /** Source */
@@ -855,6 +910,19 @@ export interface components {
              * @default 0
              */
             gateway_failure_count: number;
+            /** R0 Estimate */
+            r0_estimate?: number | null;
+            /** Serial Interval */
+            serial_interval?: number | null;
+            /**
+             * Final Size
+             * @default 0
+             */
+            final_size: number;
+            /** Peak Prevalence */
+            peak_prevalence?: number | null;
+            /** Peak Tick */
+            peak_tick?: number | null;
         };
         /**
          * NodeType
@@ -879,10 +947,28 @@ export interface components {
              */
             agent_kind: "simulated" | "real";
         };
+        /** PrevalencePoint */
+        PrevalencePoint: {
+            /** Tick */
+            tick: number;
+            /** Infectious */
+            infectious: number;
+            /** Quarantined */
+            quarantined: number;
+        };
         /** ProvenanceResponse */
         ProvenanceResponse: {
             /** Chain */
             chain: string[];
+        };
+        /** REffectivePoint */
+        REffectivePoint: {
+            /** Tick */
+            tick: number;
+            /** Value */
+            value: number;
+            /** Censored */
+            censored: boolean;
         };
         /** RecommendationView */
         RecommendationView: {
@@ -1382,6 +1468,37 @@ export interface operations {
             };
         };
     };
+    get_epidemic_api_experiments__experiment_id__epidemic_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                experiment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EpidemicResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_remediation_api_experiments__experiment_id__remediation_get: {
         parameters: {
             query?: never;
@@ -1723,6 +1840,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MetricsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_replay_epidemic_api_experiments__experiment_id__replay_epidemic_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                experiment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EpidemicResponse"];
                 };
             };
             /** @description Validation Error */
