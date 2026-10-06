@@ -27,6 +27,8 @@ jobs:
       POSTGRES_USER: agentnet
       POSTGRES_PASSWORD: agentnet_dev
       POSTGRES_DB: agentnet_test
+      # Fail, don't skip, the Postgres-backed tests if the service is down.
+      AGENTNET_REQUIRE_POSTGRES: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
