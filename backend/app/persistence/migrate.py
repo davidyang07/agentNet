@@ -1,8 +1,7 @@
 """Hand-rolled forward-only SQL migration runner.
 
 No ORM/Alembic exists in this codebase (`db.py` uses raw `asyncpg`) and the
-schema is two tables with no anticipated near-term churn -- see
-docs/PHASE_1_5_PLAN.md §4 for the rationale. Migrations are plain `.sql`
+schema is two tables with no anticipated near-term churn. Migrations are plain `.sql`
 files in `backend/migrations/`, applied in filename order inside a
 transaction, tracked in a `schema_migrations` table so repeated runs are
 no-ops (idempotent by construction: an applied version is simply skipped).

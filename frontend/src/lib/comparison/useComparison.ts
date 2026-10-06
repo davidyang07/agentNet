@@ -63,8 +63,7 @@ export async function runBothArms(
  * Runs both arms as loadHistoricalArm calls against two already-persisted
  * experiments, independently (Promise.allSettled) exactly like
  * runBothArms. No backend replay-equivalent -- both arms go through
- * loadReplayData/reduce()/selectMetrics(), the same path replay uses
- * (docs/PHASE_1_5_PLAN.md §10).
+ * loadReplayData/reduce()/selectMetrics(), the same path replay uses.
  */
 export async function runBothHistoricalArms(
   experimentIdA: string,

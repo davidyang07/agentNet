@@ -40,7 +40,7 @@ class ExperimentRunner:
         # cover the whole run in O(agents) memory -- the bus ring only keeps
         # the most recent RING_SIZE events (app/metrics/compute.py).
         self.event_tally = EventLogTally()
-        # Phase 2 (docs/PHASE_2_PLAN.md §2, §7): None unless the caller built
+        # Phase 2: None unless the caller built
         # one (routes_experiments.py, only when real_agent_count > 0) --
         # real_agent_step is only ever called when this is set, so every
         # existing test/call site constructing ExperimentRunner(config) with
@@ -59,7 +59,7 @@ class ExperimentRunner:
         # after `await self.bus.publish(...)` completes -- never before. A
         # persistence writer races this against its queue to know when it's
         # safe to drain the last of the queue and finalize without risking
-        # finalizing one event early (docs/PHASE_1_5_PLAN.md §6).
+        # finalizing one event early.
         self._terminal_event = asyncio.Event()
         # time.monotonic() when the run ended -- lifecycle bookkeeping for
         # registry eviction, never simulation time.
@@ -113,7 +113,7 @@ class ExperimentRunner:
                     # interleaved between them -- a real agent compromised this
                     # tick is first eligible for quarantine detection next tick,
                     # a deliberate, documented one-tick timing difference from
-                    # the simulated path (docs/PHASE_2_PLAN.md §2, §16).
+                    # the simulated path.
                     state, real_drafts = await run_async_scenarios(
                         state, self.config, self._gateway, tick=state.tick
                     )

@@ -39,7 +39,7 @@ import { useExperimentStream } from "@/lib/stream/useExperimentStream";
 // its own (SnapshotFrame.status is sent only once, on connect/reconnect;
 // EventFrame carries no status field) — so natural completion (reaching
 // max_ticks, or full containment) is otherwise invisible to a connected
-// client. Poll GET /{id} to close that gap (docs/M1_F5_PLAN.md §4).
+// client. Poll GET /{id} to close that gap.
 const STATUS_POLL_INTERVAL_MS = 1000;
 
 // The workspace is a multi-route shell, so the active run has to survive a
@@ -245,7 +245,7 @@ export function ExperimentProvider({ children }: { children: ReactNode }) {
     [apply],
   );
 
-  // Reset ordering (docs/M1_F5_PLAN.md §5): await stopping the old
+  // Reset ordering: await stopping the old
   // experiment (idempotent / 404-tolerant — either way it's gone), only
   // then create the new one, and only then swap the active experimentId/
   // status — so there is never a moment with two experiments simultaneously
@@ -296,7 +296,7 @@ export function ExperimentProvider({ children }: { children: ReactNode }) {
     }
   }, [apply]);
 
-  // Closes the REST/WS status gap for natural completion (docs/M1_F5_PLAN.md §4).
+  // Closes the REST/WS status gap for natural completion.
   useEffect(() => {
     if (state.status !== "running" || state.pending !== null || !state.experimentId) return;
     const id = state.experimentId;

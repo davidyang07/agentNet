@@ -41,7 +41,7 @@ def step(state: WorldState, config: ExperimentConfig) -> tuple[WorldState, list[
         for target in targets:
             # A real-real edge is owned exclusively by agents.runtime's
             # LLM-mediated attempt, not this probabilistic mechanism -- each
-            # edge is attacked by exactly one path (docs/PHASE_2_PLAN.md §5).
+            # edge is attacked by exactly one path.
             # A no-op whenever no node is agent_kind="real" (real_agent_count
             # defaults to 0), which is what keeps this function's behavior
             # byte-for-byte unchanged for the synthetic baseline.

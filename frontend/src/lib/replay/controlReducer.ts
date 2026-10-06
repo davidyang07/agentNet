@@ -4,8 +4,7 @@
 // Replay's pause/resume/speed are synchronous and network-free (the whole
 // point of driving reduce() from a prefetched log), so bolting them onto
 // that state machine would force every existing handler there to
-// special-case "is this actually going to hit the network"
-// (docs/PHASE_1_5_PLAN.md §7).
+// special-case "is this actually going to hit the network".
 
 const MIN_SPEED = 0.25;
 const MAX_SPEED = 8.0;

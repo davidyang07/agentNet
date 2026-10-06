@@ -36,8 +36,8 @@ export type GraphState = {
     // this live session. Kept outside recentEvents so its 200-event cap cannot
     // silently erase the metric (M1_PLAN §6).
     newCompromises: number;
-    // Cumulative count of MODEL_REQUESTED events -- one per real-agent
-    // lateral-compromise attempt (docs/PHASE_2_PLAN.md §11). Zero for any
+    // Cumulative count of MODEL_REQUESTED events -- one per model call a
+    // real-agent lateral-compromise attempt makes, retries included. Zero for any
     // experiment with real_agent_count=0, since no MODEL_REQUESTED event is
     // ever emitted in that case.
     modelCalls: number;

@@ -94,9 +94,9 @@ def test_budget_exhaustion_holds_under_concurrent_load():
     the semaphore let every caller queued past max_concurrency observe the
     same stale count and all pass the check once admitted, overrunning the
     budget -- exactly real_agent_step's asyncio.gather calling shape
-    whenever a tick has more real-real attempts than max_concurrency
-    (docs/PHASE_2_PLAN.md §3's "hard backstop... regardless of node_count x
-    max_ticks x real-real edge count" claim)."""
+    whenever a tick has more real-real attempts than max_concurrency. The
+    budget is a hard backstop, whatever node_count x max_ticks x real-real
+    edge count comes to."""
     provider = _CountingProvider()
     gateway = _gateway(provider, max_concurrency=2, max_requests_per_experiment=3)
 
@@ -215,7 +215,7 @@ def test_concurrency_never_exceeds_configured_max():
 def test_cancellation_is_never_swallowed():
     """asyncio.CancelledError must propagate through complete() -- a gateway
     that ate it would let ExperimentRunner.stop()'s task cancellation vanish
-    silently (docs/PHASE_2_PLAN.md §3, §12)."""
+    silently."""
     provider = _AlwaysTimesOutProvider(delay=5.0)
     gateway = _gateway(provider, timeout_s=10.0, max_retries=0)
 

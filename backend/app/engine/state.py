@@ -19,7 +19,7 @@ class AgentNode:
     neighbors: tuple[str, ...]
     compromised_by: str | None = None
     tick_compromised: int | None = None
-    # Phase 2 (docs/PHASE_2_PLAN.md §4): "real" nodes are LLM-backed via the
+    # Phase 2: "real" nodes are LLM-backed via the
     # Model Gateway; "simulated" (the default) keeps the pre-Phase-2
     # probabilistic behavior byte-for-byte unchanged. confidential_token is
     # the synthetic secret a real agent must never leak (§6) -- engine-

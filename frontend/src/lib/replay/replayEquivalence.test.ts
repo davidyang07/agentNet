@@ -59,8 +59,7 @@ describe("replay/live reduce() equivalence", () => {
 
   // The tick-0 events a literal re-simulation would have produced. These
   // must never be re-delivered through the event branch once the snapshot
-  // already reflects them -- the verified double-counting hazard from
-  // docs/PHASE_1_5_PLAN.md §7.
+  // already reflects them -- that would double-count them.
   const tick0Events: Event[] = [
     ...nodeIds.map((id, i) => agentCreated(i, id)),
     seedCompromise(nodeIds.length, seedId),

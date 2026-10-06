@@ -569,7 +569,7 @@ gateway-selection code was needed: `app/benchmark/runner.py`'s async path reuses
 `app/gateway/factory.py::build_gateway` (the same function the live API already uses), so
 `ExperimentConfig(model_provider="vllm")` routes through `VLLMProvider` with zero new logic.
 `backend/scripts/run_golden_demo.py --model-provider vllm` is the entry point; exact setup command
-is in README's "Real-model benchmark/golden-demo validation" section. No reachable vLLM endpoint
+is in README's "Real (LLM-backed) agents" section. No reachable vLLM endpoint
 existed this session, so this path is implemented and unit-tested (provider-override wiring only)
 but not run against a real model.
 
@@ -597,7 +597,7 @@ historical arms. The two items below remain the highest-value open work:
 1. An actual browser pass on `NetworkGraph.tsx` typed-node rendering (no browser/screenshot tool
    has been available in any session so far, this one included — see §11's confirmation).
 2. A real Qwen/vLLM validation run once a GPU endpoint is available (exact command in README's
-   "Real-model benchmark/golden-demo validation" section).
+   "Real (LLM-backed) agents" section).
 
 ### Closed this session: async scenario registry gating (§3)
 Previously flagged here as a "known simplification": `run_async_scenarios` now gates by
@@ -719,8 +719,8 @@ consistent with §9 item 1.
 ### Remaining after this session
 1. ~~An actual browser pass on `NetworkGraph.tsx` typed-node rendering.~~ **Closed in §12 below.**
 2. A real Qwen/vLLM validation run once a GPU endpoint is available — `backend/scripts/
-   run_golden_demo.py --model-provider vllm` (see README's "Real-model benchmark/golden-demo
-   validation" section for the exact setup). Not exercised this session either — no reachable vLLM
+   run_golden_demo.py --model-provider vllm` (see README's "Real (LLM-backed) agents"
+   section for the exact setup). Not exercised this session either — no reachable vLLM
    endpoint.
 
 Treat the git log and test suite as ground truth over this section if they ever disagree.
@@ -1027,6 +1027,32 @@ on the old code; the pinned tests changed under D2 are named in their commits.
 
 **Exit:** every review finding is closed or explicitly waived in this section; tests cover WebSocket
 disconnect, eviction and the database-hang path; CI is green.
+
+**Phase B — done (2026-10-06),** in three PRs: B-1 (#4, items 1–6), B-2 (#5, items 7–9) and B-3
+(item 10). Each fix has a test that fails on the old code. The exit tests are
+`test_ws_lifecycle.py`, `test_run_lifecycle.py` and `test_db_timeouts.py`.
+- **Event streams.** Synthetic-only runs are byte-identical (`verify_determinism.py`). Real-agent
+  runs change as intended: `MODEL_REQUESTED` is emitted once per provider attempt, with
+  `metadata.attempt`.
+- **New API behaviour:**
+  - 429 when `max_active_experiments` runs are active;
+  - 422 for an out-of-range `seed`, `since_seq` or `top_n`;
+  - WebSocket close codes 4000 (resync), 4001 (run ended) and 4004 (unknown run);
+  - an `X-Replay-Version-Mismatch` header on replay responses.
+- **Waived or narrowed:**
+  - The WebSocket `since_seq` is not bounded: any value already falls back to a fresh snapshot.
+    Only the history endpoints' `since_seq`, which reaches an INT column, is.
+  - The replay warning is a response header, exposed through CORS. Showing it in the UI belongs
+    to Phase D. Two unversioned `dev` builds can't be told apart, so they aren't flagged.
+- **Beyond the list:**
+  - App shutdown clears the run registry. Without that, runs left unfinished by one app instance
+    held active-run slots for the rest of the process.
+  - The lock is two files: `requirements.lock` for the image, and `requirements-dev.lock` for CI
+    and development, constrained to the same versions.
+  - A CI `docker` job builds and starts the stack. It checks health, that both services run as
+    non-root, and that a run records the commit as its `app_version`.
+  - The B.10 cleanup found one comment that was wrong rather than only stale: the frontend reducer
+    described `MODEL_REQUESTED` as one per compromise attempt, which B.5 changed.
 
 ### 14.4 Phase C — Epidemiology and population immunity (the prompt-worm defenses)
 

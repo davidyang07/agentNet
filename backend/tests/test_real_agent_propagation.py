@@ -153,8 +153,7 @@ def test_two_real_sources_claim_tie_break_matches_propagation_convention():
 
 def test_real_simulated_neighbor_never_attempted_by_real_agent_step():
     """A real node's simulated neighbor is out of scope for this function --
-    it's handled by the unchanged probabilistic propagation.step() path
-    (docs/PHASE_2_PLAN.md §5)."""
+    it's handled by the unchanged probabilistic propagation.step() path."""
     nodes = {
         "agent-000": _real_node("agent-000", SecurityState.COMPROMISED, ("agent-001",)),
         "agent-001": AgentNode(

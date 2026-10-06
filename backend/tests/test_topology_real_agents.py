@@ -66,7 +66,7 @@ def test_real_agent_count_clamped_le_20_by_schema():
 
 def test_node_view_never_exposes_confidential_token():
     """The whole prompt-injection scenario depends on this secret never
-    reaching a client (docs/PHASE_2_PLAN.md §4/§11) -- verified structurally,
+    reaching a client -- verified structurally,
     not just by omission from the schema definition."""
     assert "confidential_token" not in NodeView.model_fields
 

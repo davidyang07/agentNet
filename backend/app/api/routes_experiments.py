@@ -25,7 +25,7 @@ async def create_experiment(config: ExperimentConfig, request: Request) -> Exper
     if scenarios_error is not None:
         raise HTTPException(status_code=422, detail=scenarios_error)
 
-    # Fail fast (docs/PHASE_2_PLAN.md §8): never construct a runner that can
+    # Fail fast: never construct a runner that can
     # never make a real model call. model_provider="mock" always succeeds --
     # it needs no external service.
     if config.real_agent_count > 0 and config.model_provider == "vllm":
@@ -49,7 +49,7 @@ async def create_experiment(config: ExperimentConfig, request: Request) -> Exper
     # Persistence is additive and best-effort: a Postgres outage (no pool, or
     # a failed writer start) must never block or fail experiment creation --
     # the live run simply proceeds without a durable record for this
-    # experiment (docs/PHASE_1_5_PLAN.md §11 "DB down at creation").
+    # experiment.
     pool = getattr(request.app.state, "pg_pool", None)
     if pool is not None:
         writer = PostgresWriter(pool, runner.experiment_id, runner.bus, runner)
