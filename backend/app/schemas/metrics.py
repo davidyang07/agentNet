@@ -15,3 +15,10 @@ class MetricsResponse(BaseModel):
     # every retry failed) -- reported separately so they aren't mistaken for
     # attacks the target defended against.
     gateway_failure_count: int = 0
+    # Epidemic metrics (docs/PLAN.md §14.4 C.1, defined in §6), read from
+    # the infection tree; None when there is nothing to measure.
+    r0_estimate: float | None = None
+    serial_interval: float | None = None
+    final_size: float = 0.0
+    peak_prevalence: float | None = None
+    peak_tick: int | None = None

@@ -21,6 +21,7 @@ const METRICS_RESPONSE: MetricsResponse = {
   detection_latency: 1,
   containment_latency: 2,
   gateway_failure_count: 0,
+  final_size: 0,
 };
 
 describe("loadHistoricalArm", () => {

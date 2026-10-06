@@ -70,6 +70,7 @@ function fakeMetrics(overrides: Partial<MetricsResponse> = {}): MetricsResponse 
     detection_latency: 1,
     containment_latency: 1,
     gateway_failure_count: 0,
+    final_size: 0,
     ...overrides,
   };
 }

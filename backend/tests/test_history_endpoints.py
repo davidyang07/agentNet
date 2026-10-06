@@ -304,6 +304,7 @@ def test_replay_graph_metrics_remediation_match_a_live_equivalent_run():
                 live_remediation = client.get(
                     f"/api/experiments/{live.experiment_id}/remediation"
                 ).json()
+                live_epidemic = client.get(f"/api/experiments/{live.experiment_id}/epidemic").json()
             finally:
                 registry.remove(live.experiment_id)
 
@@ -314,10 +315,14 @@ def test_replay_graph_metrics_remediation_match_a_live_equivalent_run():
             assert replay_metrics.status_code == 200
             replay_remediation = client.get(f"/api/experiments/{exp_id}/replay/remediation")
             assert replay_remediation.status_code == 200
+            replay_epidemic = client.get(f"/api/experiments/{exp_id}/replay/epidemic")
+            assert replay_epidemic.status_code == 200
 
             assert replay_graph.json() == live_graph
             assert replay_metrics.json() == live_metrics
             assert replay_remediation.json() == live_remediation
+            assert replay_epidemic.json() == live_epidemic
+            assert live_epidemic["prevalence"], "the comparison must cover a real curve"
     finally:
         asyncio.run(_cleanup(runner.experiment_id))
 
@@ -474,6 +479,7 @@ def test_replay_warns_when_the_run_was_recorded_by_another_build():
         "replay/analysis/critical-nodes",
         "replay/metrics",
         "replay/remediation",
+        "replay/epidemic",
     ]
     try:
         with TestClient(app) as client:

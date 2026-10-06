@@ -22,8 +22,10 @@ from app.graph.analysis import attack_paths, blast_radius, critical_nodes, prove
 from app.graph.builder import build_security_graph
 from app.graph.security_graph import SecurityGraph
 from app.metrics import compute as metrics
+from app.metrics import epidemic
 from app.orchestrator.registry import registry
 from app.remediation.analyze import recommend
+from app.schemas.epidemic import EpidemicResponse
 from app.schemas.events import INCIDENT_EVENT_TYPES, Event
 from app.schemas.experiment import EdgeView, ExperimentConfig, NodeView
 from app.schemas.frames import SnapshotFrame
@@ -441,6 +443,15 @@ async def get_replay_metrics(
     return MetricsResponse(
         **await asyncio.to_thread(metrics.all_metrics, world, graph, tally)
     )
+
+
+@router.get("/{experiment_id}/replay/epidemic", response_model=EpidemicResponse)
+async def get_replay_epidemic(
+    experiment_id: UUID, request: Request, response: Response
+) -> EpidemicResponse:
+    pool = _get_pool(request)
+    world, _, _, tally = await _reconstruct_for_replay(pool, experiment_id, response)
+    return EpidemicResponse(**await asyncio.to_thread(epidemic.epidemic_report, world, tally))
 
 
 @router.get("/{experiment_id}/replay/remediation", response_model=RemediationResponse)
