@@ -16,6 +16,7 @@ from app.api import (
 from app.config import get_settings
 from app.db import check_postgres_reachable, create_pool
 from app.gateway.factory import build_http_client
+from app.orchestrator.registry import registry
 from app.persistence.migrate import run_migrations
 from app.persistence.registry import writer_registry
 
@@ -53,6 +54,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # they depend on -- otherwise a still-running experiment at shutdown
     # leaks a task holding a reference to a now-closed pool.
     await writer_registry.shutdown_all()
+    registry.clear()
     if app.state.pg_pool is not None:
         await app.state.pg_pool.close()
     await app.state.http_client.aclose()

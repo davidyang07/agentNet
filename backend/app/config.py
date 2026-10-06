@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     vllm_base_url: str | None = None
     vllm_api_key: str | None = None
 
+    # Run lifecycle (docs/PLAN.md §14.3 B.2): an ended run stays in memory
+    # this long for late readers (its durable record is in Postgres), and at
+    # most this many runs may be running or paused at once.
+    finished_run_ttl_s: float = 900.0
+    max_active_experiments: int = 20
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -4,9 +4,10 @@ pattern routes_experiments.py already uses. History/replay equivalents can
 be added later the same way routes_history.py replays topology, once
 frontend integration needs them (docs/PLAN.md §9)."""
 
+import asyncio
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from app.graph.analysis import attack_paths, blast_radius, critical_nodes, provenance
 from app.graph.builder import build_security_graph
@@ -43,6 +44,17 @@ def _security_graph_for(experiment_id: UUID) -> SecurityGraph:
     return build_security_graph(runner.state, runner.config)
 
 
+async def _analyze(experiment_id: UUID, analysis):
+    """Runs `analysis(graph)` on the run's current security graph in a worker
+    thread: graph analysis is pure CPU, and inside an async route it froze
+    every live run and WebSocket for its duration. The state is captured on
+    the event loop first -- the runner swaps in a new WorldState each tick and
+    never mutates one it has handed out."""
+    runner = _runner_for(experiment_id)
+    state, config = runner.state, runner.config
+    return await asyncio.to_thread(lambda: analysis(build_security_graph(state, config)))
+
+
 @router.get("/{experiment_id}/graph", response_model=SecurityGraphView)
 async def get_security_graph(experiment_id: UUID) -> SecurityGraphView:
     graph = _security_graph_for(experiment_id)
@@ -62,23 +74,28 @@ async def get_security_graph(experiment_id: UUID) -> SecurityGraphView:
 
 @router.get("/{experiment_id}/analysis/attack-paths", response_model=AttackPathsResponse)
 async def get_attack_paths(experiment_id: UUID, source: str, target: str) -> AttackPathsResponse:
-    graph = _security_graph_for(experiment_id)
-    return AttackPathsResponse(paths=attack_paths(graph, source, target))
+    paths = await _analyze(experiment_id, lambda graph: attack_paths(graph, source, target))
+    return AttackPathsResponse(paths=paths)
 
 
 @router.get("/{experiment_id}/analysis/blast-radius", response_model=BlastRadiusResponse)
 async def get_blast_radius(experiment_id: UUID) -> BlastRadiusResponse:
-    graph = _security_graph_for(experiment_id)
-    compromised = sorted(graph.compromised_ids())
-    reachable = sorted(blast_radius(graph))
-    fraction = metrics.blast_radius_fraction(graph)
-    return BlastRadiusResponse(compromised=compromised, reachable=reachable, fraction=fraction)
+    return await _analyze(experiment_id, _blast_radius_response)
+
+
+def _blast_radius_response(graph: SecurityGraph) -> BlastRadiusResponse:
+    return BlastRadiusResponse(
+        compromised=sorted(graph.compromised_ids()),
+        reachable=sorted(blast_radius(graph)),
+        fraction=metrics.blast_radius_fraction(graph),
+    )
 
 
 @router.get("/{experiment_id}/analysis/critical-nodes", response_model=CriticalNodesResponse)
-async def get_critical_nodes(experiment_id: UUID, top_n: int = 5) -> CriticalNodesResponse:
-    graph = _security_graph_for(experiment_id)
-    ranked = critical_nodes(graph, top_n=top_n)
+async def get_critical_nodes(
+    experiment_id: UUID, top_n: int = Query(5, ge=1)
+) -> CriticalNodesResponse:
+    ranked = await _analyze(experiment_id, lambda graph: critical_nodes(graph, top_n=top_n))
     return CriticalNodesResponse(
         nodes=[CriticalNodeView(id=node_id, betweenness=score) for node_id, score in ranked]
     )
@@ -101,10 +118,15 @@ async def get_provenance(experiment_id: UUID, node_id: str) -> ProvenanceRespons
 @router.get("/{experiment_id}/metrics", response_model=MetricsResponse)
 async def get_metrics(experiment_id: UUID) -> MetricsResponse:
     runner = _runner_for(experiment_id)
-    graph = build_security_graph(runner.state, runner.config)
+    state, config = runner.state, runner.config
     # The runner's whole-run tally, not the EventBus ring: the ring stops
     # holding a long run's start, which silently zeroed these metrics.
-    return MetricsResponse(**metrics.all_metrics(runner.state, graph, runner.event_tally))
+    # Snapshotted on the loop, since the runner keeps folding into it.
+    tally = runner.event_tally.snapshot()
+    reported = await asyncio.to_thread(
+        lambda: metrics.all_metrics(state, build_security_graph(state, config), tally)
+    )
+    return MetricsResponse(**reported)
 
 
 @router.get("/{experiment_id}/remediation", response_model=RemediationResponse)

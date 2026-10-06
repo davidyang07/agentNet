@@ -31,6 +31,16 @@ logger = logging.getLogger(__name__)
 # an unbounded drain could otherwise starve a very hot bus indefinitely.
 DRAIN_BATCH_CAP = 500
 
+# The experiment-row insert runs inside POST /api/experiments; past this,
+# the run proceeds without persistence rather than the request hanging on a
+# database that never answers (docs/PLAN.md §14.3 B.4).
+WRITER_START_TIMEOUT_S = 3.0
+
+# Events persistence may fall behind by. Past it the bus drops events for
+# this writer, which leaves a seq gap, so _finalize() records the run as
+# incomplete -- instead of buffering without limit while the database lags.
+WRITER_QUEUE_LIMIT = 50_000
+
 _INSERT_EVENTS_SQL = """
     INSERT INTO experiment_events
         (experiment_id, seq, event_id, sim_tick, event_type, agent_id,
@@ -71,9 +81,9 @@ class PostgresWriter:
         down immediately so a failed persistence init never leaves an
         orphaned queue registered on the bus forever.
         """
-        self._queue = self._bus.subscribe()
+        self._queue = self._bus.subscribe(maxsize=WRITER_QUEUE_LIMIT)
         try:
-            await self._insert_experiment_row()
+            await asyncio.wait_for(self._insert_experiment_row(), timeout=WRITER_START_TIMEOUT_S)
         except Exception:
             self._bus.unsubscribe(self._queue)
             self._queue = None
@@ -111,7 +121,16 @@ class PostgresWriter:
 
     async def _drain_loop(self) -> None:
         assert self._queue is not None
+        overflow_logged = False
         while True:
+            if not overflow_logged and self._bus.overflowed(self._queue):
+                overflow_logged = True
+                logger.warning(
+                    "persistence fell more than %d events behind for experiment %s; "
+                    "events were dropped and the run will be recorded as incomplete",
+                    WRITER_QUEUE_LIMIT,
+                    self._experiment_id,
+                )
             get_task: asyncio.Task[Event] = asyncio.ensure_future(self._queue.get())
             term_task: asyncio.Task[bool] = asyncio.ensure_future(
                 self._runner._terminal_event.wait()

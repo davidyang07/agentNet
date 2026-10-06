@@ -174,3 +174,34 @@ def test_null_usage_falls_back_to_token_estimate():
 def test_non_string_content_raises_model_provider_error():
     with pytest.raises(ModelProviderError):
         _complete_with({"choices": [{"message": {"content": [{"type": "text", "text": "hi"}]}}]})
+
+
+
+def _status(code: int):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(code, json={})
+
+    async def run():
+        async with _client_with_handler(handler) as client:
+            provider = VLLMProvider(
+                client, base_url="http://vllm.local:8000", api_key=None, model_name="qwen-test"
+            )
+            await provider.complete(_request())
+
+    with pytest.raises(ModelProviderError) as excinfo:
+        asyncio.run(run())
+    return excinfo.value
+
+
+def test_client_errors_are_not_retryable_but_overload_and_server_errors_are():
+    # A 401/404 will fail identically on every retry; 429 and 5xx may not.
+    assert _status(401).retryable is False
+    assert _status(404).retryable is False
+    assert _status(429).retryable is True
+    assert _status(503).retryable is True
+
+
+def test_an_unexpected_response_shape_is_not_retryable():
+    with pytest.raises(ModelProviderError) as excinfo:
+        _complete_with({"choices": [{"message": {"content": [{"type": "text"}]}}]})
+    assert excinfo.value.retryable is False

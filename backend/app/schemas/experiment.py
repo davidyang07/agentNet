@@ -5,9 +5,13 @@ from pydantic import BaseModel, Field
 
 from app.engine.state import SecurityState
 
+# experiments.seed is BIGINT: a seed outside it could run but never be saved.
+SEED_MIN = -(2**63)
+SEED_MAX = 2**63 - 1
+
 
 class ExperimentConfig(BaseModel):
-    seed: int
+    seed: int = Field(ge=SEED_MIN, le=SEED_MAX)
     node_count: int = Field(60, ge=25, le=100)
     edge_density: int = Field(2, ge=1, le=5)
     software_type_count: int = Field(3, ge=1, le=5)

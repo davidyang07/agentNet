@@ -37,8 +37,13 @@ class ModelResponse(BaseModel):
 
 class ModelProviderError(Exception):
     """Raised by a provider on any HTTP/connection/parse failure. Caught only
-    by ModelGateway, which maps it onto the same retry/timeout path as an
-    outright timeout."""
+    by ModelGateway, which retries it like a timeout -- unless `retryable` is
+    False: a failure that would recur identically on every attempt (a 4xx
+    other than 429, a malformed response) is given up on at once."""
+
+    def __init__(self, message: str, *, retryable: bool = True) -> None:
+        super().__init__(message)
+        self.retryable = retryable
 
 
 class ModelProvider(Protocol):

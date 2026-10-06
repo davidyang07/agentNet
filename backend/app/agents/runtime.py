@@ -28,7 +28,7 @@ async def real_agent_step(
     but explicitly async and, with a real provider behind the gateway, not
     reproducible byte-for-byte -- only the deterministic mock-provider path
     is (docs/PHASE_2_PLAN.md §9). Never raises for a gateway/provider
-    failure: ModelGateway.complete() already degrades that to `None`, which
+    failure: ModelGateway already degrades that to a `None` response, which
     this function turns into a COMPROMISE_FAILED draft, same as a
     probabilistic miss.
     """
@@ -72,14 +72,31 @@ async def real_agent_step(
     if not attempts:
         return state, []
 
-    responses = await asyncio.gather(*(gateway.complete(a[3]) for a in attempts))
+    results = await asyncio.gather(*(gateway.complete_with_attempts(a[3]) for a in attempts))
 
     drafts: list[EventDraft] = []
     claims: dict[str, str] = {}
 
-    for (source, target, probability, _request), response in zip(
-        attempts, responses, strict=True
+    for (source, target, probability, _request), result in zip(
+        attempts, results, strict=True
     ):
+        # One per provider call, retries and failed calls included, so the
+        # log accounts for every request the budget was charged for.
+        for attempt in range(1, result.attempts + 1):
+            drafts.append(
+                EventDraft(
+                    sim_tick=tick,
+                    event_type=EventType.MODEL_REQUESTED,
+                    agent_id=target,
+                    metadata={
+                        "source_agent_id": source,
+                        "purpose": "propagation",
+                        "attempt": attempt,
+                    },
+                )
+            )
+
+        response = result.response
         if response is None:
             drafts.append(
                 EventDraft(
@@ -96,14 +113,6 @@ async def real_agent_step(
             )
             continue
 
-        drafts.append(
-            EventDraft(
-                sim_tick=tick,
-                event_type=EventType.MODEL_REQUESTED,
-                agent_id=target,
-                metadata={"source_agent_id": source, "purpose": "propagation"},
-            )
-        )
         drafts.append(
             EventDraft(
                 sim_tick=tick,

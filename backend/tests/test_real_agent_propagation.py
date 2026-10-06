@@ -4,7 +4,7 @@ from app.agents.runtime import real_agent_step
 from app.engine.state import AgentNode, SecurityState, WorldState
 from app.gateway.gateway import ModelGateway
 from app.gateway.mock_provider import MockProvider
-from app.gateway.schemas import ModelRequest, ModelResponse
+from app.gateway.schemas import ModelProviderError, ModelRequest, ModelResponse
 from app.schemas.experiment import ExperimentConfig
 
 
@@ -92,25 +92,40 @@ def test_no_leak_emits_compromise_failed_no_tool_event():
     assert new_world.nodes["agent-001"].security_state == SecurityState.HEALTHY
 
 
-def test_gateway_error_short_circuits_to_compromise_failed_no_model_events():
-    class _AlwaysNoneGateway:
-        async def complete(self, request: ModelRequest) -> ModelResponse | None:
-            return None
+class _AlwaysFailsProvider:
+    async def complete(self, request: ModelRequest) -> ModelResponse:
+        raise ModelProviderError("simulated outage")
 
+
+def _gateway_failure_drafts(gateway: ModelGateway):
     nodes = {
         "agent-000": _real_node("agent-000", SecurityState.COMPROMISED, ("agent-001",)),
         "agent-001": _real_node("agent-001", SecurityState.HEALTHY, ("agent-000",)),
     }
     world = WorldState(tick=1, nodes=nodes, edges=(("agent-000", "agent-001"),))
-
-    new_world, drafts = asyncio.run(
-        real_agent_step(world, _config(), _AlwaysNoneGateway(), tick=1)
-    )
-
-    assert len(drafts) == 1
-    assert drafts[0].event_type.value == "COMPROMISE_FAILED"
-    assert drafts[0].metadata["gateway_error"] is True
+    new_world, drafts = asyncio.run(real_agent_step(world, _config(), gateway, tick=1))
     assert new_world.nodes["agent-001"].security_state == SecurityState.HEALTHY
+    return drafts
+
+
+def test_gateway_error_short_circuits_to_compromise_failed_without_a_response():
+    """Each provider attempt is recorded, but a call that never got a
+    response is a gateway failure, not an attempted compromise."""
+    drafts = _gateway_failure_drafts(_gateway(_AlwaysFailsProvider(), max_retries=1))
+
+    assert [d.event_type.value for d in drafts] == [
+        "MODEL_REQUESTED",
+        "MODEL_REQUESTED",
+        "COMPROMISE_FAILED",
+    ]
+    assert drafts[-1].metadata["gateway_error"] is True
+
+
+def test_a_spent_budget_fails_without_model_events():
+    drafts = _gateway_failure_drafts(_gateway(max_requests_per_experiment=0))
+
+    assert [d.event_type.value for d in drafts] == ["COMPROMISE_FAILED"]
+    assert drafts[0].metadata["gateway_error"] is True
 
 
 def test_two_real_sources_claim_tie_break_matches_propagation_convention():
@@ -219,3 +234,33 @@ def test_attacks_from_different_sources_on_one_target_are_independent():
 
     compromised = sum(two_sources_one_target(seed) for seed in range(1000)) / 1000
     assert abs(compromised - 0.51) < 0.05
+
+
+class _FailsOnceProvider:
+    def __init__(self) -> None:
+        self.calls = 0
+        self.inner = MockProvider()
+
+    async def complete(self, request: ModelRequest) -> ModelResponse:
+        self.calls += 1
+        if self.calls == 1:
+            raise ModelProviderError("transient")
+        return await self.inner.complete(request)
+
+
+def test_every_provider_attempt_is_an_event():
+    """MODEL_REQUESTED was emitted only once, and only on success, so retries
+    and failed attempts never reached the event log (PLAN 14.3 B.5)."""
+    nodes = {
+        "agent-000": _real_node("agent-000", SecurityState.COMPROMISED, ("agent-001",)),
+        "agent-001": _real_node("agent-001", SecurityState.HEALTHY, ("agent-000",)),
+    }
+    world = WorldState(tick=1, nodes=nodes, edges=(("agent-000", "agent-001"),))
+
+    _, drafts = asyncio.run(
+        real_agent_step(world, _config(), _gateway(_FailsOnceProvider(), max_retries=1), tick=1)
+    )
+
+    requested = [d for d in drafts if d.event_type.value == "MODEL_REQUESTED"]
+    assert [d.metadata["attempt"] for d in requested] == [1, 2]
+    assert sum(d.event_type.value == "MODEL_RESPONDED" for d in drafts) == 1

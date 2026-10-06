@@ -289,3 +289,32 @@ def test_concurrent_experiments_are_isolated_by_experiment_id():
             await pool.close()
 
     asyncio.run(run())
+
+
+def test_writer_overflow_leaves_the_run_marked_incomplete(monkeypatch):
+    """The writer's queue is bounded (PLAN 14.3 B.4): if persistence falls
+    that far behind, the dropped events leave a gap and the run is recorded
+    as incomplete, instead of the queue growing without limit."""
+    from app.persistence import writer as writer_module
+
+    monkeypatch.setattr(writer_module, "WRITER_QUEUE_LIMIT", 5)
+
+    async def main() -> bool | None:
+        pool = await create_pool(TEST_SETTINGS)
+        runner = _make_runner()
+        try:
+            writer = await _start_writer(pool, runner)
+            # The initial events (27 for 25 agents) publish before the writer
+            # first drains, overflowing a 5-event queue.
+            await runner.publish_initial()
+            await runner._run_loop()
+            await _wait_for_finalize(writer)
+            return await pool.fetchval(
+                "SELECT is_complete FROM experiments WHERE experiment_id = $1",
+                runner.experiment_id,
+            )
+        finally:
+            await _cleanup(pool, runner.experiment_id)
+            await pool.close()
+
+    assert asyncio.run(main()) is False

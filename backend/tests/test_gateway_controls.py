@@ -122,16 +122,71 @@ def test_retry_then_give_up_returns_none():
     assert provider.calls == 3  # initial attempt + 2 retries
 
 
-def test_timeout_triggers_retry_then_gives_up():
-    provider = _AlwaysTimesOutProvider(delay=0.2)
-    gateway = _gateway(provider, timeout_s=0.05, max_retries=1)
+def test_timeout_is_a_total_deadline_across_attempts():
+    """model_timeout_s bounds the whole call, retries included. It used to
+    apply per attempt, so retries multiplied it: up to ~480 s for one call at
+    the maximum settings (PLAN 14.3 B.5). A slow provider spends the whole
+    deadline on its first attempt and is not retried."""
+    provider = _AlwaysTimesOutProvider(delay=1.0)
+    gateway = _gateway(provider, timeout_s=0.2, max_retries=3)
 
     async def run():
-        return await gateway.complete(_request())
+        started = asyncio.get_running_loop().time()
+        result = await gateway.complete(_request())
+        return result, asyncio.get_running_loop().time() - started
 
-    result = asyncio.run(run())
+    result, elapsed = asyncio.run(run())
     assert result is None
-    assert provider.calls == 2  # initial attempt + 1 retry
+    assert provider.calls == 1
+    assert elapsed < 0.5
+
+
+def test_fast_failures_are_retried_within_the_deadline():
+    provider = _AlwaysFailsProvider()
+    gateway = _gateway(provider, timeout_s=5.0, max_retries=2)
+
+    assert asyncio.run(gateway.complete(_request())) is None
+    assert provider.calls == 3
+
+
+def test_the_budget_is_charged_per_provider_attempt():
+    """It was charged once per call, so retries were free: a budget of 2 made
+    8 provider calls with 3 retries each."""
+    provider = _AlwaysFailsProvider()
+    gateway = _gateway(provider, max_retries=3, max_requests_per_experiment=2)
+
+    async def run():
+        return [await gateway.complete(_request()) for _ in range(2)]
+
+    assert asyncio.run(run()) == [None, None]
+    assert provider.calls == 2
+    assert gateway.requests_used == 2
+
+
+class _RejectsProvider:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def complete(self, request: ModelRequest) -> ModelResponse:
+        self.calls += 1
+        raise ModelProviderError("HTTP 401", retryable=False)
+
+
+def test_a_non_retryable_failure_is_not_retried():
+    provider = _RejectsProvider()
+    gateway = _gateway(provider, max_retries=3)
+
+    assert asyncio.run(gateway.complete(_request())) is None
+    assert provider.calls == 1
+
+
+def test_attempts_are_reported_with_the_outcome():
+    provider = _AlwaysFailsProvider()
+    gateway = _gateway(provider, max_retries=2)
+
+    result = asyncio.run(gateway.complete_with_attempts(_request()))
+    assert result.response is None
+    assert result.attempts == 3
 
 
 def test_success_does_not_retry():

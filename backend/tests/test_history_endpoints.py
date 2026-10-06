@@ -365,6 +365,40 @@ def test_replay_matches_live_for_a_mock_real_agent_run():
         asyncio.run(_cleanup(exp_id))
 
 
+def test_replay_reconstructs_a_finished_run_once_for_many_requests(monkeypatch):
+    """A persisted run's (config, final tick) never changes, and a replay page
+    fires several /replay/* requests: each used to re-simulate the whole run
+    (seconds for a long one)."""
+    from app.api import routes_history
+
+    routes_history._replay_world.cache_clear()
+    calls = []
+    real = routes_history.reconstruct_final_state
+
+    def counting(config, target_tick):
+        calls.append(target_tick)
+        return real(config, target_tick)
+
+    monkeypatch.setattr(routes_history, "reconstruct_final_state", counting)
+
+    async def setup() -> ExperimentRunner:
+        pool = await create_pool(TEST_SETTINGS)
+        try:
+            return await _persist_completed_run(pool, seed=8, node_count=25, p_same=0.4)
+        finally:
+            await pool.close()
+
+    runner = asyncio.run(setup())
+    try:
+        with TestClient(app) as client:
+            base = f"/api/experiments/{runner.experiment_id}/replay"
+            for path in ("/graph", "/metrics", "/remediation", "/analysis/blast-radius"):
+                assert client.get(base + path).status_code == 200
+        assert len(calls) == 1
+    finally:
+        asyncio.run(_cleanup(runner.experiment_id))
+
+
 def test_replay_analysis_endpoints_return_200_for_a_persisted_run():
     async def setup() -> ExperimentRunner:
         pool = await create_pool(TEST_SETTINGS)

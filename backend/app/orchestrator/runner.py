@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from collections.abc import Sequence
 from typing import Literal
 from uuid import UUID, uuid4
@@ -60,6 +61,9 @@ class ExperimentRunner:
         # safe to drain the last of the queue and finalize without risking
         # finalizing one event early (docs/PHASE_1_5_PLAN.md §6).
         self._terminal_event = asyncio.Event()
+        # time.monotonic() when the run ended -- lifecycle bookkeeping for
+        # registry eviction, never simulation time.
+        self.ended_at: float | None = None
         self._initial_drafts: list[EventDraft] = [
             EventDraft(sim_tick=0, event_type=EventType.EXPERIMENT_STARTED),
             *topology_drafts,
@@ -132,7 +136,7 @@ class ExperimentRunner:
             return
         if self._running:
             self.status = "finished"
-            self._terminal_event.set()
+            self._mark_ended()
         self._task = None
 
     async def _stop_after_error(self, exc: Exception) -> None:
@@ -150,7 +154,7 @@ class ExperimentRunner:
                 )
             ]
         )
-        self._terminal_event.set()
+        self._mark_ended()
 
     async def stop(self) -> None:
         if self.status == "finished":
@@ -177,12 +181,27 @@ class ExperimentRunner:
         await self._publish(
             [EventDraft(sim_tick=self.state.tick, event_type=EventType.EXPERIMENT_STOPPED)]
         )
+        self._mark_ended()
+
+    def _mark_ended(self) -> None:
+        """Called only after the run's final event is published."""
+        self.ended_at = time.monotonic()
         self._terminal_event.set()
 
     async def _publish(self, drafts: Sequence[EventDraft]) -> None:
         events = self._emitter.emit(drafts)
         self.event_tally.add(events)
         await self.bus.publish(events)
+
+    @property
+    def ended(self) -> asyncio.Event:
+        """Set once the run's final event has been published (finished,
+        stopped, or stopped by an error) -- nothing is published after it."""
+        return self._terminal_event
+
+    @property
+    def last_seq(self) -> int:
+        return self._emitter.last_seq
 
     def summary(self) -> ExperimentSummary:
         return ExperimentSummary(

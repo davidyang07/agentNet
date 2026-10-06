@@ -35,6 +35,14 @@ async def create_experiment(config: ExperimentConfig, request: Request) -> Exper
                 detail="vLLM base_url not configured; set VLLM_BASE_URL or use model_provider=mock",
             )
 
+    max_active = get_settings().max_active_experiments
+    if registry.active_count() >= max_active:
+        raise HTTPException(
+            status_code=429,
+            detail=f"{max_active} experiments are already running or paused; "
+            "stop one or wait for one to finish",
+        )
+
     gateway = build_gateway(config, get_settings(), request.app.state.http_client)
     runner = ExperimentRunner(config, gateway=gateway)
 
