@@ -12,6 +12,7 @@ import asyncio
 from dataclasses import replace
 
 from app.agents.prompts import INJECTION_PAYLOAD, build_system_prompt, response_leaked_token
+from app.engine import strains
 from app.engine.state import SecurityState, WorldState
 from app.gateway.gateway import ModelGateway
 from app.gateway.schemas import ModelRequest
@@ -76,6 +77,8 @@ async def real_agent_step(
 
     drafts: list[EventDraft] = []
     claims: dict[str, str] = {}
+    claimed_strains: dict[str, int] = {}
+    track_strains = strains.tracked(config)
 
     for (source, target, probability, _request), result in zip(
         attempts, results, strict=True
@@ -166,10 +169,15 @@ async def real_agent_step(
         # an already-claimed target is recorded but does not re-win it.
         already_claimed = target in claims
         metadata: dict[str, object] = {"probability": probability, "real_agent": True}
+        if track_strains:
+            strain, mutated = strains.transmit(config, tick, state.nodes[source], target)
+            metadata.update(strains.success_metadata(config, strain, mutated))
         if already_claimed:
             metadata["already_compromised"] = True
         else:
             claims[target] = source
+            if track_strains:
+                claimed_strains[target] = strain
         drafts.append(
             EventDraft(
                 sim_tick=tick,
@@ -190,6 +198,7 @@ async def real_agent_step(
             security_state=SecurityState.COMPROMISED,
             compromised_by=source,
             tick_compromised=tick,
+            strain=claimed_strains.get(target),
         )
     new_state = WorldState(
         tick=state.tick,

@@ -123,6 +123,13 @@ def generation_stats(state: WorldState) -> list[tuple[int, int, float]]:
     ]
 
 
+def strains_observed(state: WorldState) -> int | None:
+    """Distinct strains among infected agents (§14.4 C.3); None when strains
+    aren't tracked."""
+    seen = {n.strain for n in _infected(state).values() if n.strain is not None}
+    return len(seen) or None
+
+
 def peak_prevalence(state: WorldState, tally: EventLogTally) -> tuple[float | None, int | None]:
     """The largest fraction of agents infectious at once, and the first tick
     it was reached; (None, None) before any event."""
@@ -142,6 +149,7 @@ def epidemic_metrics(state: WorldState, tally: EventLogTally) -> dict[str, float
         "final_size": final_size(state),
         "peak_prevalence": peak,
         "peak_tick": peak_tick,
+        "strains_observed": strains_observed(state),
     }
 
 

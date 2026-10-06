@@ -60,6 +60,10 @@ const CONFIG: ExperimentConfig = {
   inference_fraction: 1,
   inference_placement: "random",
   topology: "barabasi_albert",
+  signature_bits: 64,
+  strain_benign_distance: 32,
+  mutation_rate: 0,
+  mutation_bits: 1,
 };
 
 function okResponse(body: unknown) {
@@ -266,6 +270,10 @@ describe("api client", () => {
   inference_fraction: 1,
   inference_placement: "random",
   topology: "barabasi_albert",
+  signature_bits: 64,
+  strain_benign_distance: 32,
+  mutation_rate: 0,
+  mutation_bits: 1,
       }),
     );
     await getMetrics("a");

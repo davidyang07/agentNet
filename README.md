@@ -82,6 +82,8 @@ edges — and scenarios are pluggable via the `active_scenarios` config field.
 - **Population** — `topology` picks Barabási–Albert (default) or Erdős–Rényi with the same edge
   count, and `inference_fraction`/`inference_placement` (random, hubs, periphery) set which agents
   can run inference. A compromised agent that can't is a dead end: it never attacks.
+- **Worm strains** — with `mutation_rate > 0`, every infection carries a `signature_bits`-bit strain
+  that may mutate on each transmission, starting `strain_benign_distance` bits from benign behaviour.
 - **Analysis** — `GET /api/experiments/{id}/graph` and
   `.../analysis/{attack-paths,blast-radius,critical-nodes,provenance}` compute reachability, blast
   radius, choke points, and compromise provenance on demand from the live experiment.

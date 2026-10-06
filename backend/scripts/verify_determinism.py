@@ -47,6 +47,10 @@ CONFIGS: dict[str, ExperimentConfig] = {
         seed=8, inference_fraction=0.4, p_same=0.5, p_cross=0.2, defense_enabled=False
     ),
     "erdos_renyi": ExperimentConfig(seed=8, topology="erdos_renyi", p_same=0.4),
+    # docs/PLAN.md §14.4 C.3, real agents included
+    "strain_mutation": ExperimentConfig(
+        seed=12, mutation_rate=0.3, mutation_bits=2, real_agent_count=6, p_same=0.5, p_cross=0.2
+    ),
 }
 
 DETERMINISM_FIELDS = (

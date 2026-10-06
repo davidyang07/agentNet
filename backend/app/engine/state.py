@@ -29,6 +29,9 @@ class AgentNode:
     # docs/PLAN.md §14.4 C.2: an agent that can't run inference is a dead end
     # -- it can be compromised, but never attacks anyone.
     inference_capable: bool = True
+    # docs/PLAN.md §14.4 C.3: the worm strain this agent carries, a
+    # signature_bits-bit vector; None unless strains are tracked.
+    strain: int | None = None
 
 
 @dataclass
