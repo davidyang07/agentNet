@@ -7,7 +7,7 @@ frontend integration needs them (docs/PLAN.md §9)."""
 import asyncio
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from app.graph.analysis import attack_paths, blast_radius, critical_nodes, provenance
 from app.graph.builder import build_security_graph
@@ -92,7 +92,9 @@ def _blast_radius_response(graph: SecurityGraph) -> BlastRadiusResponse:
 
 
 @router.get("/{experiment_id}/analysis/critical-nodes", response_model=CriticalNodesResponse)
-async def get_critical_nodes(experiment_id: UUID, top_n: int = 5) -> CriticalNodesResponse:
+async def get_critical_nodes(
+    experiment_id: UUID, top_n: int = Query(5, ge=1)
+) -> CriticalNodesResponse:
     ranked = await _analyze(experiment_id, lambda graph: critical_nodes(graph, top_n=top_n))
     return CriticalNodesResponse(
         nodes=[CriticalNodeView(id=node_id, betweenness=score) for node_id, score in ranked]

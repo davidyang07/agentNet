@@ -22,6 +22,7 @@ from app.graph.analysis import attack_paths, blast_radius, critical_nodes, prove
 from app.graph.builder import build_security_graph
 from app.graph.security_graph import SecurityGraph
 from app.metrics import compute as metrics
+from app.orchestrator.registry import registry
 from app.remediation.analyze import recommend
 from app.schemas.events import INCIDENT_EVENT_TYPES, Event
 from app.schemas.experiment import EdgeView, ExperimentConfig, NodeView
@@ -51,6 +52,8 @@ DEFAULT_LIST_LIMIT = 20
 MAX_LIST_LIMIT = 100
 DEFAULT_EVENT_LIMIT = 500
 MAX_EVENT_LIMIT = 2000
+# experiment_events.seq is INT; -1 means "from the start".
+SEQ_MAX = 2**31 - 1
 
 _LIST_COLUMNS = (
     "experiment_id, seed, config, created_at, final_status, "
@@ -186,7 +189,7 @@ async def get_experiment_detail(experiment_id: UUID, request: Request) -> Experi
 async def get_experiment_events(
     experiment_id: UUID,
     request: Request,
-    since_seq: int = -1,
+    since_seq: int = Query(-1, ge=-1, le=SEQ_MAX),
     limit: int = Query(DEFAULT_EVENT_LIMIT, ge=1, le=MAX_EVENT_LIMIT),
 ) -> EventHistoryResponse:
     pool = _get_pool(request)
@@ -207,7 +210,7 @@ async def get_experiment_events(
 async def get_experiment_incidents(
     experiment_id: UUID,
     request: Request,
-    since_seq: int = -1,
+    since_seq: int = Query(-1, ge=-1, le=SEQ_MAX),
     limit: int = Query(DEFAULT_EVENT_LIMIT, ge=1, le=MAX_EVENT_LIMIT),
 ) -> EventHistoryResponse:
     pool = _get_pool(request)
@@ -223,6 +226,18 @@ async def get_experiment_incidents(
     events = [_row_to_event(r) for r in rows]
     next_seq = events[-1].seq if len(events) == limit else None
     return EventHistoryResponse(events=events, next_seq=next_seq)
+
+
+def _unfinished_status(
+    experiment_id: UUID,
+) -> Literal["running", "paused", "finished", "stopped"]:
+    """Status of a run with no final status recorded yet. Postgres can't tell
+    running from paused, so this one field asks the in-memory registry -- the
+    only place this module reads anything but Postgres. A run in neither place
+    never ended cleanly (its process went down, or its writer gave up), so it
+    reads as stopped."""
+    runner = registry.get(experiment_id)
+    return "stopped" if runner is None else runner.status
 
 
 @router.get("/{experiment_id}/replay-snapshot", response_model=SnapshotFrame)
@@ -259,7 +274,7 @@ async def get_replay_snapshot(experiment_id: UUID, request: Request) -> Snapshot
         experiment_id=experiment_id,
         last_seq=last_seq,
         sim_tick=0,
-        status=row["final_status"] or "stopped",
+        status=row["final_status"] or _unfinished_status(experiment_id),
         nodes=[
             NodeView(
                 id=n.id,
@@ -369,7 +384,7 @@ async def get_replay_blast_radius(experiment_id: UUID, request: Request) -> Blas
     "/{experiment_id}/replay/analysis/critical-nodes", response_model=CriticalNodesResponse
 )
 async def get_replay_critical_nodes(
-    experiment_id: UUID, request: Request, top_n: int = 5
+    experiment_id: UUID, request: Request, top_n: int = Query(5, ge=1)
 ) -> CriticalNodesResponse:
     pool = _get_pool(request)
     _, _, graph, _ = await _reconstruct_for_replay(pool, experiment_id)
