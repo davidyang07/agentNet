@@ -35,6 +35,29 @@ def _select_real_agents(sorted_ids: list[str], degree: dict[str, int], count: in
     return set(ranked[:count])
 
 
+def _select_inference_capable(
+    sorted_ids: list[str], degree: dict[str, int], config: ExperimentConfig, always: set[str]
+) -> set[str]:
+    """docs/PLAN.md §14.4 C.2, after [S2]: round(inference_fraction x agents)
+    agents can run inference. The seed and real agents always can -- every
+    run has a propagator, and a real agent is a model -- and count toward
+    the total; the rest are placed at random, on the hubs, or on the
+    periphery (by degree, ties by lowest id). At the default fraction every
+    agent is capable and nothing is drawn."""
+    if config.inference_fraction >= 1.0:
+        return set(sorted_ids)
+    count = round(config.inference_fraction * len(sorted_ids))
+    others = [n for n in sorted_ids if n not in always]
+    if config.inference_placement == "hubs":
+        ranked = sorted(others, key=lambda n: (-degree[n], n))
+    elif config.inference_placement == "periphery":
+        ranked = sorted(others, key=lambda n: (degree[n], n))
+    else:
+        ranked = others
+        rng(config.seed, 0, "topology", "inference_placement").shuffle(ranked)
+    return always | set(ranked[: max(0, count - len(always))])
+
+
 def build_world_from_agents(
     agent_ids: list[str], edges: set[tuple[str, str]], config: ExperimentConfig
 ) -> tuple[WorldState, list[EventDraft]]:
@@ -66,6 +89,9 @@ def build_world_from_agents(
         seed_node = sorted(n for n in sorted_ids if degree[n] == max_degree)[0]
 
     real_agent_ids = _select_real_agents(sorted_ids, degree, config.real_agent_count)
+    capable = _select_inference_capable(
+        sorted_ids, degree, config, always={seed_node} | real_agent_ids
+    )
 
     nodes: dict[str, AgentNode] = {}
     for n in sorted_ids:
@@ -80,18 +106,22 @@ def build_world_from_agents(
             tick_compromised=0 if n == seed_node else None,
             agent_kind="real" if is_real else "simulated",
             confidential_token=_generate_confidential_token(config.seed, n) if is_real else None,
+            inference_capable=n in capable,
         )
 
     world = WorldState(tick=0, nodes=nodes, edges=tuple(sorted(edge_set)))
 
     drafts: list[EventDraft] = []
     for n in sorted_ids:
+        metadata: dict[str, object] = {"software_type": types[n]}
+        if config.inference_fraction < 1.0:
+            metadata["inference_capable"] = n in capable
         drafts.append(
             EventDraft(
                 sim_tick=0,
                 event_type=EventType.AGENT_CREATED,
                 agent_id=n,
-                metadata={"software_type": types[n]},
+                metadata=metadata,
             )
         )
     drafts.append(
@@ -112,9 +142,18 @@ def build_world(config: ExperimentConfig) -> tuple[WorldState, list[EventDraft]]
     Returns tick-0 state plus one AGENT_CREATED draft per node and one
     COMPROMISE_SUCCEEDED draft for the seeded node.
     """
-    graph = nx.barabasi_albert_graph(
-        n=config.node_count, m=config.edge_density, seed=config.seed
-    )
+    if config.topology == "erdos_renyi":
+        # docs/PLAN.md §14.4 C.2: as many edges as barabasi_albert_graph makes
+        # (edge_density x (node_count - edge_density)), placed uniformly.
+        graph = nx.gnm_random_graph(
+            n=config.node_count,
+            m=config.edge_density * (config.node_count - config.edge_density),
+            seed=config.seed,
+        )
+    else:
+        graph = nx.barabasi_albert_graph(
+            n=config.node_count, m=config.edge_density, seed=config.seed
+        )
 
     def node_id(i: int) -> str:
         return f"agent-{i:03d}"
