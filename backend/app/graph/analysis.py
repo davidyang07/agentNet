@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import networkx as nx
 
+from app.engine.state import SecurityState
 from app.graph.security_graph import PROPAGATION_EDGE_TYPES, SecurityGraph
 
 # Longest path this enumeration will consider, in hops. `max_paths` alone
@@ -21,14 +22,28 @@ from app.graph.security_graph import PROPAGATION_EDGE_TYPES, SecurityGraph
 MAX_PATH_HOPS = 6
 
 
+def _reachability_view(graph: SecurityGraph, keep: tuple[str, ...] = ()) -> nx.DiGraph:
+    """Propagation-capable edges without QUARANTINED nodes: the engine never
+    lets a quarantined agent send or receive, so compromise cannot reach one
+    or pass through it. `keep` retains nodes a caller asked about by name."""
+    view = graph.subgraph_view(PROPAGATION_EDGE_TYPES)
+    view.remove_nodes_from(
+        n.id
+        for n in graph.nodes
+        if n.security_state == SecurityState.QUARANTINED and n.id not in keep
+    )
+    return view
+
+
 def attack_paths(
     graph: SecurityGraph, source: str, target: str, *, max_paths: int = 10
 ) -> list[list[str]]:
     """Simple (no repeated node) paths of at most MAX_PATH_HOPS hops from
     source to target across propagation-capable edges, in the order networkx
     enumerates them, capped at max_paths so a dense graph can't return an
-    unbounded list."""
-    view = graph.subgraph_view(PROPAGATION_EDGE_TYPES)
+    unbounded list. Never routes through a quarantined node; a quarantined
+    source or target is still answered."""
+    view = _reachability_view(graph, keep=(source, target))
     if source not in view or target not in view:
         return []
     paths: list[list[str]] = []
@@ -41,8 +56,9 @@ def attack_paths(
 
 def blast_radius(graph: SecurityGraph) -> set[str]:
     """Every node reachable from a currently-compromised node across
-    propagation-capable edges, including the compromised nodes themselves."""
-    view = graph.subgraph_view(PROPAGATION_EDGE_TYPES)
+    propagation-capable edges, including the compromised nodes themselves.
+    Quarantined nodes are neither reachable nor traversed."""
+    view = _reachability_view(graph)
     compromised = graph.compromised_ids() & set(view.nodes)
     reachable: set[str] = set(compromised)
     for node_id in compromised:

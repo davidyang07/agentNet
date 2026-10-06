@@ -18,7 +18,6 @@ from app.engine.replay import ReplayUnsupportedError, reconstruct_final_state
 from app.engine.topology import build_world
 from app.graph.analysis import attack_paths, blast_radius, critical_nodes, provenance
 from app.graph.builder import build_security_graph
-from app.graph.types import NodeType
 from app.metrics import compute as metrics
 from app.remediation.analyze import recommend
 from app.schemas.events import INCIDENT_EVENT_TYPES, Event
@@ -340,8 +339,7 @@ async def get_replay_blast_radius(experiment_id: UUID, request: Request) -> Blas
     _, _, graph, _ = await _reconstruct_for_replay(pool, experiment_id)
     compromised = sorted(graph.compromised_ids())
     reachable = sorted(blast_radius(graph))
-    total_agents = len(graph.nodes_of_type(NodeType.AGENT))
-    fraction = (len(reachable) / total_agents) if total_agents else 0.0
+    fraction = metrics.blast_radius_fraction(graph)
     return BlastRadiusResponse(compromised=compromised, reachable=reachable, fraction=fraction)
 
 

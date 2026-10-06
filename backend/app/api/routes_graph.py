@@ -11,7 +11,6 @@ from fastapi import APIRouter, HTTPException
 from app.graph.analysis import attack_paths, blast_radius, critical_nodes, provenance
 from app.graph.builder import build_security_graph
 from app.graph.security_graph import SecurityGraph
-from app.graph.types import NodeType
 from app.metrics import compute as metrics
 from app.orchestrator.registry import registry
 from app.orchestrator.runner import ExperimentRunner
@@ -72,8 +71,7 @@ async def get_blast_radius(experiment_id: UUID) -> BlastRadiusResponse:
     graph = _security_graph_for(experiment_id)
     compromised = sorted(graph.compromised_ids())
     reachable = sorted(blast_radius(graph))
-    total_agents = len(graph.nodes_of_type(NodeType.AGENT))
-    fraction = (len(reachable) / total_agents) if total_agents else 0.0
+    fraction = metrics.blast_radius_fraction(graph)
     return BlastRadiusResponse(compromised=compromised, reachable=reachable, fraction=fraction)
 
 

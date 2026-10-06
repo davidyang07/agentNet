@@ -66,3 +66,19 @@ def test_critical_nodes_endpoint_returns_ranked_nodes():
         assert len(nodes) <= 3
         scores = [n["betweenness"] for n in nodes]
         assert scores == sorted(scores, reverse=True)
+
+
+def test_blast_radius_endpoint_fraction_counts_agents_only_like_the_metric():
+    # The endpoint divided every reachable node (tools, credentials,
+    # resources included) by the agent count, so it could exceed 1.0 and
+    # disagree with /metrics' blast_radius_fraction for the same run.
+    with TestClient(app) as client:
+        exp_id = _start_experiment(
+            client, tool_count=10, credential_count=10, resource_count=10
+        )["experiment_id"]
+        body = client.get(f"/api/experiments/{exp_id}/analysis/blast-radius").json()
+        metrics = client.get(f"/api/experiments/{exp_id}/metrics").json()
+        reachable_agents = [n for n in body["reachable"] if n.startswith("agent-")]
+        assert len(body["reachable"]) > len(reachable_agents)
+        assert body["fraction"] == metrics["blast_radius_fraction"]
+        assert body["fraction"] <= 1.0
