@@ -1,7 +1,13 @@
-.PHONY: dev test lint types verify-determinism migrate benchmark benchmark-audit golden-demo import-demo agentshield-test
+.PHONY: dev up test lint lock types verify-determinism migrate benchmark benchmark-audit golden-demo import-demo agentshield-test
 
+# Hot reload: the images plus docker-compose.dev.yml's source mounts.
 dev:
-	docker compose up --build
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+
+# The images as built, recording the commit as every run's app_version
+# ("-dirty" when the working tree has uncommitted changes).
+up:
+	GIT_SHA=$$(git rev-parse HEAD)$$(git diff --quiet HEAD || echo -dirty) docker compose up --build
 
 # Backend tests hit a real Postgres (persistence integration tests) -- run
 # against a dedicated agentnet_test database, created if absent, so the
@@ -21,6 +27,14 @@ lint:
 	# `tsc --noEmit` alone errors on any route using them without this.
 	cd frontend && npx next typegen
 	cd frontend && npx tsc --noEmit
+
+# Re-pins the backend's dependencies after a change to pyproject.toml
+# (docs/PLAN.md §14.7 D3): requirements.lock is what the Docker image
+# installs; requirements-dev.lock adds the dev tools, constrained to the same
+# versions, for CI and local development.
+lock:
+	cd backend && uv pip compile pyproject.toml --universal --python-version 3.12 -o requirements.lock
+	cd backend && uv pip compile pyproject.toml --extra dev --universal --python-version 3.12 -c requirements.lock -o requirements-dev.lock
 
 # Requires a backend already running at localhost:8000 (e.g. `make dev`, or
 # `cd backend && .venv/bin/uvicorn app.main:app`).

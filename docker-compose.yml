@@ -15,8 +15,14 @@ services:
       timeout: 3s
       retries: 5
 
+  # The images as built: no hot reload, no source mounts. For development,
+  # layer docker-compose.dev.yml on top (`make dev`).
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      args:
+        # Recorded on every persisted run; `make up` passes the commit.
+        GIT_SHA: ${GIT_SHA:-dev}
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
@@ -25,26 +31,23 @@ services:
       POSTGRES_DB: agentnet
     ports:
       - "8000:8000"
-    volumes:
-      - ./backend:/app
     depends_on:
       postgres:
         condition: service_healthy
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        # Experiment/stream traffic goes browser -> backend directly, so
+        # these must resolve from the host (not the "backend" Compose
+        # hostname). Inlined at build time, so they're build arguments.
+        NEXT_PUBLIC_BACKEND_URL: http://localhost:8000
+        NEXT_PUBLIC_BACKEND_WS_URL: ws://localhost:8000
     environment:
       BACKEND_INTERNAL_URL: http://backend:8000
-      # M0's experiment/stream traffic goes browser -> backend directly, so
-      # these must resolve from the host (not the "backend" Compose hostname).
-      NEXT_PUBLIC_BACKEND_URL: http://localhost:8000
-      NEXT_PUBLIC_BACKEND_WS_URL: ws://localhost:8000
     ports:
       - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
     depends_on:
       - backend
 

@@ -67,6 +67,8 @@ app.add_middleware(
     allow_origins=get_settings().cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Cross-origin, the browser UI can read only the headers listed here.
+    expose_headers=[routes_history.REPLAY_VERSION_HEADER],
 )
 
 app.include_router(routes_experiments.router)

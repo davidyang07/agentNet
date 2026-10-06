@@ -13,7 +13,7 @@ from typing import Literal
 from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 
 from app.engine.replay import ReplayUnsupportedError, reconstruct_final_state
 from app.engine.state import WorldState
@@ -45,6 +45,7 @@ from app.schemas.history import (
 )
 from app.schemas.metrics import MetricsResponse
 from app.schemas.remediation import RecommendationView, RemediationResponse
+from app.version import APP_VERSION
 
 router = APIRouter(prefix="/api/experiments", tags=["history"])
 
@@ -54,6 +55,9 @@ DEFAULT_EVENT_LIMIT = 500
 MAX_EVENT_LIMIT = 2000
 # experiment_events.seq is INT; -1 means "from the start".
 SEQ_MAX = 2**31 - 1
+
+# Set on a replay response when the run was recorded by a different build.
+REPLAY_VERSION_HEADER = "X-Replay-Version-Mismatch"
 
 _LIST_COLUMNS = (
     "experiment_id, seed, config, created_at, final_status, "
@@ -241,14 +245,17 @@ def _unfinished_status(
 
 
 @router.get("/{experiment_id}/replay-snapshot", response_model=SnapshotFrame)
-async def get_replay_snapshot(experiment_id: UUID, request: Request) -> SnapshotFrame:
+async def get_replay_snapshot(
+    experiment_id: UUID, request: Request, response: Response
+) -> SnapshotFrame:
     pool = _get_pool(request)
     row = await pool.fetchrow(
-        "SELECT config, final_status FROM experiments WHERE experiment_id = $1",
+        "SELECT config, final_status, app_version FROM experiments WHERE experiment_id = $1",
         experiment_id,
     )
     if row is None:
         raise HTTPException(status_code=404, detail="experiment not found")
+    _flag_version_mismatch(response, row["app_version"])
 
     config = ExperimentConfig(**json.loads(row["config"]))
     world, topology_drafts = build_world(config)
@@ -290,11 +297,23 @@ async def get_replay_snapshot(experiment_id: UUID, request: Request) -> Snapshot
     )
 
 
+def _flag_version_mismatch(response: Response, recorded_version: str) -> None:
+    """Replay re-simulates a run from its config with this server's code, so a
+    run recorded by a different build may not reproduce exactly -- engine
+    rules and dependency versions (networkx builds the topology) both move.
+    Say so on the response rather than answer as if it always does. Two
+    unversioned "dev" builds can't be told apart, so they aren't flagged."""
+    if recorded_version != APP_VERSION:
+        response.headers[REPLAY_VERSION_HEADER] = (
+            f"recorded={recorded_version}; server={APP_VERSION}"
+        )
+
+
 async def _load_replay_target(
-    pool: asyncpg.Pool, experiment_id: UUID
+    pool: asyncpg.Pool, experiment_id: UUID, response: Response
 ) -> tuple[ExperimentConfig, int]:
     row = await pool.fetchrow(
-        "SELECT config, final_sim_tick FROM experiments WHERE experiment_id = $1",
+        "SELECT config, final_sim_tick, app_version FROM experiments WHERE experiment_id = $1",
         experiment_id,
     )
     if row is None:
@@ -303,6 +322,7 @@ async def _load_replay_target(
         raise HTTPException(
             status_code=409, detail="experiment has not finished; no final tick recorded yet"
         )
+    _flag_version_mismatch(response, row["app_version"])
     return ExperimentConfig(**json.loads(row["config"])), row["final_sim_tick"]
 
 
@@ -320,8 +340,8 @@ def _replay_world(
     return world, build_security_graph(world, config), metrics.EventLogTally.of(events)
 
 
-async def _reconstruct_for_replay(pool: asyncpg.Pool, experiment_id: UUID):
-    config, target_tick = await _load_replay_target(pool, experiment_id)
+async def _reconstruct_for_replay(pool: asyncpg.Pool, experiment_id: UUID, response: Response):
+    config, target_tick = await _load_replay_target(pool, experiment_id, response)
     try:
         # Off the event loop: reconstruct_final_state drives a real-agent
         # replay through asyncio.run(), which raises inside this route's
@@ -336,9 +356,11 @@ async def _reconstruct_for_replay(pool: asyncpg.Pool, experiment_id: UUID):
 
 
 @router.get("/{experiment_id}/replay/graph", response_model=SecurityGraphView)
-async def get_replay_graph(experiment_id: UUID, request: Request) -> SecurityGraphView:
+async def get_replay_graph(
+    experiment_id: UUID, request: Request, response: Response
+) -> SecurityGraphView:
     pool = _get_pool(request)
-    _, _, graph, _ = await _reconstruct_for_replay(pool, experiment_id)
+    _, _, graph, _ = await _reconstruct_for_replay(pool, experiment_id, response)
     return SecurityGraphView(
         nodes=[
             GraphNodeView(
@@ -357,10 +379,10 @@ async def get_replay_graph(experiment_id: UUID, request: Request) -> SecurityGra
     "/{experiment_id}/replay/analysis/attack-paths", response_model=AttackPathsResponse
 )
 async def get_replay_attack_paths(
-    experiment_id: UUID, request: Request, source: str, target: str
+    experiment_id: UUID, request: Request, response: Response, source: str, target: str
 ) -> AttackPathsResponse:
     pool = _get_pool(request)
-    _, _, graph, _ = await _reconstruct_for_replay(pool, experiment_id)
+    _, _, graph, _ = await _reconstruct_for_replay(pool, experiment_id, response)
     return AttackPathsResponse(
         paths=await asyncio.to_thread(attack_paths, graph, source, target)
     )
@@ -369,9 +391,11 @@ async def get_replay_attack_paths(
 @router.get(
     "/{experiment_id}/replay/analysis/blast-radius", response_model=BlastRadiusResponse
 )
-async def get_replay_blast_radius(experiment_id: UUID, request: Request) -> BlastRadiusResponse:
+async def get_replay_blast_radius(
+    experiment_id: UUID, request: Request, response: Response
+) -> BlastRadiusResponse:
     pool = _get_pool(request)
-    _, _, graph, _ = await _reconstruct_for_replay(pool, experiment_id)
+    _, _, graph, _ = await _reconstruct_for_replay(pool, experiment_id, response)
     reachable = await asyncio.to_thread(blast_radius, graph)
     return BlastRadiusResponse(
         compromised=sorted(graph.compromised_ids()),
@@ -384,10 +408,10 @@ async def get_replay_blast_radius(experiment_id: UUID, request: Request) -> Blas
     "/{experiment_id}/replay/analysis/critical-nodes", response_model=CriticalNodesResponse
 )
 async def get_replay_critical_nodes(
-    experiment_id: UUID, request: Request, top_n: int = Query(5, ge=1)
+    experiment_id: UUID, request: Request, response: Response, top_n: int = Query(5, ge=1)
 ) -> CriticalNodesResponse:
     pool = _get_pool(request)
-    _, _, graph, _ = await _reconstruct_for_replay(pool, experiment_id)
+    _, _, graph, _ = await _reconstruct_for_replay(pool, experiment_id, response)
     ranked = await asyncio.to_thread(lambda: critical_nodes(graph, top_n=top_n))
     return CriticalNodesResponse(
         nodes=[CriticalNodeView(id=node_id, betweenness=score) for node_id, score in ranked]
@@ -398,10 +422,10 @@ async def get_replay_critical_nodes(
     "/{experiment_id}/replay/analysis/provenance", response_model=ProvenanceResponse
 )
 async def get_replay_provenance(
-    experiment_id: UUID, request: Request, node_id: str
+    experiment_id: UUID, request: Request, response: Response, node_id: str
 ) -> ProvenanceResponse:
     pool = _get_pool(request)
-    world, _, _, _ = await _reconstruct_for_replay(pool, experiment_id)
+    world, _, _, _ = await _reconstruct_for_replay(pool, experiment_id, response)
     if node_id not in world.nodes:
         raise HTTPException(status_code=404, detail="node not found in this experiment")
     compromised_by = {n.id: n.compromised_by for n in world.nodes.values()}
@@ -409,18 +433,22 @@ async def get_replay_provenance(
 
 
 @router.get("/{experiment_id}/replay/metrics", response_model=MetricsResponse)
-async def get_replay_metrics(experiment_id: UUID, request: Request) -> MetricsResponse:
+async def get_replay_metrics(
+    experiment_id: UUID, request: Request, response: Response
+) -> MetricsResponse:
     pool = _get_pool(request)
-    world, _, graph, tally = await _reconstruct_for_replay(pool, experiment_id)
+    world, _, graph, tally = await _reconstruct_for_replay(pool, experiment_id, response)
     return MetricsResponse(
         **await asyncio.to_thread(metrics.all_metrics, world, graph, tally)
     )
 
 
 @router.get("/{experiment_id}/replay/remediation", response_model=RemediationResponse)
-async def get_replay_remediation(experiment_id: UUID, request: Request) -> RemediationResponse:
+async def get_replay_remediation(
+    experiment_id: UUID, request: Request, response: Response
+) -> RemediationResponse:
     pool = _get_pool(request)
-    world, config, graph, _ = await _reconstruct_for_replay(pool, experiment_id)
+    world, config, graph, _ = await _reconstruct_for_replay(pool, experiment_id, response)
     fraction = metrics.compromise_fraction(world)
     integrity = metrics.security_plane_integrity(graph)
     recommendations = recommend(config, fraction, integrity)

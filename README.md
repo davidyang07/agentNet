@@ -98,13 +98,14 @@ history, comparison, and the insights sidebar work identically on past runs.
 ## Getting started
 
 ```bash
-make dev        # docker compose up --build: Postgres + backend :8000 + frontend :3000
+make dev        # Postgres + backend :8000 + frontend :3000, hot-reloading mounted source
+make up         # the production images as built, recording the commit on every run
 ```
 
 Or run the two halves directly:
 
 ```bash
-cd backend && python3 -m venv .venv && .venv/bin/pip install -e ".[dev]" && .venv/bin/uvicorn app.main:app --reload
+cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.lock && .venv/bin/pip install --no-deps -e . && .venv/bin/uvicorn app.main:app --reload
 cd frontend && npm install && npm run dev
 ```
 
@@ -183,6 +184,10 @@ cd frontend && npm test && npm run build
 ```
 
 Persistence-integration tests (migrations, `PostgresWriter`, history endpoints, replay
-equivalence) require a reachable Postgres and skip automatically otherwise.
+equivalence) require a reachable Postgres and skip automatically otherwise; CI sets
+`AGENTNET_REQUIRE_POSTGRES=1`, which fails the run instead. The suite always uses the
+`agentnet_test` database, never the dev one. Backend dependencies are pinned in
+`backend/requirements.lock` (runtime) and `requirements-dev.lock` (with dev tools); after changing
+`pyproject.toml`, run `make lock`.
 `backend/tests/test_real_agent_determinism.py` proves the same determinism property for hybrid
 runs under the mock provider, driven through the real async `ExperimentRunner`.

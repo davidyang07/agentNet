@@ -15,14 +15,22 @@ scoping is both simpler and actually correct here.
 """
 
 import asyncio
+import os
 
-import pytest
+# Before anything imports the app: its settings are read once and cached, so
+# a bare `pytest` would otherwise run every TestClient(app) against the dev
+# database (PLAN 14.3 B.9). Pinned, not defaulted -- a POSTGRES_DB left in
+# the shell must not redirect the suite either.
+TEST_DB = "agentnet_test"
+os.environ["POSTGRES_DB"] = TEST_DB
 
-from app.config import Settings
-from app.db import check_postgres_reachable, create_pool
-from app.persistence.migrate import run_migrations
+import pytest  # noqa: E402
 
-TEST_SETTINGS = Settings(postgres_db="agentnet_test")
+from app.config import Settings  # noqa: E402
+from app.db import check_postgres_reachable, create_pool  # noqa: E402
+from app.persistence.migrate import run_migrations  # noqa: E402
+
+TEST_SETTINGS = Settings(postgres_db=TEST_DB)
 
 
 def _pg_reachable() -> bool:
@@ -30,6 +38,19 @@ def _pg_reachable() -> bool:
 
 
 PG_REACHABLE = _pg_reachable()
+
+# CI sets this, so an unreachable Postgres fails the run there instead of
+# silently skipping every Postgres-backed test. Locally they still skip.
+REQUIRE_POSTGRES = os.environ.get("AGENTNET_REQUIRE_POSTGRES") == "1"
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    if REQUIRE_POSTGRES and not PG_REACHABLE:
+        pytest.exit(
+            f"AGENTNET_REQUIRE_POSTGRES=1 but Postgres ({TEST_DB}) is not reachable",
+            returncode=1,
+        )
+
 
 requires_postgres = pytest.mark.skipif(
     not PG_REACHABLE,

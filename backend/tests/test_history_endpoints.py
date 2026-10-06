@@ -18,6 +18,7 @@ from app.orchestrator.runner import ExperimentRunner
 from app.persistence.registry import writer_registry
 from app.persistence.writer import PostgresWriter
 from app.schemas.experiment import ExperimentConfig
+from app.version import APP_VERSION
 
 from .conftest import TEST_SETTINGS, requires_postgres
 
@@ -439,6 +440,63 @@ def test_replay_analysis_endpoints_return_200_for_a_persisted_run():
             assert resp.json()["chain"][0] == node_id
     finally:
         asyncio.run(_cleanup(runner.experiment_id))
+
+
+def test_replay_warns_when_the_run_was_recorded_by_another_build():
+    """Replay re-simulates a run with this server's code, so a run recorded
+    by a different build may not reproduce exactly. Replay used to answer as
+    if it always did (PLAN 14.3 B.8)."""
+
+    async def setup() -> ExperimentRunner:
+        pool = await create_pool(TEST_SETTINGS)
+        try:
+            return await _persist_completed_run(pool, seed=5, node_count=25)
+        finally:
+            await pool.close()
+
+    async def set_recorded_version(experiment_id, version: str) -> None:
+        pool = await create_pool(TEST_SETTINGS)
+        try:
+            await pool.execute(
+                "UPDATE experiments SET app_version = $2 WHERE experiment_id = $1",
+                experiment_id,
+                version,
+            )
+        finally:
+            await pool.close()
+
+    runner = asyncio.run(setup())
+    exp_id = runner.experiment_id
+    paths = [
+        "replay-snapshot",
+        "replay/graph",
+        "replay/analysis/blast-radius",
+        "replay/analysis/critical-nodes",
+        "replay/metrics",
+        "replay/remediation",
+    ]
+    try:
+        with TestClient(app) as client:
+            for path in paths:
+                resp = client.get(f"/api/experiments/{exp_id}/{path}")
+                assert resp.status_code == 200, path
+                assert "x-replay-version-mismatch" not in resp.headers, path
+
+            asyncio.run(set_recorded_version(exp_id, "0123abc"))
+            for path in paths:
+                resp = client.get(
+                    f"/api/experiments/{exp_id}/{path}",
+                    headers={"Origin": "http://localhost:3000"},
+                )
+                assert resp.status_code == 200, path
+                assert resp.headers["x-replay-version-mismatch"] == (
+                    f"recorded=0123abc; server={APP_VERSION}"
+                ), path
+                # Readable by the browser UI, which is on another origin.
+                exposed = resp.headers["access-control-expose-headers"].lower()
+                assert "x-replay-version-mismatch" in exposed, path
+    finally:
+        asyncio.run(_cleanup(exp_id))
 
 
 def test_replay_endpoints_404_for_unknown_experiment():
