@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 import { Badge, ConfigChip, RunStatusBadge } from "@/components/ui/Badge";
 import { Button, SegmentedControl } from "@/components/ui/Button";
@@ -32,6 +33,7 @@ export function RunContextBar() {
     changeSpeed,
   } = useExperiment();
 
+  const pathname = usePathname();
   const config = control.activeConfig;
   const progress = config ? Math.min(1, stream.tick / config.max_ticks) : 0;
 
@@ -115,14 +117,16 @@ export function RunContextBar() {
             <span className="hidden text-xs text-fg-subtle sm:inline">
               Configure a system and launch a run to begin.
             </span>
-            <div className="ml-auto">
-              <Link
-                href="/"
-                className="text-xs font-medium text-fg-muted transition-colors hover:text-fg"
-              >
-                Go to launch →
-              </Link>
-            </div>
+            {pathname !== "/" && (
+              <div className="ml-auto">
+                <Link
+                  href="/"
+                  className="text-xs font-medium text-fg-muted transition-colors hover:text-fg"
+                >
+                  Go to Set up →
+                </Link>
+              </div>
+            )}
           </>
         )}
       </div>

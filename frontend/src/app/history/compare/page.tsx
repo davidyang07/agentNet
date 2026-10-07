@@ -129,7 +129,7 @@ function CompareContent() {
         <WarningBanner>
           These two runs differ in more than their defense setting — seed, size or run length is
           not held constant. Any difference below is therefore not attributable to the defense
-          alone. Use <Link href="/defenses" className="underline">Defense comparison</Link> for a
+          alone. Use <Link href="/fix" className="underline">the defense check in Fix &amp; re-test</Link> for a
           single-variable test.
         </WarningBanner>
       )}

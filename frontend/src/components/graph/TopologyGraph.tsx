@@ -178,6 +178,9 @@ export function TopologyGraph({
       // its shape ring just because a neighbour's label won the grid cell.
       renderLabels: false,
       renderEdgeLabels: false,
+      // A container can be momentarily 0px tall mid-layout (a panel opening,
+      // a resize); Sigma would throw and take the whole console down with it.
+      allowInvalidContainer: true,
       // Sigma's own hover chip is a white pill drawn on its hover layer,
       // independent of `renderLabels`. The overlay already draws a hover
       // label in this design system's style, so silence Sigma's.
@@ -280,7 +283,10 @@ export function TopologyGraph({
   }, [layers, selectedId, highlightPath, focusIds]);
 
   return (
-    <div className="relative size-full">
+    // Pinned to the positioned parent rather than sized with height: 100%,
+    // which resolves to 0 when the parent's height comes from flex alone (the
+    // stacked narrow-screen layout) — and Sigma cannot draw into 0px.
+    <div className="absolute inset-0">
       <div ref={containerRef} className="absolute inset-0" />
       <canvas
         ref={overlayRef}

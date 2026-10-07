@@ -97,6 +97,24 @@ export function eventSeverity(
   return eventMeta(eventType).severity;
 }
 
+/**
+ * The label for one event. Where metadata changes what an event *means* — and
+ * so the severity it is shown with — the label says so, so a colour is never
+ * the only clue (an illegitimate quarantine is orange, not quarantine teal).
+ */
+export function eventLabel(
+  eventType: string,
+  metadata: Record<string, unknown> | null | undefined,
+): string {
+  if (eventType === "ATTESTATION_VERIFIED" && metadata?.["replayed"] === true)
+    return "Attestation replay accepted";
+  if (eventType === "AGENT_QUARANTINED" && metadata?.["legitimate"] === false)
+    return "False quarantine";
+  if (eventType === "THREAT_SIGNATURE_PUBLISHED" && metadata?.["legitimate"] === false)
+    return "False threat signature";
+  return eventMeta(eventType).label;
+}
+
 export const EVENT_CATEGORY_LABEL: Record<EventCategory, string> = {
   attack: "Attack",
   defense: "Defense",

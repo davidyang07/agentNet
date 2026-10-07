@@ -263,23 +263,6 @@ export function OutbreakChart({
   );
 }
 
-export function OutbreakLegend() {
-  return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-      {SERIES.map((s) => (
-        <span key={s.key} className="flex items-center gap-1.5 text-2xs text-fg-muted">
-          <span aria-hidden className={cn("size-2 shrink-0 rounded-xs", SEVERITY_BG[s.severity])} />
-          {s.label}
-        </span>
-      ))}
-      <span className="flex items-center gap-1.5 text-2xs text-fg-subtle">
-        <span aria-hidden className="size-2 shrink-0 rounded-xs border border-line-strong" />
-        Remaining area is healthy
-      </span>
-    </div>
-  );
-}
-
 /** Area from a top edge down to a flat baseline. */
 function area(points: ReadonlyArray<readonly [number, number]>, baseline: number): string {
   if (points.length === 0) return "";

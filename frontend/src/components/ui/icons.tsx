@@ -1,21 +1,16 @@
 import {
-  Activity,
   ArrowLeft,
-  ChartColumn,
-  Check,
+  ArrowRight,
   ChevronDown,
   ChevronRight,
   Crosshair,
-  Gauge,
   History,
   Info,
   Layers,
-  Network,
   Pause,
   Play,
   RotateCcw,
   Search,
-  Shield,
   ShieldCheck,
   ShieldHalf,
   TriangleAlert,
@@ -37,11 +32,6 @@ function role(Glyph: LucideIcon) {
   return RoleIcon;
 }
 
-export const IconOverview = role(Gauge);
-export const IconTopology = role(Network);
-export const IconActivity = role(Activity);
-export const IconMetrics = role(ChartColumn);
-export const IconShield = role(Shield);
 export const IconShieldCheck = role(ShieldCheck);
 export const IconWrench = role(Wrench);
 export const IconHistory = role(History);
@@ -52,12 +42,12 @@ export const IconClose = role(X);
 export const IconChevronRight = role(ChevronRight);
 export const IconChevronDown = role(ChevronDown);
 export const IconArrowLeft = role(ArrowLeft);
+export const IconArrowRight = role(ArrowRight);
 export const IconSearch = role(Search);
 export const IconTarget = role(Crosshair);
 export const IconLayers = role(Layers);
 export const IconAlert = role(TriangleAlert);
 export const IconInfo = role(Info);
-export const IconCheck = role(Check);
 
 /** The product mark: a half-filled shield. */
 export const BrandMark = role(ShieldHalf);

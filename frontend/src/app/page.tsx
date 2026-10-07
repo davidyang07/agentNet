@@ -1,40 +1,27 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
-import { EventFeed } from "@/components/activity/EventFeed";
-import { FindingsList } from "@/components/insights/FindingsList";
-import {
-  AttackSurfacePanel,
-  CriticalNodesPanel,
-  FleetBreakdown,
-  ObservedCountersPanel,
-} from "@/components/insights/Panels";
-import { OutbreakChart, OutbreakLegend } from "@/components/insights/OutbreakChart";
-import { PostureTiles } from "@/components/insights/SecurityMetrics";
-import { WorkflowTracker, type Stage } from "@/components/insights/WorkflowTracker";
 import { RunConfigurator } from "@/components/run/RunConfigurator";
 import { PageHeader } from "@/components/shell/AppShell";
-import { Badge } from "@/components/ui/Badge";
-import { Button, ButtonLink } from "@/components/ui/Button";
+import { stepLabel } from "@/components/shell/nav";
+import { Badge, RunStatusBadge } from "@/components/ui/Badge";
+import { ButtonLink } from "@/components/ui/Button";
+import { IconArrowRight } from "@/components/ui/icons";
 import { Panel, PanelHeader } from "@/components/ui/Panel";
-import { Disclaimer, ErrorState, Spinner, StatListSkeleton } from "@/components/ui/States";
+import { Spinner } from "@/components/ui/States";
 import { useExperiment } from "@/lib/experiment/ExperimentProvider";
 import { DEFAULT_CONFIG } from "@/lib/experiment/presets";
 import { shortId } from "@/lib/format";
-import { useSecurityInsights } from "@/lib/security/useSecurityInsights";
-import { selectMetrics } from "@/lib/stream/reducer";
-import { liveLogGapHint } from "@/lib/stream/sessionScope";
-import { useOutbreakSeries } from "@/lib/stream/useOutbreakSeries";
 import { scenarioMeta } from "@/lib/vocabulary";
 
-export default function OverviewPage() {
+/**
+ * Step 1: describe the system under test and the attacks, then launch. This
+ * screen has one job — the run itself opens in Watch.
+ */
+export default function SetupPage() {
   const { control, stream, canStart, start, hydrating } = useExperiment();
-  const insights = useSecurityInsights(control.experimentId);
-  const series = useOutbreakSeries(stream);
-  const streamMetrics = useMemo(() => selectMetrics(stream), [stream]);
-  const [configuring, setConfiguring] = useState(false);
+  const router = useRouter();
 
   if (hydrating) {
     return (
@@ -45,273 +32,66 @@ export default function OverviewPage() {
   }
 
   const config = control.activeConfig;
-  const hasRun = Boolean(control.experimentId && config);
-  const showConfigurator = !hasRun || configuring;
-
-  const stages = buildStages({
-    hasRun,
-    observedEvents: stream.recentEvents.length,
-    compromised: streamMetrics.compromised,
-    hasMetrics: insights.metrics !== null,
-    findings: insights.remediation?.recommendations.length ?? 0,
-  });
+  const runId = control.experimentId;
 
   return (
     <div className="flex flex-col">
-      {hasRun ? (
-        <PageHeader
-          eyebrow="Assessment overview"
-          title="Security posture"
-          description={
-            <>
-              Live posture for run{" "}
-              <span className="font-mono text-fg-muted">{shortId(control.experimentId!)}</span>.
-              Every number below is computed from this run&apos;s deterministic event log.
-            </>
-          }
-          actions={
-            <>
-              {config && (
-                <div className="hidden flex-wrap gap-1 md:flex">
-                  {(config.active_scenarios ?? []).map((scenario) => (
-                    <Badge key={scenario} severity="neutral">
-                      {scenarioMeta(scenario).label}
-                    </Badge>
-                  ))}
-                </div>
-              )}
-              <Button
-                onClick={() => setConfiguring((v) => !v)}
-                disabled={!canStart && !configuring}
-                title={
-                  canStart
-                    ? "Configure and launch a new assessment"
-                    : "Finish or stop the current run first"
-                }
-              >
-                {configuring ? "Hide configuration" : "New assessment"}
-              </Button>
-            </>
-          }
-        />
-      ) : (
-        <LaunchHero />
-      )}
+      <PageHeader
+        eyebrow={stepLabel("/")}
+        title="Set up an assessment"
+        description="Describe the system under test and the attacks to run against it, then launch. The run opens in Watch as soon as it starts."
+      />
 
       <div className="flex flex-col gap-4 p-4 lg:p-5">
-        <section>
-          <h2 className="eyebrow mb-2">Assessment workflow</h2>
-          <WorkflowTracker stages={stages} />
-        </section>
-
-        {showConfigurator && (
-          <RunConfigurator
-            disabled={!canStart}
-            initialConfig={config ?? DEFAULT_CONFIG}
-            onStart={(next) => {
-              setConfiguring(false);
-              start(next);
-            }}
-          />
-        )}
-
-        {hasRun && (
-          <>
-            {insights.error && (
-              <ErrorState title="Could not load derived security data" detail={insights.error} />
-            )}
-
-            {insights.metrics ? (
-              <PostureTiles metrics={insights.metrics} />
-            ) : (
-              <Panel>
-                <StatListSkeleton rows={2} />
-              </Panel>
-            )}
-
-            <div className="grid gap-4 xl:grid-cols-3">
-              <Panel className="xl:col-span-2" flush>
-                <PanelHeader
-                  bordered
-                  title="Outbreak progression"
-                  description="Agents held by the attacker, and agents the defense has contained, per simulated tick."
-                  actions={<OutbreakLegend />}
-                />
-                <div className="h-56 p-2">
-                  <OutbreakChart
-                    series={series}
-                    maxTicks={config?.max_ticks ?? 200}
-                    emptyDescription={
-                      liveLogGapHint(control.status, series.length > 0) ??
-                      "The outbreak curve builds as the simulation ticks."
-                    }
-                  />
-                </div>
-              </Panel>
-
-              <Panel>
-                <PanelHeader title="Fleet" description="Current split across security states." />
-                <FleetBreakdown metrics={streamMetrics} />
-                <div className="mt-4 border-t border-line pt-3">
-                  <ObservedCountersPanel metrics={streamMetrics} />
-                </div>
-              </Panel>
-            </div>
-
-            <div className="grid gap-4 xl:grid-cols-3">
-              <Panel>
-                <PanelHeader
-                  title="Attack surface"
-                  description="Typed non-agent nodes and how many have fallen."
-                  actions={
-                    <Link
-                      href="/topology"
-                      className="text-xs font-medium text-fg-muted transition-colors hover:text-fg"
-                    >
-                      Open topology →
-                    </Link>
-                  }
-                />
-                <AttackSurfacePanel graph={insights.graph} />
-              </Panel>
-
-              <Panel>
-                <PanelHeader
-                  title="Choke points"
-                  description="Highest betweenness centrality — containing these disconnects the most."
-                />
-                <CriticalNodesPanel nodes={insights.criticalNodes} graph={insights.graph} />
-              </Panel>
-
-              <Panel flush>
-                <PanelHeader
-                  bordered
-                  title="Recent activity"
-                  actions={
-                    <Link
-                      href="/activity"
-                      className="text-xs font-medium text-fg-muted transition-colors hover:text-fg"
-                    >
-                      Full log →
-                    </Link>
-                  }
-                />
-                {/* The feed fills a fixed-height box and scrolls inside it. */}
-                <div className="flex h-64 flex-col">
-                  <EventFeed
-                    className="flex-1"
-                    events={stream.recentEvents.slice(-40)}
-                    emptyTitle={
-                      liveLogGapHint(control.status, stream.recentEvents.length > 0)
-                        ? "No events in this session"
-                        : "No events yet"
-                    }
-                    emptyHint={liveLogGapHint(control.status, stream.recentEvents.length > 0)}
-                  />
-                </div>
-              </Panel>
-            </div>
-
-            <Panel>
-              <PanelHeader
-                title="Remediation findings"
-                description="Deterministic, rule-based recommendations derived from this run's graph and metrics."
-                actions={
-                  <ButtonLink href="/remediation" size="sm">
-                    Validate fixes
+        {runId && config && (
+          <Panel>
+            <PanelHeader
+              title="Current run"
+              description={
+                canStart
+                  ? "Launching a new assessment replaces it in steps 2–4; it stays under Runs."
+                  : "Launch is available again once this run finishes."
+              }
+              actions={
+                <>
+                  <ButtonLink href="/watch" size="sm">
+                    Watch
+                    <IconArrowRight className="size-3.5" />
                   </ButtonLink>
-                }
-              />
-              {insights.remediation ? (
-                <FindingsList
-                  recommendations={insights.remediation.recommendations}
-                  baseConfig={config ?? null}
-                />
-              ) : (
-                <StatListSkeleton rows={2} />
-              )}
-            </Panel>
-
-            <Disclaimer>
-              Simulation results only — reproducible from{" "}
-              <span className="font-mono">(seed, config)</span>, but not real-world security
-              evidence about any deployed system.
-            </Disclaimer>
-          </>
+                  <ButtonLink href="/results" size="sm">
+                    Results
+                    <IconArrowRight className="size-3.5" />
+                  </ButtonLink>
+                </>
+              }
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <RunStatusBadge status={control.status} />
+              <span className="font-mono text-xs text-fg" title={runId}>
+                {shortId(runId)}
+              </span>
+              <span className="font-mono text-2xs tabular text-fg-subtle">
+                t{stream.tick}/{config.max_ticks}
+              </span>
+              {(config.active_scenarios ?? []).map((scenario) => (
+                <Badge key={scenario}>{scenarioMeta(scenario).label}</Badge>
+              ))}
+            </div>
+          </Panel>
         )}
+
+        <RunConfigurator
+          disabled={!canStart}
+          initialConfig={config ?? DEFAULT_CONFIG}
+          submitLabel={runId ? "Launch new assessment" : "Launch assessment"}
+          onStart={(next) => {
+            // Launching moves the operator straight on to step 2, which shows
+            // "Starting run…" until the backend has created it.
+            start(next);
+            router.push("/watch");
+          }}
+        />
       </div>
     </div>
   );
-}
-
-function LaunchHero() {
-  return (
-    <PageHeader
-      eyebrow="New assessment"
-      title="Configure an assessment"
-      description="Model an agent system as a typed security graph — agents, tools, credentials, resources and the sentinels watching them — then run adversarial scenarios against it and measure how far compromise spreads, what the defense costs, and whether a proposed fix changes the outcome."
-    />
-  );
-}
-
-function buildStages({
-  hasRun,
-  observedEvents,
-  compromised,
-  hasMetrics,
-  findings,
-}: {
-  hasRun: boolean;
-  observedEvents: number;
-  compromised: number;
-  hasMetrics: boolean;
-  findings: number;
-}): Stage[] {
-  const stage = (done: boolean, active: boolean) =>
-    done ? ("done" as const) : active ? ("active" as const) : ("pending" as const);
-
-  return [
-    {
-      id: "map",
-      label: "Map",
-      description: "Model the agent system as a typed security graph.",
-      href: "/topology",
-      state: stage(hasRun, !hasRun),
-    },
-    {
-      id: "attack",
-      label: "Attack",
-      description: "Run adversarial scenarios against it.",
-      href: "/",
-      state: stage(hasRun && observedEvents > 0, hasRun && observedEvents === 0),
-    },
-    {
-      id: "observe",
-      label: "Observe",
-      description: "Watch compromise and containment propagate.",
-      href: "/activity",
-      state: stage(compromised > 0 || observedEvents > 20, observedEvents > 0),
-    },
-    {
-      id: "measure",
-      label: "Measure",
-      description: "Score security against retained utility.",
-      href: "/metrics",
-      state: stage(hasMetrics, hasRun),
-    },
-    {
-      id: "remediate",
-      label: "Remediate",
-      description: "Get a config change that would have changed the outcome.",
-      href: "/remediation",
-      state: stage(findings > 0, hasMetrics),
-    },
-    {
-      id: "retest",
-      label: "Re-test",
-      description: "Re-run with the fix applied and compare the numbers.",
-      href: "/remediation",
-      state: stage(false, findings > 0),
-    },
-  ];
 }

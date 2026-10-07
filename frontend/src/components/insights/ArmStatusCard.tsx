@@ -18,14 +18,17 @@ export function ArmStatusCard({
   hint,
   arm,
   children,
+  inset,
 }: {
   label: string;
   hint?: ReactNode;
   arm: ArmState;
   children?: ReactNode;
+  /** Sits inside another panel: one surface step down, no edge highlight. */
+  inset?: boolean;
 }) {
   return (
-    <Panel>
+    <Panel inset={inset}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-sm font-medium text-fg">{label}</h3>

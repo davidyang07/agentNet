@@ -334,6 +334,11 @@ Only two edge treatments have colour:
     `surface` panel (8px from the frame, `rounded.lg`, hairline border) that scrolls on its own.
     The run-context bar is the first row of the inset.
   - **Narrow screens:** the sidebar becomes a horizontal strip.
+- **Navigation is the workflow.** The sidebar lists the four steps (Set up, Watch, Results, Fix &
+  re-test) as numbered markers joined by a hairline, the current step's marker in `accent`; Runs
+  sits apart under Archive. Every step screen opens with a "Step N of 4" eyebrow and points to the
+  next step. Each piece of information lives on exactly one screen — never repeat a panel on a
+  second screen to save the operator a click.
 - **Density.** Match the references in `design-refs/`: list rows about 36px, single-line event
   rows, and labels left with values right.
 

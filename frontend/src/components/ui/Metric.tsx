@@ -100,35 +100,3 @@ export function StatRow({
 export function StatList({ children, className }: { children: ReactNode; className?: string }) {
   return <dl className={cn("divide-y divide-line", className)}>{children}</dl>;
 }
-
-/**
- * Horizontal stacked bar showing how a population splits across security
- * states. Reads faster than four separate counts when the question is
- * "how much of the fleet is still healthy".
- */
-export function StackedBar({
-  segments,
-  className,
-}: {
-  segments: ReadonlyArray<{ key: string; value: number; severity: Severity; label: string }>;
-  className?: string;
-}) {
-  const total = segments.reduce((sum, s) => sum + s.value, 0);
-  if (total === 0) {
-    return <div className={cn("h-2 w-full rounded-full bg-line", className)} />;
-  }
-  return (
-    <div className={cn("flex h-2 w-full gap-0.5 overflow-hidden rounded-full bg-line", className)}>
-      {segments
-        .filter((s) => s.value > 0)
-        .map((s) => (
-          <div
-            key={s.key}
-            className={cn("h-full transition-[width] duration-300", SEVERITY_BG[s.severity])}
-            style={{ width: `${(s.value / total) * 100}%` }}
-            title={`${s.label}: ${s.value}`}
-          />
-        ))}
-    </div>
-  );
-}

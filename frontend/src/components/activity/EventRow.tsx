@@ -2,7 +2,7 @@ import { SeverityDot } from "@/components/ui/Badge";
 import { cn } from "@/lib/cn";
 import { formatEventMetadata } from "@/lib/format";
 import type { Event } from "@/lib/stream/reducer";
-import { eventMeta, eventSeverity } from "@/lib/vocabulary";
+import { eventLabel, eventSeverity } from "@/lib/vocabulary";
 
 /**
  * One line of the event log. Reads as a sentence — *when*, *what*, *between
@@ -18,7 +18,7 @@ export function EventRow({
   compact?: boolean;
   onSelectAgent?: (agentId: string) => void;
 }) {
-  const meta = eventMeta(event.event_type);
+  const label = eventLabel(event.event_type, event.metadata ?? null);
   const severity = eventSeverity(event.event_type, event.metadata ?? null);
   const metadata = formatEventMetadata(event.metadata as Record<string, unknown> | null);
   const source = event.source_agent_id ?? event.agent_id ?? null;
@@ -31,7 +31,7 @@ export function EventRow({
       {/* The dot carries the severity; the label stays ink. */}
       <span className="flex shrink-0 items-center gap-2">
         <SeverityDot severity={severity} />
-        <span className="text-xs font-medium text-fg">{meta.label}</span>
+        <span className="text-xs font-medium text-fg">{label}</span>
       </span>
 
       {(source || target) && (

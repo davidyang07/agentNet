@@ -35,7 +35,11 @@ export function RunConfigurator({
   submitLabel?: string;
 }) {
   const [draft, setDraft] = useState<ExperimentConfig>(initialConfig);
-  const [presetId, setPresetId] = useState<string | null>("baseline");
+  // Highlight the preset the form was opened with, if it is one — a form
+  // pre-filled from the current run must not claim to be "Baseline".
+  const [presetId, setPresetId] = useState<string | null>(
+    () => PRESETS.find((preset) => matchesPreset(preset.config, initialConfig))?.id ?? null,
+  );
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const set = <K extends Field>(key: K, value: ExperimentConfig[K]) => {
@@ -405,5 +409,12 @@ export function RunConfigurator({
         </div>
       </form>
     </Panel>
+  );
+}
+
+/** True when every field a preset sets has that value in `config`. */
+function matchesPreset(preset: ExperimentConfig, config: ExperimentConfig): boolean {
+  return (Object.keys(preset) as Array<keyof ExperimentConfig>).every(
+    (key) => JSON.stringify(preset[key]) === JSON.stringify(config[key]),
   );
 }

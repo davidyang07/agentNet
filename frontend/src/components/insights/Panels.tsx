@@ -1,7 +1,7 @@
 "use client";
 
 import { Badge, SeverityDot } from "@/components/ui/Badge";
-import { Meter, StackedBar, StatList, StatRow } from "@/components/ui/Metric";
+import { Meter, StatList, StatRow } from "@/components/ui/Metric";
 import { ShapeGlyph } from "@/components/graph/GraphLegend";
 import { EmptyState } from "@/components/ui/States";
 import type { CriticalNodeView, SecurityGraphView } from "@/lib/api/client";
@@ -18,36 +18,6 @@ import type { selectMetrics } from "@/lib/stream/reducer";
 import { nodeTypeMeta } from "@/lib/vocabulary";
 
 type StreamMetrics = ReturnType<typeof selectMetrics>;
-
-/** How the agent fleet is currently split across security states. */
-export function FleetBreakdown({ metrics }: { metrics: StreamMetrics }) {
-  const segments = [
-    { key: "compromised", value: metrics.compromised, severity: "critical" as const, label: "Compromised" },
-    { key: "quarantined", value: metrics.quarantined, severity: "contained" as const, label: "Quarantined" },
-    { key: "healthy", value: metrics.healthy, severity: "neutral" as const, label: "Healthy" },
-  ];
-
-  return (
-    <div>
-      <div className="mb-2 flex items-baseline justify-between gap-2">
-        <span className="text-2xl font-semibold tabular text-fg">
-          {metrics.total}
-        </span>
-        <span className="text-xs text-fg-subtle">agents under test</span>
-      </div>
-      <StackedBar segments={segments} />
-      <ul className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1">
-        {segments.map((segment) => (
-          <li key={segment.key} className="flex items-baseline gap-1.5 text-xs">
-            <SeverityDot severity={segment.severity} />
-            <span className="font-mono tabular text-fg">{segment.value}</span>
-            <span className="text-fg-subtle">{segment.label}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
 
 /** Typed non-agent nodes: what else the attacker can reach besides agents. */
 export function AttackSurfacePanel({

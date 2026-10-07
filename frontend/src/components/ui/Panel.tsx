@@ -11,16 +11,20 @@ export function Panel({
   children,
   className,
   flush,
+  inset,
 }: {
   children: ReactNode;
   className?: string;
   /** Drop the panel's own padding, for tables and graphs that bleed to the edge. */
   flush?: boolean;
+  /** Nested inside another panel: one surface step down, no edge highlight. */
+  inset?: boolean;
 }) {
   return (
     <section
       className={cn(
-        "flex min-w-0 flex-col rounded-lg border border-line bg-raised shadow-panel",
+        "flex min-w-0 flex-col rounded-lg border border-line",
+        inset ? "bg-surface" : "bg-raised shadow-panel",
         !flush && "p-4",
         className,
       )}

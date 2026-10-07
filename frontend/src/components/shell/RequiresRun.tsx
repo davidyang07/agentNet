@@ -30,6 +30,15 @@ export function RequiresRun({
     );
   }
 
+  // A launch from step 1 lands here before the backend has created the run.
+  if (control.pending === "start") {
+    return (
+      <div className="flex h-full items-center justify-center gap-2 text-xs text-fg-muted">
+        <Spinner /> Starting run…
+      </div>
+    );
+  }
+
   if (!control.experimentId) {
     return (
       <EmptyState
@@ -38,7 +47,7 @@ export function RequiresRun({
         description={description}
         action={
           <ButtonLink href="/" variant="primary" size="sm">
-            Configure an assessment
+            Go to step 1: Set up
           </ButtonLink>
         }
       />

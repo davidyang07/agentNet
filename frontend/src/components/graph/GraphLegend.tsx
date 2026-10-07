@@ -51,10 +51,13 @@ export function ShapeGlyph({
  */
 export function GraphLegend({
   nodeTypes,
+  counts,
   className,
 }: {
   /** Node types actually present in this run — a legend for absent kinds is noise. */
   nodeTypes: readonly string[];
+  /** How many nodes of each type the graph holds, shown beside the type. */
+  counts?: Readonly<Record<string, number>>;
   className?: string;
 }) {
   return (
@@ -92,6 +95,9 @@ export function GraphLegend({
           >
             <ShapeGlyph shape={nodeShape(type)} className="shrink-0 text-fg-subtle" />
             {nodeTypeMeta(type).label}
+            {counts?.[type] !== undefined && (
+              <span className="font-mono tabular text-fg-subtle">{counts[type]}</span>
+            )}
           </li>
         ))}
       </ul>

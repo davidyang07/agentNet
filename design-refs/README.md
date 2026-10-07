@@ -16,6 +16,17 @@ frontend hardcodes instead of taking from a shared token.
 | `activity.png` | axiom.co/docs/query-data/stream ("Event stream") | Log/event stream: time column, key-value rows, filter bar |
 | `remediation.png`, `remediation-390.png` | github.com/expressjs/express/pull/7459/files | PR "Files changed": file tree, hunks, line-level diff |
 
+Which reference each screen follows:
+
+| Screen | Reference |
+|---|---|
+| Shell (sidebar, inset, run bar) | `shell.png` |
+| 1 · Set up (`/`) | `shell.png` — one panel, form density |
+| 2 · Watch (`/watch`) | `topology.png` for the graph, `activity.png` for the live events rail |
+| 3 · Results (`/results`) | `list.png` — row density for the metric list |
+| 4 · Fix & re-test (`/fix`) | `remediation.png` — before → after |
+| Runs (`/history`) | `list.png` |
+
 To re-capture (from the repo root; see `scripts/screenshot.mjs` for setup):
 
 ```sh

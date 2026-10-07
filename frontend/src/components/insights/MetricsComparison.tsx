@@ -52,11 +52,15 @@ export function MetricsDeltaTable({
   after,
   beforeLabel,
   afterLabel,
+  withDefinitions = true,
 }: {
   before: MetricsResponse | null;
   after: MetricsResponse | null;
   beforeLabel: string;
   afterLabel: string;
+  /** Show each metric's definition under its name. Off where the definitions
+   * are a step away (Results) and the table is read for the deltas. */
+  withDefinitions?: boolean;
 }) {
   return (
     <TableWrap>
@@ -79,9 +83,11 @@ export function MetricsDeltaTable({
             <Tr key={descriptor.key}>
               <Td className="text-fg">
                 <span className="block text-xs text-fg">{descriptor.label}</span>
-                <span className="block max-w-lg text-2xs text-fg-subtle">
-                  {descriptor.definition}
-                </span>
+                {withDefinitions && (
+                  <span className="block max-w-lg text-2xs text-fg-subtle">
+                    {descriptor.definition}
+                  </span>
+                )}
               </Td>
               <Td className="text-right font-mono text-fg-muted">
                 {before ? formatMetric(descriptor, beforeValue) : "—"}

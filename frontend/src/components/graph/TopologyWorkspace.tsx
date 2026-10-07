@@ -1,13 +1,12 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 import { AttackPathFinder } from "@/components/graph/AttackPathFinder";
 import { GraphLegend, LayerToggles } from "@/components/graph/GraphLegend";
 import { NodeInspector } from "@/components/graph/NodeInspector";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { Button, SegmentedControl } from "@/components/ui/Button";
 import { IconLayers, IconTarget } from "@/components/ui/icons";
 import { Meter } from "@/components/ui/Metric";
 import { EmptyState, Spinner } from "@/components/ui/States";
@@ -17,7 +16,7 @@ import { buildTopologyModel, edgeLayer } from "@/lib/graph/model";
 import { formatPercent } from "@/lib/format";
 import type { InsightsMode } from "@/lib/security/useSecurityInsights";
 import type { GraphState } from "@/lib/stream/reducer";
-import { nodeTypeMeta, type EdgeLayer } from "@/lib/vocabulary";
+import type { EdgeLayer } from "@/lib/vocabulary";
 
 // Sigma touches WebGL2RenderingContext at module load — it can only ever run
 // in the browser, so it must be excluded from server-side rendering.
@@ -39,11 +38,22 @@ const ALL_LAYERS: EdgeLayer[] = ["mesh", "access", "oversight"];
 // buries the communication topology underneath it.
 const INITIAL_LAYERS: EdgeLayer[] = ["mesh", "access"];
 
+type RailTab = "live" | "investigate";
+
+const RAIL_TABS: ReadonlyArray<{ value: RailTab; label: string }> = [
+  { value: "live", label: "Live events" },
+  { value: "investigate", label: "Investigate" },
+];
+
 /**
  * The investigation surface, shared by the live view and replay: the typed
  * security graph, an inspector for whatever is selected, and the two analyses
  * that are about *reachability* rather than counts — attack paths and blast
  * radius.
+ *
+ * The live view also passes `belowGraph` (the outbreak curve) and `liveRail`
+ * (the event stream), which turns the side panel into two tabs. Selecting a
+ * node always opens its inspector there.
  */
 export function TopologyWorkspace({
   experimentId,
@@ -52,6 +62,8 @@ export function TopologyWorkspace({
   blastRadius,
   mode = "live",
   loading,
+  belowGraph,
+  liveRail,
 }: {
   experimentId: string;
   stream: GraphState;
@@ -59,8 +71,15 @@ export function TopologyWorkspace({
   blastRadius: BlastRadiusResponse | null;
   mode?: InsightsMode;
   loading?: boolean;
+  belowGraph?: ReactNode;
+  /** Rendered with a callback that selects a node, so a row in the live
+   * rail can open that node's inspector. */
+  liveRail?: (selectNode: (nodeId: string) => void) => ReactNode;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [railTab, setRailTab] = useState<RailTab>("live");
+  const hasRail = liveRail !== undefined;
+  const activeTab: RailTab = selectedId ? "investigate" : railTab;
   const [layers, setLayers] = useState<ReadonlySet<EdgeLayer>>(new Set(INITIAL_LAYERS));
   const [path, setPath] = useState<readonly string[] | null>(null);
   const [pathSource, setPathSource] = useState("");
@@ -79,6 +98,12 @@ export function TopologyWorkspace({
   }, [model.nodes]);
 
   const nodeIds = useMemo(() => model.nodes.map((n) => n.id), [model.nodes]);
+
+  const typeCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const node of model.nodes) counts[node.nodeType] = (counts[node.nodeType] ?? 0) + 1;
+    return counts;
+  }, [model.nodes]);
 
   const focusIds = useMemo(() => {
     if (!focusBlastRadius || !blastRadius) return null;
@@ -103,7 +128,7 @@ export function TopologyWorkspace({
   // The /analysis/blast-radius `fraction` divides reachable nodes of every
   // type by the *agent* count, so it can exceed 1.0 once tools and credentials
   // are in play. Reporting reach as a share of the whole graph is the honest
-  // reading here; the agent-scoped figure is on the Metrics screen.
+  // reading here; the agent-scoped figure is on the Results screen.
   const reachableShare =
     blastRadius && model.nodes.length > 0
       ? Math.min(1, blastRadius.reachable.length / model.nodes.length)
@@ -132,18 +157,13 @@ export function TopologyWorkspace({
           Blast radius
         </Button>
 
-        <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          {nodeTypes.map((type) => (
-            <Badge key={type} severity="neutral" title={nodeTypeMeta(type).hint}>
-              {model.nodes.filter((n) => n.nodeType === type).length} {nodeTypeMeta(type).plural}
-            </Badge>
-          ))}
-        </div>
       </div>
 
-      <div className="relative flex min-h-0 flex-1">
+      <div className={cn("relative flex min-h-0 flex-1", hasRail && "flex-col xl:flex-row")}>
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="relative min-h-0 flex-1">
+          {/* Stacked under a narrow screen's live rail, the graph keeps a
+              usable height of its own instead of collapsing to nothing. */}
+          <div className={cn("relative flex-1", hasRail ? "min-h-80" : "min-h-0")}>
           {loading && model.nodes.length === 0 ? (
             <div className="flex size-full items-center justify-center gap-2 text-xs text-fg-muted">
               <Spinner /> Building security graph…
@@ -183,20 +203,42 @@ export function TopologyWorkspace({
           )}
           </div>
 
-          <GraphLegend nodeTypes={nodeTypes} />
+          <GraphLegend nodeTypes={nodeTypes} counts={typeCounts} />
+          {belowGraph}
         </div>
 
         {/* Below xl the inspector slides over the graph instead of splitting
-            it — a 320px panel beside a 400px graph helps nobody. */}
+            it — a 320px panel beside a 400px graph helps nobody. With a live
+            rail, the rail stacks under the graph instead. */}
         <aside
           className={cn(
-            "w-80 min-h-0 shrink-0 flex-col overflow-hidden border-l border-line bg-surface 2xl:w-96",
-            selectedId
-              ? "absolute inset-y-0 right-0 z-20 flex shadow-pop xl:static xl:z-auto xl:shadow-none"
-              : "hidden xl:flex",
+            "min-h-0 shrink-0 flex-col overflow-hidden border-line bg-surface",
+            hasRail
+              ? "flex h-112 w-full border-t xl:h-auto xl:w-80 xl:border-l xl:border-t-0 2xl:w-96"
+              : cn(
+                  "w-80 border-l 2xl:w-96",
+                  selectedId
+                    ? "absolute inset-y-0 right-0 z-20 flex shadow-pop xl:static xl:z-auto xl:shadow-none"
+                    : "hidden xl:flex",
+                ),
           )}
         >
-          {selectedId ? (
+          {hasRail && (
+            <div className="shrink-0 border-b border-line px-3 py-2">
+              <SegmentedControl
+                ariaLabel="Side panel"
+                value={activeTab}
+                options={RAIL_TABS}
+                onChange={(tab) => {
+                  if (tab === "live") setSelectedId(null);
+                  setRailTab(tab);
+                }}
+              />
+            </div>
+          )}
+          {liveRail && activeTab === "live" ? (
+            liveRail(setSelectedId)
+          ) : selectedId ? (
             <NodeInspector
               nodeId={selectedId}
               model={model}

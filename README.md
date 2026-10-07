@@ -13,32 +13,31 @@ picture: the environment where such defenses can be attacked, measured, and comp
 
 ## The console
 
-One operator console organised around the assessment workflow — **Map → Attack → Observe →
-Measure → Remediate → Re-test** — with a persistent run-context bar that keeps the live WebSocket
-connected as you move between screens.
+The console is the assessment workflow itself: four numbered steps in the sidebar, one job per
+screen, each ending with the way to the next. Every piece of information lives on exactly one
+screen. A persistent run-context bar keeps the live WebSocket connected as you move between them.
 
-| Screen | What it answers |
-|---|---|
-| **Overview** (`/`) | Configure and launch an assessment; then, how bad is it? Posture KPIs, outbreak curve, fleet split, attack surface, choke points, findings. |
-| **Topology** (`/topology`) | What can the attacker reach? The typed graph, edge-layer toggles, blast-radius focus, attack-path tracing, and a node inspector with a causal trace back to patient zero. |
-| **Activity** (`/activity`) | What just happened? Every event, filterable by attack / defense / security-plane / model, with critical events pulled out. |
-| **Metrics** (`/metrics`) | What did it cost? Every metric with the definition the backend computes it from, plus the run's provenance. |
-| **Defenses** (`/defenses`) | Did the defense help? A single-variable A/B (identical config, `defense_enabled` flipped) scored as an explicit delta. |
-| **Remediation** (`/remediation`) | What should change, and did it work? Findings as before → after config diffs, each re-testable in place. |
-| **Runs** (`/history`) | Everything ever run: a filterable table, deterministic replay, and comparison of any two persisted runs. |
+| Step | Screen | What it answers |
+|---|---|---|
+| 1 | **Set up** (`/`) | What are we testing? Pick a preset or describe the system and the attacks, then launch — the run opens in Watch. |
+| 2 | **Watch** (`/watch`) | What is happening? The typed security graph coloured by compromise, the outbreak curve under it, and live events beside it. Select a node to trace it back to patient zero, or trace an attack path between two nodes. |
+| 3 | **Results** (`/results`) | How bad was it, and what did the defense cost? Four headline numbers, every metric with its definition, the attack surface and the choke points. |
+| 4 | **Fix & re-test** (`/fix`) | What should change, and does it work? Findings as config changes, each re-tested before → after from the same seed — plus a defense on vs off check. |
+| — | **Runs** (`/history`) | Everything ever run: a filterable table, deterministic replay, and comparison of any two persisted runs. |
 
-![Overview — posture KPIs, outbreak progression, workflow tracker](docs/screenshots/overview.jpg)
+![Watch — the security graph, outbreak curve and live events](docs/screenshots/watch.jpg)
 
-*Overview: the workflow tracker, four posture KPIs, and the live outbreak curve.*
-
-![Topology — typed security graph with a node inspector](docs/screenshots/topology.jpg)
-
-*Topology: colour is security state, shape and size are node type. Selecting a node traces its
+*Watch: colour is security state, shape and size are node type. Selecting a node traces its
 compromise chain back to patient zero and lists what it can reach.*
 
-![Remediation — a finding and its validated before/after](docs/screenshots/remediation.jpg)
+![Results — headline numbers and every metric with its definition](docs/screenshots/results.jpg)
 
-*Remediation: each finding is a before → after config diff, and **Validate fix** runs both to
+*Results: the four headline numbers, then every metric with the definition the backend computes
+it from.*
+
+![Fix & re-test — a finding and its validated before/after](docs/screenshots/fix.jpg)
+
+*Fix & re-test: each finding is a before → after config change, and **Validate fix** runs both to
 completion and reports the per-metric delta — including when a fix makes something else worse.*
 
 Colour is reserved for security state and finding severity, never decoration; node **type** is

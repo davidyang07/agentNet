@@ -5,18 +5,21 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { RunContextBar } from "@/components/shell/RunContextBar";
-import { isActivePath, NAV } from "@/components/shell/nav";
-import { BrandMark } from "@/components/ui/icons";
+import { ARCHIVE, isActivePath, WORKFLOW, type WorkflowStep } from "@/components/shell/nav";
+import { BrandMark, IconHistory } from "@/components/ui/icons";
 import { cn } from "@/lib/cn";
+import { useExperiment } from "@/lib/experiment/ExperimentProvider";
 
 /**
- * Workspace chrome: a persistent rail on the left, a run-context bar across
- * the top, and the screen itself scrolling underneath. The live WebSocket
- * lives above this in ExperimentProvider, so moving between screens never
- * interrupts a running assessment.
+ * Workspace chrome: the workflow as a numbered rail on the left, a
+ * run-context bar across the top, and the screen itself scrolling underneath.
+ * The live WebSocket lives above this in ExperimentProvider, so moving between
+ * steps never interrupts a running assessment.
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const { control } = useExperiment();
+  const hasRun = Boolean(control.experimentId);
 
   return (
     <div className="flex h-dvh min-h-0 w-full overflow-hidden bg-canvas">
@@ -32,49 +35,43 @@ export function AppShell({ children }: { children: ReactNode }) {
         </Link>
 
         <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 py-4">
-          {NAV.map((group) => (
-            <div key={group.label}>
-              <p className="eyebrow px-2 pb-1">{group.label}</p>
-              <ul className="flex flex-col gap-px">
-                {group.items.map((item) => {
-                  const active = isActivePath(pathname, item.href);
-                  const Icon = item.icon;
-                  return (
-                    <li key={item.href}>
-                      <Link
-                        href={item.href}
-                        aria-current={active ? "page" : undefined}
-                        className={cn(
-                          "group flex h-8 items-center gap-2.5 rounded-sm px-2 transition-colors duration-100",
-                          active
-                            ? "bg-overlay text-fg"
-                            : "text-fg-muted hover:bg-raised hover:text-fg",
-                        )}
-                      >
-                        <Icon
-                          className={cn(
-                            "size-4 shrink-0",
-                            active ? "text-fg" : "text-fg-subtle group-hover:text-fg-muted",
-                          )}
-                        />
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                          {item.label}
-                        </span>
-                        <span
-                          className={cn(
-                            "shrink-0 text-2xs",
-                            active ? "text-fg-muted" : "text-fg-subtle",
-                          )}
-                        >
-                          {item.stage}
-                        </span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
+          <div>
+            <p className="eyebrow px-2 pb-1">Assessment</p>
+            <ol className="flex flex-col gap-px">
+              {WORKFLOW.map((step, index) => (
+                <li key={step.href} className="relative">
+                  {/* The hairline joining the markers is what reads as a
+                      sequence rather than a menu. */}
+                  {index < WORKFLOW.length - 1 && (
+                    <span aria-hidden className="absolute left-4.5 top-6.5 h-3.25 w-px bg-line-strong" />
+                  )}
+                  <StepLink
+                    step={step}
+                    active={isActivePath(pathname, step.href)}
+                    locked={step.needsRun && !hasRun}
+                  />
+                </li>
+              ))}
+            </ol>
+          </div>
+
+          <div>
+            <p className="eyebrow px-2 pb-1">Archive</p>
+            <Link
+              href={ARCHIVE.href}
+              title={ARCHIVE.summary}
+              aria-current={isActivePath(pathname, ARCHIVE.href) ? "page" : undefined}
+              className={cn(
+                "group flex h-8 items-center gap-2.5 rounded-sm px-2 transition-colors duration-100",
+                isActivePath(pathname, ARCHIVE.href)
+                  ? "bg-overlay text-fg"
+                  : "text-fg-muted hover:bg-raised hover:text-fg",
+              )}
+            >
+              <IconHistory className="size-4 shrink-0 text-fg-subtle group-hover:text-fg-muted" />
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">{ARCHIVE.label}</span>
+            </Link>
+          </div>
         </div>
 
         <p className="px-5 py-4 text-2xs text-fg-subtle">
@@ -90,36 +87,96 @@ export function AppShell({ children }: { children: ReactNode }) {
               of ambiguity that makes an operator distrust the whole screen. */}
           {!pathname.startsWith("/history") && <RunContextBar />}
 
-          {/* Below `lg` the rail is replaced by a horizontal strip, so the nav
-              never eats a third of a narrow viewport. */}
+          {/* Below `lg` the rail becomes a horizontal strip of the same steps,
+              so the nav never eats a third of a narrow viewport. */}
           <nav
             aria-label="Primary"
             className="flex shrink-0 gap-1 overflow-x-auto border-b border-line px-3 py-1.5 lg:hidden"
           >
-            {NAV.flatMap((group) => group.items).map((item) => {
-              const active = isActivePath(pathname, item.href);
-              const Icon = item.icon;
+            {WORKFLOW.map((step) => {
+              const active = isActivePath(pathname, step.href);
               return (
                 <Link
-                  key={item.href}
-                  href={item.href}
+                  key={step.href}
+                  href={step.href}
                   aria-current={active ? "page" : undefined}
                   className={cn(
                     "flex h-8 shrink-0 items-center gap-1.5 rounded-sm px-2 text-xs font-medium transition-colors",
                     active ? "bg-overlay text-fg" : "text-fg-muted hover:bg-raised hover:text-fg",
                   )}
                 >
-                  <Icon className={cn("size-3.5", active ? "text-fg" : "text-fg-subtle")} />
-                  {item.label}
+                  <StepNumber step={step.step} active={active} />
+                  {step.label}
                 </Link>
               );
             })}
+            <Link
+              href={ARCHIVE.href}
+              aria-current={isActivePath(pathname, ARCHIVE.href) ? "page" : undefined}
+              className={cn(
+                "flex h-8 shrink-0 items-center gap-1.5 rounded-sm px-2 text-xs font-medium transition-colors",
+                isActivePath(pathname, ARCHIVE.href)
+                  ? "bg-overlay text-fg"
+                  : "text-fg-muted hover:bg-raised hover:text-fg",
+              )}
+            >
+              <IconHistory className="size-3.5 text-fg-subtle" />
+              {ARCHIVE.label}
+            </Link>
           </nav>
 
           <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
         </div>
       </div>
     </div>
+  );
+}
+
+function StepLink({
+  step,
+  active,
+  locked,
+}: {
+  step: WorkflowStep;
+  active: boolean;
+  /** The step needs a run and there isn't one yet. Still clickable — its
+   * screen says what to do — but visibly not the next thing to do. */
+  locked: boolean;
+}) {
+  return (
+    <Link
+      href={step.href}
+      aria-current={active ? "page" : undefined}
+      title={locked ? `${step.summary} Launch a run first.` : step.summary}
+      className={cn(
+        "group flex h-8 items-center gap-2.5 rounded-sm px-2 transition-colors duration-100",
+        active
+          ? "bg-overlay text-fg"
+          : locked
+            ? "text-fg-subtle hover:bg-raised"
+            : "text-fg-muted hover:bg-raised hover:text-fg",
+      )}
+    >
+      <StepNumber step={step.step} active={active} />
+      <span className="min-w-0 flex-1 truncate text-sm font-medium">{step.label}</span>
+    </Link>
+  );
+}
+
+/** The step's number in a ring; the accent marks where the operator is. */
+function StepNumber({ step, active }: { step: number; active: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "relative flex size-5 shrink-0 items-center justify-center rounded-full border text-2xs font-semibold tabular",
+        active
+          ? "border-transparent bg-accent text-on-accent"
+          : "border-line-strong bg-canvas text-fg-subtle",
+      )}
+    >
+      {step}
+    </span>
   );
 }
 

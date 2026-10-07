@@ -32,8 +32,11 @@ export function EventFeed({
   emptyTitle,
   emptyHint,
   emptyAction,
+  compact,
 }: {
   events: Event[];
+  /** Narrow-panel layout: filters stack, and rows drop their metadata. */
+  compact?: boolean;
   onSelectAgent?: (agentId: string) => void;
   className?: string;
   emptyTitle?: string;
@@ -65,13 +68,14 @@ export function EventFeed({
           value={filter}
           onChange={setFilter}
           options={FILTERS}
+          className={cn(compact && "max-w-full overflow-x-auto")}
         />
         <TextField
           aria-label="Filter events by agent or type"
           placeholder="Filter by agent or event type…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="h-7 min-w-40 max-w-64 flex-1 text-xs"
+          className={cn("h-7 min-w-40 flex-1 text-xs", !compact && "max-w-64")}
         />
         <span className="ml-auto shrink-0 font-mono text-2xs tabular text-fg-subtle">
           {filtered.length}
@@ -98,7 +102,12 @@ export function EventFeed({
       ) : (
         <ul className="min-h-0 flex-1 divide-y divide-line overflow-y-auto px-3">
           {[...filtered].reverse().map((event) => (
-            <EventRow key={event.event_id} event={event} onSelectAgent={onSelectAgent} />
+            <EventRow
+              key={event.event_id}
+              event={event}
+              compact={compact}
+              onSelectAgent={onSelectAgent}
+            />
           ))}
         </ul>
       )}
