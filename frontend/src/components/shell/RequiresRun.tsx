@@ -46,7 +46,7 @@ export function RequiresRun({
         title={title}
         description={description}
         action={
-          <ButtonLink href="/" variant="primary" size="sm">
+          <ButtonLink href="/setup" variant="primary" size="sm">
             Go to step 1: Set up
           </ButtonLink>
         }

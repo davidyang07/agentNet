@@ -98,6 +98,13 @@
   --text-3xl: 1.875rem;
   --text-3xl--line-height: 2.25rem;
   --text-3xl--letter-spacing: -0.04rem;
+  /* Display sizes — the landing page's headline only, never the console. */
+  --text-4xl: 2.25rem;
+  --text-4xl--line-height: 2.625rem;
+  --text-4xl--letter-spacing: -0.06rem;
+  --text-5xl: 3rem;
+  --text-5xl--line-height: 3.375rem;
+  --text-5xl--letter-spacing: -0.09rem;
 
   /* No drop shadows on dark: a panel's depth is its surface step plus a 1px
      top-edge highlight. Only popovers float. */

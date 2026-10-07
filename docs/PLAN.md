@@ -1391,11 +1391,14 @@ Inputs, beyond the user's own goals for the redesign:
 **Agreed scope so far (2026-10-07):**
 - **Visual system:** `DESIGN.md` — Linear's product language specialized for the console, with a
   security-state palette as the only meaningful colour.
-- **Information architecture:** the console is the workflow — four numbered steps, Set up (`/`),
-  Watch (`/watch`), Results (`/results`), Fix & re-test (`/fix`), plus Runs (`/history`). One job
-  per screen, each piece of information on exactly one screen. The former Overview, Topology,
-  Activity, Metrics, Defenses and Remediation screens are merged into these steps; their routes
-  redirect.
+- **Information architecture:** the console is the workflow — four numbered steps, Set up
+  (`/setup`), Watch (`/watch`), Results (`/results`), Fix & re-test (`/fix`), plus Runs
+  (`/history`). One job per screen, each piece of information on exactly one screen. The former
+  Overview, Topology, Activity, Metrics, Defenses and Remediation screens are merged into these
+  steps; their routes redirect.
+- **Landing page (`/`):** a standalone page outside the console shell. It states what the tool
+  models and measures and where its evidence stops, walks through the four steps with real
+  screenshots, and links to Set up — or back to the active run when there is one.
 
 ### 14.6 Deferred (named so they aren't forgotten; not part of A–D)
 

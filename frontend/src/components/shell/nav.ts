@@ -16,7 +16,7 @@ export type WorkflowStep = {
 
 export const WORKFLOW: readonly WorkflowStep[] = [
   {
-    href: "/",
+    href: "/setup",
     step: 1,
     label: "Set up",
     summary: "Choose the system and the attacks, then launch.",
@@ -67,8 +67,7 @@ export function stepLabel(href: string): string {
   return `Step ${workflowStep(href).step} of ${WORKFLOW.length}`;
 }
 
-/** Longest-prefix match so `/history/<id>` still highlights "Runs". */
+/** Prefix match so `/history/<id>` still highlights "Runs". */
 export function isActivePath(pathname: string, href: string): boolean {
-  if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
 }

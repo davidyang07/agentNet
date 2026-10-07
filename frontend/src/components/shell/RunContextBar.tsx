@@ -117,10 +117,10 @@ export function RunContextBar() {
             <span className="hidden text-xs text-fg-subtle sm:inline">
               Configure a system and launch a run to begin.
             </span>
-            {pathname !== "/" && (
+            {pathname !== "/setup" && (
               <div className="ml-auto">
                 <Link
-                  href="/"
+                  href="/setup"
                   className="text-xs font-medium text-fg-muted transition-colors hover:text-fg"
                 >
                   Go to Set up →

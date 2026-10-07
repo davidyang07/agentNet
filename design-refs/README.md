@@ -15,13 +15,15 @@ frontend hardcodes instead of taking from a shared token.
 | `topology.png` | wiz.io/solutions/ai-spm ("Attack path analysis extended to AI") | Security Graph attack path from Internet to an AI training bucket |
 | `activity.png` | axiom.co/docs/query-data/stream ("Event stream") | Log/event stream: time column, key-value rows, filter bar |
 | `remediation.png`, `remediation-390.png` | github.com/expressjs/express/pull/7459/files | PR "Files changed": file tree, hunks, line-level diff |
+| `landing.png`, `landing-390.png` | linear.app (homepage, first screen) | Product front page: top nav, display headline, one-line sub, framed product shot |
 
 Which reference each screen follows:
 
 | Screen | Reference |
 |---|---|
+| Landing (`/`) | `landing.png` — display headline over a framed product shot |
 | Shell (sidebar, inset, run bar) | `shell.png` |
-| 1 · Set up (`/`) | `shell.png` — one panel, form density |
+| 1 · Set up (`/setup`) | `shell.png` — one panel, form density |
 | 2 · Watch (`/watch`) | `topology.png` for the graph, `activity.png` for the live events rail |
 | 3 · Results (`/results`) | `list.png` — row density for the metric list |
 | 4 · Fix & re-test (`/fix`) | `remediation.png` — before → after |
@@ -39,7 +41,13 @@ node scripts/screenshot.mjs https://www.datocms-assets.com/75231/1699868014-ai-a
 node scripts/screenshot.mjs https://axiom.co/docs/doc-assets/shots/event-stream-1.png \
   design-refs activity --selector img
 node scripts/screenshot.mjs https://github.com/expressjs/express/pull/7459/files design-refs remediation --wait 4000
+node scripts/screenshot.mjs https://linear.app design-refs landing --wait 4000
 ```
 
 `topology` and `activity` are static product screenshots served as images, so they have no
 390px version. The Linear selectors depend on class names that Linear may change.
+
+The landing page's own screenshots (`frontend/src/app/_landing/*.jpg`) are captures of the console
+during a live "Security-plane assault" run (seed 42): `hero-watch.jpg` is the full 1440×900 Watch
+screen; each `step-*.jpg` is that step's content inset. Re-capture them after a visible change to
+those screens.

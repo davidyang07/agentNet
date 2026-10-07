@@ -9,6 +9,7 @@
 // Options:
 //   --full-page            capture the whole page, not just the viewport — including
 //                          content inside an app-shell scroll container (<main>)
+//                          and lazy-loaded images below the first screen
 //   --selector <css>       capture only the first element matching <css>
 //   --wait <ms>            settle time after load, for late fonts/data (default 1500)
 //   --hide <css>           hide matching elements before capturing, e.g. a cookie
@@ -108,6 +109,30 @@ async function growToContent(page) {
   }
 }
 
+// fullPage captures without scrolling, so lazy images far below the first
+// screen never start loading. Scroll through once, wait for every image, and
+// return to the top.
+async function loadLazyContent(page) {
+  await page.evaluate(async () => {
+    const step = window.innerHeight;
+    for (let y = 0; y < document.documentElement.scrollHeight; y += step) {
+      window.scrollTo(0, y);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    const pending = [...document.images].filter((img) => !img.complete);
+    await Promise.all(
+      pending.map(
+        (img) =>
+          new Promise((resolve) => {
+            img.addEventListener("load", resolve, { once: true });
+            img.addEventListener("error", resolve, { once: true });
+          }),
+      ),
+    );
+    window.scrollTo(0, 0);
+  });
+}
+
 await mkdir(outDir, { recursive: true });
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
 let captured = 0;
@@ -155,7 +180,10 @@ try {
         continue;
       }
     } else {
-      if (values["full-page"]) await growToContent(page);
+      if (values["full-page"]) {
+        await loadLazyContent(page);
+        await growToContent(page);
+      }
       await page.screenshot({ ...options, fullPage: values["full-page"] });
     }
     console.log(file);

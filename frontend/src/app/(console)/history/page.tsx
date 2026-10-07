@@ -116,7 +116,7 @@ function HistoryList({
         title="No persisted runs match"
         description="Every assessment is persisted event by event as it runs. Launch one, or widen the filters above."
         action={
-          <ButtonLink href="/" size="sm" variant="primary">
+          <ButtonLink href="/setup" size="sm" variant="primary">
             Launch an assessment
           </ButtonLink>
         }

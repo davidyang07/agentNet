@@ -16,10 +16,12 @@ picture: the environment where such defenses can be attacked, measured, and comp
 The console is the assessment workflow itself: four numbered steps in the sidebar, one job per
 screen, each ending with the way to the next. Every piece of information lives on exactly one
 screen. A persistent run-context bar keeps the live WebSocket connected as you move between them.
+The landing page at `/` explains the four steps and the model's limits, then links into the
+console: **Start an assessment**, or **Resume run** when one is active.
 
 | Step | Screen | What it answers |
 |---|---|---|
-| 1 | **Set up** (`/`) | What are we testing? Pick a preset or describe the system and the attacks, then launch — the run opens in Watch. |
+| 1 | **Set up** (`/setup`) | What are we testing? Pick a preset or describe the system and the attacks, then launch — the run opens in Watch. |
 | 2 | **Watch** (`/watch`) | What is happening? The typed security graph coloured by compromise, the outbreak curve under it, and live events beside it. Select a node to trace it back to patient zero, or trace an attack path between two nodes. |
 | 3 | **Results** (`/results`) | How bad was it, and what did the defense cost? Four headline numbers, every metric with its definition, the attack surface and the choke points. |
 | 4 | **Fix & re-test** (`/fix`) | What should change, and does it work? Findings as config changes, each re-tested before → after from the same seed — plus a defense on vs off check. |
@@ -127,7 +129,8 @@ cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements-dev
 cd frontend && npm install && npm run dev
 ```
 
-Open `http://localhost:3000`. Four presets (baseline propagation, undefended control,
+Open `http://localhost:3000` and choose **Start an assessment** (or go straight to
+`http://localhost:3000/setup`). Four presets (baseline propagation, undefended control,
 security-plane assault, adaptive attacker) seed a full configuration; every field is an
 `ExperimentConfig` key sent verbatim to `POST /api/experiments`, with the machine name printed
 under each label so a run stays reproducible from the UI alone. Pick your scenarios, click
