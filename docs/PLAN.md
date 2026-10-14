@@ -1396,9 +1396,9 @@ Inputs, beyond the user's own goals for the redesign:
   (`/history`). One job per screen, each piece of information on exactly one screen. The former
   Overview, Topology, Activity, Metrics, Defenses and Remediation screens are merged into these
   steps; their routes redirect.
-- **Landing page (`/`):** a standalone page outside the console shell. It states what the tool
-  models and measures and where its evidence stops, walks through the four steps with real
-  screenshots, and links to Set up — or back to the active run when there is one.
+- **Landing page (`/`):** a standalone, one-screen page outside the console shell: what the tool
+  does, a screenshot of Watch, the four steps in one line each, the simulation disclaimer, and a
+  link to Set up — or back to the active run when there is one.
 
 ### 14.6 Deferred (named so they aren't forgotten; not part of A–D)
 

@@ -16,8 +16,8 @@ picture: the environment where such defenses can be attacked, measured, and comp
 The console is the assessment workflow itself: four numbered steps in the sidebar, one job per
 screen, each ending with the way to the next. Every piece of information lives on exactly one
 screen. A persistent run-context bar keeps the live WebSocket connected as you move between them.
-The landing page at `/` explains the four steps and the model's limits, then links into the
-console: **Start an assessment**, or **Resume run** when one is active.
+The landing page at `/` is one screen: what AgentShield does, the four steps, and the way in —
+**Start an assessment**, or **Resume run** when one is active.
 
 | Step | Screen | What it answers |
 |---|---|---|

@@ -316,7 +316,7 @@ Only two edge treatments have colour:
 |---|---|---|---|---|
 | display | `text-4xl` → `lg:text-5xl` | 36 / 42 → 48 / 54 | 600, −1 to −1.4px | The landing page's headline only. Never in the console. |
 | page-title | `text-xl` | 18 / 26 | 600, −0.2px | One per screen, in `PageHeader`. |
-| metric | `text-2xl` | 24 / 30 | 600, −0.4px | KPI values, and the landing page's section headings. |
+| metric | `text-2xl` | 24 / 30 | 600, −0.4px | KPI values. |
 | section-title | `text-sm` | 13 / 20 | 500 | Panel titles, nav items. |
 | body | `text-base` | 14 / 22 | 400 | Page default, prose. |
 | body-sm | `text-sm` | 13 / 20 | 400 | Working text in panels and forms. |
@@ -348,12 +348,12 @@ Only two edge treatments have colour:
   second screen to save the operator a click.
 - **Density.** Match the references in `design-refs/`: list rows about 36px, single-line event
   rows, and labels left with values right.
-- **Landing (`/`)** sits outside the shell: full width on `canvas`, no sidebar, content in a
-  1152px column (`max-w-6xl`), sections split by hairlines. In order: the headline and one
-  factual paragraph, the start or resume buttons, a framed Watch screenshot, the four steps
-  (each with its screenshot), what it models / measures / its limits, and a closing call to
-  action. Screenshots are real captures of the console in `frontend/src/app/_landing/`. Copy
-  states what the tool does and where it stops; it makes no claim the console cannot show.
+- **Landing (`/`)** sits outside the shell and fits one desktop screen: full width on `canvas`,
+  no sidebar, content in a 1152px column (`max-w-6xl`). The headline, one factual sentence and
+  the start or resume buttons sit beside a framed Watch screenshot (a real capture, in
+  `frontend/src/app/_landing/`); the four steps follow as one row, one line each, above a footer
+  carrying the console's simulation disclaimer. Copy states what the tool does; it makes no
+  claim the console cannot show. Add to it only what a first-time operator needs before Set up.
 
 ## Elevation & depth
 

@@ -21,7 +21,7 @@ Which reference each screen follows:
 
 | Screen | Reference |
 |---|---|
-| Landing (`/`) | `landing.png` — display headline over a framed product shot |
+| Landing (`/`) | `landing.png` — display headline and a framed product shot, on one screen |
 | Shell (sidebar, inset, run bar) | `shell.png` |
 | 1 · Set up (`/setup`) | `shell.png` — one panel, form density |
 | 2 · Watch (`/watch`) | `topology.png` for the graph, `activity.png` for the live events rail |
@@ -47,7 +47,6 @@ node scripts/screenshot.mjs https://linear.app design-refs landing --wait 4000
 `topology` and `activity` are static product screenshots served as images, so they have no
 390px version. The Linear selectors depend on class names that Linear may change.
 
-The landing page's own screenshots (`frontend/src/app/_landing/*.jpg`) are captures of the console
-during a live "Security-plane assault" run (seed 42): `hero-watch.jpg` is the full 1440×900 Watch
-screen; each `step-*.jpg` is that step's content inset. Re-capture them after a visible change to
-those screens.
+The landing page's screenshot (`frontend/src/app/_landing/hero-watch.jpg`) is a capture of the full
+1440×900 Watch screen during a live "Security-plane assault" run (seed 42). Re-capture it after a
+visible change to Watch.
