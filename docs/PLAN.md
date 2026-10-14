@@ -1396,6 +1396,9 @@ Inputs, beyond the user's own goals for the redesign:
   (`/history`). One job per screen, each piece of information on exactly one screen. The former
   Overview, Topology, Activity, Metrics, Defenses and Remediation screens are merged into these
   steps; their routes redirect.
+- **Density:** each screen shows the answer to its question; definitions, tuning parameters, the
+  full configuration and unchanged metrics open on demand. Set up keeps preset, agents, seed,
+  scenarios and defense in view, with the rest under Advanced settings.
 - **Landing page (`/`):** a standalone, one-screen page outside the console shell: what the tool
   does, a screenshot of Watch, the four steps in one line each, the simulation disclaimer, and a
   link to Set up — or back to the active run when there is one.

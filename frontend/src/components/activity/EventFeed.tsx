@@ -35,7 +35,8 @@ export function EventFeed({
   compact,
 }: {
   events: Event[];
-  /** Narrow-panel layout: filters stack, and rows drop their metadata. */
+  /** Narrow-panel layout: category filter only (selecting a node is the way
+   * to follow one agent there), and rows drop their metadata. */
   compact?: boolean;
   onSelectAgent?: (agentId: string) => void;
   className?: string;
@@ -70,17 +71,21 @@ export function EventFeed({
           options={FILTERS}
           className={cn(compact && "max-w-full overflow-x-auto")}
         />
-        <TextField
-          aria-label="Filter events by agent or type"
-          placeholder="Filter by agent or event type…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className={cn("h-7 min-w-40 flex-1 text-xs", !compact && "max-w-64")}
-        />
-        <span className="ml-auto shrink-0 font-mono text-2xs tabular text-fg-subtle">
-          {filtered.length}
-          {filtered.length !== events.length && ` / ${events.length}`} events
-        </span>
+        {!compact && (
+          <TextField
+            aria-label="Filter events by agent or type"
+            placeholder="Filter by agent or event type…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="h-7 min-w-40 max-w-64 flex-1 text-xs"
+          />
+        )}
+        {!compact && (
+          <span className="ml-auto shrink-0 font-mono text-2xs tabular text-fg-subtle">
+            {filtered.length}
+            {filtered.length !== events.length && ` / ${events.length}`} events
+          </span>
+        )}
       </div>
 
       {filtered.length === 0 ? (
@@ -95,7 +100,9 @@ export function EventFeed({
           description={
             events.length === 0
               ? (emptyHint ?? "Events stream in as the simulation ticks.")
-              : "Try a different category, or clear the text filter."
+              : compact
+                ? "Try a different category."
+                : "Try a different category, or clear the text filter."
           }
           action={events.length === 0 ? emptyAction : undefined}
         />

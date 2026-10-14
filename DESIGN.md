@@ -339,13 +339,21 @@ Only two edge treatments have colour:
 - **Shell:**
   - **Wide screens** (`lg` and up): a 224px sidebar on `canvas`, and the content in an inset
     `surface` panel (8px from the frame, `rounded.lg`, hairline border) that scrolls on its own.
-    The run-context bar is the first row of the inset.
+    The run-context bar is the first row of the inset: status, run id, progress, and the
+    transport (Pause, Re-run, a speed select). Config lives on Results, not in the bar.
   - **Narrow screens:** the sidebar becomes a horizontal strip.
 - **Navigation is the workflow.** The sidebar lists the four steps (Set up, Watch, Results, Fix &
   re-test) as numbered markers joined by a hairline, the current step's marker in `accent`; Runs
-  sits apart under Archive. Every step screen opens with a "Step N of 4" eyebrow and points to the
-  next step. Each piece of information lives on exactly one screen — never repeat a panel on a
-  second screen to save the operator a click.
+  sits apart under Archive. Every step screen opens with a title, one line of description, and a
+  "Next" button to the following step; the sidebar already says which step it is. Each piece of
+  information lives on exactly one screen — never repeat a panel on a second screen to save the
+  operator a click.
+- **Answer first, detail on demand.** A screen shows the answer to its question and nothing that
+  restates it. Secondary detail — metric definitions, tuning parameters, the full configuration,
+  metrics that did not change — sits behind a `DisclosureButton` (chevron + quiet text), with a
+  one-line mono summary beside it while closed so nothing that changes a run is hidden silently.
+  On Set up, the preset, agents, seed, scenarios and defense are visible; the rest is under
+  Advanced settings. Before/after tables list only the metrics that moved.
 - **Density.** Match the references in `design-refs/`: list rows about 36px, single-line event
   rows, and labels left with values right.
 - **Landing (`/`)** sits outside the shell and fits one desktop screen: full width on `canvas`,
@@ -452,6 +460,8 @@ Graph node **type** is carried by shape and size, never colour:
 - Put colour on marks (dots, meters, nodes, bands), and keep the words beside them in ink.
 - Use the surface ladder for hierarchy, and skip a level only for the content inset.
 - Keep one primary button per region.
+- Put a definition on hover (`title`) where the table is read for its numbers, and in full only
+  where the operator asks for it.
 - Keep working text at 12–13px, and never go below 11px.
 
 ### Don't

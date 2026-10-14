@@ -137,7 +137,6 @@ function HistoryList({
             <Th>Attack</Th>
             <Th>Defense</Th>
             <Th>Outcome</Th>
-            <Th>Log integrity</Th>
             <Th className="w-20" />
           </tr>
         </thead>
@@ -169,14 +168,15 @@ function HistoryList({
                     {scenarios.length === 0 ? (
                       <span className="text-fg-subtle">—</span>
                     ) : (
-                      scenarios.slice(0, 2).map((scenario) => (
-                        <Badge key={scenario} severity="neutral">
-                          {scenarioMeta(scenario).label}
-                        </Badge>
-                      ))
+                      <Badge severity="neutral">{scenarioMeta(scenarios[0]).label}</Badge>
                     )}
-                    {scenarios.length > 2 && (
-                      <span className="text-2xs text-fg-subtle">+{scenarios.length - 2}</span>
+                    {scenarios.length > 1 && (
+                      <span
+                        className="text-2xs text-fg-subtle"
+                        title={scenarios.slice(1).map((s) => scenarioMeta(s).label).join(", ")}
+                      >
+                        +{scenarios.length - 1}
+                      </span>
                     )}
                   </span>
                 </Td>
@@ -194,16 +194,14 @@ function HistoryList({
                       t{item.final_sim_tick}
                     </span>
                   )}
-                </Td>
-                <Td>
-                  {item.is_complete === true ? (
-                    <Badge severity="ok">Complete</Badge>
-                  ) : (
+                  {/* Log integrity is only worth a mark when it fails. */}
+                  {item.is_complete !== true && (
                     <Badge
                       severity="warn"
+                      className="ml-2"
                       title="A gap was detected in this run's persisted event log, or it was never finalized"
                     >
-                      Incomplete
+                      Incomplete log
                     </Badge>
                   )}
                 </Td>
@@ -250,9 +248,8 @@ export default function HistoryPage() {
   return (
     <div className="flex flex-col">
       <PageHeader
-        eyebrow="Archive"
         title="Runs"
-        description="Every assessment is persisted event by event while it runs. Replay any of them deterministically, or select two to compare."
+        description="Every assessment, kept as it ran. Replay one, or select two to compare."
         actions={
           selected.length === 2 ? (
             <ButtonLink

@@ -161,7 +161,6 @@ export default function ComparePage() {
   return (
     <div className="flex flex-col">
       <PageHeader
-        eyebrow="Archive"
         title="Compare runs"
         description="Two persisted runs, scored on identical metrics. Check the configuration of each before drawing a conclusion from the difference."
         actions={

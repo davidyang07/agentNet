@@ -28,10 +28,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <nav aria-label="Primary" className="hidden w-56 shrink-0 flex-col lg:flex">
         <Link href="/" className="flex items-center gap-2.5 px-5 pb-2 pt-4 text-fg">
           <BrandMark className="size-5 shrink-0" />
-          <span className="min-w-0">
-            <span className="block truncate text-sm font-semibold">AgentShield</span>
-            <span className="block truncate text-2xs text-fg-subtle">Adversarial resilience</span>
-          </span>
+          <span className="truncate text-sm font-semibold">AgentShield</span>
         </Link>
 
         <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 py-4">
@@ -73,11 +70,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
           </div>
         </div>
-
-        <p className="px-5 py-4 text-2xs text-fg-subtle">
-          Deterministic simulation. Results are reproducible from{" "}
-          <span className="font-mono">(seed, config)</span> — not real-world security evidence.
-        </p>
       </nav>
 
       <div className="flex min-w-0 flex-1 flex-col lg:py-2 lg:pr-2">

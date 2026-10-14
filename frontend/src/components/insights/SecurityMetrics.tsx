@@ -98,18 +98,27 @@ export function formatMetric(descriptor: MetricDescriptor, value: number | null)
   return formatPercent(value);
 }
 
-/** The four numbers that answer "how bad is it" first. */
+/** The four numbers that answer "how bad is it" first, shown as tiles. */
+export const HEADLINE_METRIC_KEYS: ReadonlyArray<keyof MetricsResponse> = [
+  "compromise_fraction",
+  "blast_radius_fraction",
+  "retained_utility",
+  "security_plane_integrity",
+];
+
+/** Every metric that is not a headline tile, in descriptor order. */
+export const SECONDARY_METRIC_KEYS: ReadonlyArray<keyof MetricsResponse> = METRIC_DESCRIPTORS.map(
+  (d) => d.key,
+).filter((key) => !HEADLINE_METRIC_KEYS.includes(key));
+
 export function PostureTiles({ metrics }: { metrics: MetricsResponse }) {
-  const tiles: Array<{ descriptor: MetricDescriptor; footnote?: string }> = [
-    { descriptor: METRIC_DESCRIPTORS[0] },
-    { descriptor: METRIC_DESCRIPTORS[1] },
-    { descriptor: METRIC_DESCRIPTORS[4] },
-    { descriptor: METRIC_DESCRIPTORS[5] },
-  ];
+  const tiles = HEADLINE_METRIC_KEYS.map(
+    (key) => METRIC_DESCRIPTORS.find((d) => d.key === key) as MetricDescriptor,
+  );
 
   return (
     <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-      {tiles.map(({ descriptor }) => {
+      {tiles.map((descriptor) => {
         const raw = metrics[descriptor.key];
         const value = typeof raw === "number" ? raw : null;
         const severity = metricSeverity(descriptor, value);

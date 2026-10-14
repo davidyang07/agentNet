@@ -8,7 +8,6 @@ import { OutbreakChart } from "@/components/insights/OutbreakChart";
 import { PageHeader } from "@/components/shell/AppShell";
 import { NextStepButton } from "@/components/shell/NextStep";
 import { RequiresRun } from "@/components/shell/RequiresRun";
-import { stepLabel } from "@/components/shell/nav";
 import { SeverityDot } from "@/components/ui/Badge";
 import { ButtonLink } from "@/components/ui/Button";
 import { useExperiment } from "@/lib/experiment/ExperimentProvider";
@@ -45,9 +44,8 @@ function WatchContent({ experimentId }: { experimentId: string }) {
   return (
     <div className="flex min-h-full flex-col xl:h-full">
       <PageHeader
-        eyebrow={stepLabel("/watch")}
         title="Watch the attack"
-        description="Colour is security state; shape is node type. Select a node to see how it was compromised and what it can reach."
+        description="Colour is security state, shape is node type. Select a node to trace how it was compromised."
         actions={<NextStepButton from="/watch" />}
         className="py-3"
       />

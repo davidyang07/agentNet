@@ -87,7 +87,9 @@ export function StatRow({
 }) {
   return (
     <div className="flex items-baseline gap-2 py-1" title={hint}>
-      <dt className="shrink-0 text-xs text-fg-muted">{label}</dt>
+      {/* Shrinks (and wraps) only when a label is longer than the row, so a
+          definition under it never pushes the value out of the panel. */}
+      <dt className="min-w-0 text-xs text-fg-muted">{label}</dt>
       <span aria-hidden className="relative -top-1 min-w-3 flex-1 border-b border-dotted border-line-strong" />
       <dd className="flex shrink-0 items-center gap-1.5 font-mono text-xs text-fg tabular">
         {severity && severity !== "neutral" && <SeverityDot severity={severity} />}

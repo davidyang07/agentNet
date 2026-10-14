@@ -5,7 +5,6 @@ import { FindingsList } from "@/components/insights/FindingsList";
 import { MetricsDeltaTable } from "@/components/insights/MetricsComparison";
 import { PageHeader } from "@/components/shell/AppShell";
 import { RequiresRun } from "@/components/shell/RequiresRun";
-import { stepLabel } from "@/components/shell/nav";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Panel, PanelHeader } from "@/components/ui/Panel";
@@ -41,9 +40,8 @@ function FixContent({ experimentId }: { experimentId: string }) {
   return (
     <div className="flex flex-col">
       <PageHeader
-        eyebrow={stepLabel("/fix")}
         title="Fix & re-test"
-        description="Each finding is a concrete configuration change with a causal reason behind it. Re-testing runs the current and the changed configuration to completion from the same seed, then compares every metric."
+        description="Re-test a finding from the same seed, or check what the defense itself buys."
       />
 
       <div className="flex flex-col gap-4 p-4 lg:p-5">
@@ -129,7 +127,6 @@ function FindingsSection({
               after={trial.after.status === "done" ? trial.after.metrics : null}
               beforeLabel="Before fix"
               afterLabel="After fix"
-              withDefinitions={false}
             />
           </div>
         )}
@@ -142,12 +139,15 @@ function DefenseCheckSection({ config }: { config: ExperimentConfig | null }) {
   const { armA, armB, runComparison } = useComparison();
   const running = armA.status === "running" || armB.status === "running";
   const started = armA.status !== "idle" || armB.status !== "idle";
+  // The arm cards report progress and failures; once both finished cleanly
+  // the table says everything they would.
+  const settled = [armA, armB].every((arm) => arm.status === "done" && !arm.incomplete);
 
   return (
     <Panel>
       <PanelHeader
         title="Is the defense worth it?"
-        description="Runs this configuration twice — defense off, then on — with everything else held constant, so any difference is the defense's doing."
+        description="Runs this configuration with the defense off, then on — same seed, everything else equal."
         actions={
           <Button
             variant="primary"
@@ -161,17 +161,18 @@ function DefenseCheckSection({ config }: { config: ExperimentConfig | null }) {
       />
       {started && (
         <div className="flex flex-col gap-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <ArmStatusCard inset label="Defense off" hint="Control" arm={armB} />
-            <ArmStatusCard inset label="Defense on" hint="Treatment" arm={armA} />
-          </div>
+          {!settled && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <ArmStatusCard inset label="Defense off" hint="Control" arm={armB} />
+              <ArmStatusCard inset label="Defense on" hint="Treatment" arm={armA} />
+            </div>
+          )}
           <div className="overflow-hidden rounded-md border border-line bg-surface">
             <MetricsDeltaTable
               before={armB.status === "done" ? (armB.metrics ?? null) : null}
               after={armA.status === "done" ? (armA.metrics ?? null) : null}
               beforeLabel="Defense off"
               afterLabel="Defense on"
-              withDefinitions={false}
             />
           </div>
         </div>

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { Panel, PanelDivider } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
+import { DisclosureButton } from "@/components/ui/Disclosure";
 import { ChipMultiSelect, NumberField, SelectField, ToggleField } from "@/components/ui/Field";
 import { IconInfo } from "@/components/ui/icons";
 import { WarningBanner } from "@/components/ui/States";
@@ -15,9 +16,10 @@ import { SCENARIOS, scenarioMeta } from "@/lib/vocabulary";
 type Field = keyof ExperimentConfig;
 
 /**
- * The launch surface: everything that defines *what system is being tested*
- * and *what is being thrown at it*, grouped by that question rather than by
- * the order the fields happen to appear in the Pydantic model.
+ * The launch surface. A preset plus the four decisions an operator makes on
+ * every run — how many agents, which seed, which attacks, defense on or off —
+ * are always visible; the tuning parameters a preset already sets sit under
+ * "Advanced settings", summarised in one line while closed.
  *
  * Every field is an `ExperimentConfig` key sent verbatim to
  * `POST /api/experiments` — the machine name is shown under each label so a
@@ -28,11 +30,14 @@ export function RunConfigurator({
   onStart,
   initialConfig = DEFAULT_CONFIG,
   submitLabel = "Launch assessment",
+  footnote,
 }: {
   disabled: boolean;
   onStart: (config: ExperimentConfig) => void;
   initialConfig?: ExperimentConfig;
   submitLabel?: string;
+  /** One line beside the launch button, e.g. what launching replaces. */
+  footnote?: ReactNode;
 }) {
   const [draft, setDraft] = useState<ExperimentConfig>(initialConfig);
   // Highlight the preset the form was opened with, if it is one — a form
@@ -120,7 +125,7 @@ export function RunConfigurator({
         )}
 
         <PanelDivider label="System under test" />
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <NumberField
             label="Agents"
             hint="node_count · 25–100"
@@ -129,74 +134,23 @@ export function RunConfigurator({
             onChange={(v) => setNumber("node_count", v)}
           />
           <NumberField
-            label="Edge density"
-            hint="edge_density · 1–5"
-            value={draft.edge_density}
-            disabled={disabled}
-            onChange={(v) => setNumber("edge_density", v)}
-          />
-          <NumberField
-            label="Software diversity"
-            hint="software_type_count · 1–5"
-            value={draft.software_type_count}
-            disabled={disabled}
-            onChange={(v) => setNumber("software_type_count", v)}
-          />
-          <SelectField
-            label="Initial foothold"
-            hint="initial_compromised"
-            value={draft.initial_compromised}
-            disabled={disabled}
-            onChange={(v) => set("initial_compromised", v)}
-            options={[
-              { value: "highest_degree", label: "Highest-degree agent" },
-              { value: "random_node", label: "Random agent" },
-            ]}
-          />
-          <NumberField
             label="Seed"
             hint="seed · determinism key"
             value={draft.seed}
             disabled={disabled}
             onChange={(v) => set("seed", Math.trunc(v))}
           />
-        </div>
-
-        <PanelDivider label="Attack surface" />
-        <p className="-mt-1 mb-3 text-xs leading-5 text-fg-subtle">
-          Typed non-agent nodes the security graph is built from. Leave at zero for a pure
-          agent-mesh test; add them to model tool access, credential blast radius and a security
-          plane the attacker can turn against you.
-        </p>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <NumberField
-            label="Tools"
-            hint="tool_count · 0–20"
-            value={draft.tool_count}
-            disabled={disabled}
-            onChange={(v) => setNumber("tool_count", v)}
-          />
-          <NumberField
-            label="Credentials"
-            hint="credential_count · 0–20"
-            value={draft.credential_count}
-            disabled={disabled}
-            onChange={(v) => setNumber("credential_count", v)}
-          />
-          <NumberField
-            label="Resources"
-            hint="resource_count · 0–20"
-            value={draft.resource_count}
-            disabled={disabled}
-            onChange={(v) => setNumber("resource_count", v)}
-          />
-          <NumberField
-            label="Sentinels"
-            hint="sentinel_count · 0–5"
-            value={draft.sentinel_count}
-            disabled={disabled}
-            onChange={(v) => setNumber("sentinel_count", v)}
-          />
+          <div className="col-span-2 flex min-w-0 flex-col gap-1">
+            <span className="text-xs font-medium text-fg-muted">Defense</span>
+            <ToggleField
+              label="Anomaly detection & quarantine"
+              checked={draft.defense_enabled}
+              disabled={disabled}
+              onChange={(v) => set("defense_enabled", v)}
+              className="h-8"
+            />
+            <p className="text-2xs text-fg-subtle">defense_enabled</p>
+          </div>
         </div>
 
         <PanelDivider label="Attack scenarios" />
@@ -207,114 +161,10 @@ export function RunConfigurator({
           selected={scenarios}
           onToggle={toggleScenario}
         />
-        <ul className="mt-2.5 flex flex-col gap-1">
-          {scenarios.map((value) => (
-            <li key={value} className="flex items-start gap-2 text-2xs text-fg-subtle">
-              <span aria-hidden className="mt-1.5 size-1 shrink-0 rounded-full bg-fg-subtle" />
-              <span>
-                <span className="font-medium text-fg-muted">{scenarioMeta(value).label}</span>{" "}
-                — {scenarioMeta(value).hint}
-              </span>
-            </li>
-          ))}
-          {scenarios.length === 0 && (
-            <li>
-              <WarningBanner>
-                No scenario selected — the system will be built and observed, but never attacked.
-              </WarningBanner>
-            </li>
-          )}
-        </ul>
-
-        {(usesAdaptive ||
-          usesPromptInjection ||
-          usesSentinelCompromise ||
-          usesAttestation ||
-          usesCollusion) && (
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-            {!usesAdaptive && (
-              <>
-                <NumberField
-                  label="Same-stack rate"
-                  hint="p_same · 0–1"
-                  step={0.01}
-                  value={draft.p_same}
-                  disabled={disabled}
-                  onChange={(v) => setNumber("p_same", v, false)}
-                />
-                <NumberField
-                  label="Cross-stack rate"
-                  hint="p_cross · 0–1"
-                  step={0.01}
-                  value={draft.p_cross}
-                  disabled={disabled}
-                  onChange={(v) => setNumber("p_cross", v, false)}
-                />
-              </>
-            )}
-            {usesAdaptive && (
-              <NumberField
-                label="Adaptive threshold"
-                hint="adaptive_detection_threshold"
-                step={0.05}
-                value={draft.adaptive_detection_threshold}
-                disabled={disabled}
-                onChange={(v) => setNumber("adaptive_detection_threshold", v, false)}
-              />
-            )}
-            {usesPromptInjection && (
-              <>
-                <NumberField
-                  label="LLM-backed agents"
-                  hint="real_agent_count · 0–20"
-                  value={draft.real_agent_count}
-                  disabled={disabled}
-                  onChange={(v) => setNumber("real_agent_count", v)}
-                />
-                <SelectField
-                  label="Model provider"
-                  hint="model_provider"
-                  value={draft.model_provider}
-                  disabled={disabled || draft.real_agent_count === 0}
-                  onChange={(v) => set("model_provider", v)}
-                  options={[
-                    { value: "mock", label: "Mock (deterministic)" },
-                    { value: "vllm", label: "vLLM endpoint" },
-                  ]}
-                />
-              </>
-            )}
-            {usesSentinelCompromise && (
-              <NumberField
-                label="Sentinel-subversion rate"
-                hint="sentinel_compromise_rate"
-                step={0.01}
-                value={draft.sentinel_compromise_rate}
-                disabled={disabled}
-                onChange={(v) => setNumber("sentinel_compromise_rate", v, false)}
-              />
-            )}
-            {usesAttestation && (
-              <NumberField
-                label="Attestation-replay rate"
-                hint="attestation_replay_rate"
-                step={0.01}
-                value={draft.attestation_replay_rate}
-                disabled={disabled}
-                onChange={(v) => setNumber("attestation_replay_rate", v, false)}
-              />
-            )}
-            {usesCollusion && (
-              <NumberField
-                label="Collusion rate"
-                hint="byzantine_collusion_rate"
-                step={0.01}
-                value={draft.byzantine_collusion_rate}
-                disabled={disabled}
-                onChange={(v) => setNumber("byzantine_collusion_rate", v, false)}
-              />
-            )}
-          </div>
+        {scenarios.length === 0 && (
+          <WarningBanner className="mt-3">
+            No scenario selected — the system will be built and observed, but never attacked.
+          </WarningBanner>
         )}
 
         {(needsSentinels || needsCredentials || needsRealAgents) && (
@@ -322,23 +172,23 @@ export function RunConfigurator({
             <ul className="flex flex-col gap-0.5">
               {needsSentinels && (
                 <li>
-                  Sentinel subversion and attestation replay need a security plane — set{" "}
-                  <span className="font-mono">sentinel_count</span> above zero or the scenario will
-                  no-op.
+                  Sentinel subversion and attestation replay need a security plane — set Sentinels
+                  (<span className="font-mono">sentinel_count</span>) under Advanced settings above
+                  zero, or the scenario will no-op.
                 </li>
               )}
               {needsCredentials && (
                 <li>
-                  Byzantine collusion targets a credential — set{" "}
-                  <span className="font-mono">credential_count</span> above zero or the scenario
-                  will no-op.
+                  Byzantine collusion targets a credential — set Credentials (
+                  <span className="font-mono">credential_count</span>) under Advanced settings
+                  above zero, or the scenario will no-op.
                 </li>
               )}
               {needsRealAgents && (
                 <li>
                   Indirect prompt injection needs LLM-backed agents — set{" "}
-                  <span className="font-mono">real_agent_count</span> above zero or the scenario
-                  will no-op.
+                  <span className="font-mono">real_agent_count</span> under Advanced settings
+                  above zero, or the scenario will no-op.
                 </li>
               )}
             </ul>
@@ -352,57 +202,203 @@ export function RunConfigurator({
           </WarningBanner>
         )}
 
-        <PanelDivider label="Defense posture" />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <ToggleField
-            label="Anomaly detection & quarantine"
-            hint="defense_enabled"
-            checked={draft.defense_enabled}
-            disabled={disabled}
-            onChange={(v) => set("defense_enabled", v)}
-          />
-          <NumberField
-            label="Detector sensitivity"
-            hint="detector_sensitivity · 0–1"
-            step={0.05}
-            value={draft.detector_sensitivity}
-            disabled={disabled || !draft.defense_enabled}
-            onChange={(v) => setNumber("detector_sensitivity", v, false)}
-          />
-          <NumberField
-            label="False-quarantine rate"
-            hint="false_quarantine_rate · subverted authority"
-            step={0.01}
-            value={draft.false_quarantine_rate}
-            disabled={disabled}
-            onChange={(v) => setNumber("false_quarantine_rate", v, false)}
-          />
+        <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <DisclosureButton open={showAdvanced} onToggle={() => setShowAdvanced((v) => !v)}>
+            Advanced settings
+          </DisclosureButton>
+          {!showAdvanced && (
+            <span className="font-mono text-2xs text-fg-subtle">{advancedSummary(draft)}</span>
+          )}
         </div>
 
-        <button
-          type="button"
-          onClick={() => setShowAdvanced((v) => !v)}
-          className="mt-4 self-start text-xs font-medium text-fg-subtle transition-colors hover:text-fg-muted"
-        >
-          {showAdvanced ? "− Hide" : "+ Show"} run limits
-        </button>
         {showAdvanced && (
-          <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <NumberField
-              label="Max ticks"
-              hint="max_ticks · 1–2000"
-              value={draft.max_ticks}
-              disabled={disabled}
-              onChange={(v) => setNumber("max_ticks", v)}
-            />
+          <div className="mt-5 flex flex-col">
+            <PanelDivider label="Topology and run length" />
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <NumberField
+                label="Edge density"
+                hint="edge_density · 1–5"
+                value={draft.edge_density}
+                disabled={disabled}
+                onChange={(v) => setNumber("edge_density", v)}
+              />
+              <NumberField
+                label="Software diversity"
+                hint="software_type_count · 1–5"
+                value={draft.software_type_count}
+                disabled={disabled}
+                onChange={(v) => setNumber("software_type_count", v)}
+              />
+              <SelectField
+                label="Initial foothold"
+                hint="initial_compromised"
+                value={draft.initial_compromised}
+                disabled={disabled}
+                onChange={(v) => set("initial_compromised", v)}
+                options={[
+                  { value: "highest_degree", label: "Highest-degree agent" },
+                  { value: "random_node", label: "Random agent" },
+                ]}
+              />
+              <NumberField
+                label="Max ticks"
+                hint="max_ticks · 1–2000"
+                value={draft.max_ticks}
+                disabled={disabled}
+                onChange={(v) => setNumber("max_ticks", v)}
+              />
+            </div>
+
+            <PanelDivider label="Attack surface" />
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <NumberField
+                label="Tools"
+                hint="tool_count · 0–20"
+                value={draft.tool_count}
+                disabled={disabled}
+                onChange={(v) => setNumber("tool_count", v)}
+              />
+              <NumberField
+                label="Credentials"
+                hint="credential_count · 0–20"
+                value={draft.credential_count}
+                disabled={disabled}
+                onChange={(v) => setNumber("credential_count", v)}
+              />
+              <NumberField
+                label="Resources"
+                hint="resource_count · 0–20"
+                value={draft.resource_count}
+                disabled={disabled}
+                onChange={(v) => setNumber("resource_count", v)}
+              />
+              <NumberField
+                label="Sentinels"
+                hint="sentinel_count · 0–5"
+                value={draft.sentinel_count}
+                disabled={disabled}
+                onChange={(v) => setNumber("sentinel_count", v)}
+              />
+            </div>
+
+            {(usesAdaptive ||
+              usesPromptInjection ||
+              usesSentinelCompromise ||
+              usesAttestation ||
+              usesCollusion) && (
+              <>
+                <PanelDivider label="Attack parameters" />
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {!usesAdaptive && (
+                    <>
+                      <NumberField
+                        label="Same-stack rate"
+                        hint="p_same · 0–1"
+                        step={0.01}
+                        value={draft.p_same}
+                        disabled={disabled}
+                        onChange={(v) => setNumber("p_same", v, false)}
+                      />
+                      <NumberField
+                        label="Cross-stack rate"
+                        hint="p_cross · 0–1"
+                        step={0.01}
+                        value={draft.p_cross}
+                        disabled={disabled}
+                        onChange={(v) => setNumber("p_cross", v, false)}
+                      />
+                    </>
+                  )}
+                  {usesAdaptive && (
+                    <NumberField
+                      label="Adaptive threshold"
+                      hint="adaptive_detection_threshold"
+                      step={0.05}
+                      value={draft.adaptive_detection_threshold}
+                      disabled={disabled}
+                      onChange={(v) => setNumber("adaptive_detection_threshold", v, false)}
+                    />
+                  )}
+                  {usesPromptInjection && (
+                    <>
+                      <NumberField
+                        label="LLM-backed agents"
+                        hint="real_agent_count · 0–20"
+                        value={draft.real_agent_count}
+                        disabled={disabled}
+                        onChange={(v) => setNumber("real_agent_count", v)}
+                      />
+                      <SelectField
+                        label="Model provider"
+                        hint="model_provider"
+                        value={draft.model_provider}
+                        disabled={disabled || draft.real_agent_count === 0}
+                        onChange={(v) => set("model_provider", v)}
+                        options={[
+                          { value: "mock", label: "Mock (deterministic)" },
+                          { value: "vllm", label: "vLLM endpoint" },
+                        ]}
+                      />
+                    </>
+                  )}
+                  {usesSentinelCompromise && (
+                    <NumberField
+                      label="Sentinel-subversion rate"
+                      hint="sentinel_compromise_rate"
+                      step={0.01}
+                      value={draft.sentinel_compromise_rate}
+                      disabled={disabled}
+                      onChange={(v) => setNumber("sentinel_compromise_rate", v, false)}
+                    />
+                  )}
+                  {usesAttestation && (
+                    <NumberField
+                      label="Attestation-replay rate"
+                      hint="attestation_replay_rate"
+                      step={0.01}
+                      value={draft.attestation_replay_rate}
+                      disabled={disabled}
+                      onChange={(v) => setNumber("attestation_replay_rate", v, false)}
+                    />
+                  )}
+                  {usesCollusion && (
+                    <NumberField
+                      label="Collusion rate"
+                      hint="byzantine_collusion_rate"
+                      step={0.01}
+                      value={draft.byzantine_collusion_rate}
+                      disabled={disabled}
+                      onChange={(v) => setNumber("byzantine_collusion_rate", v, false)}
+                    />
+                  )}
+                </div>
+              </>
+            )}
+
+            <PanelDivider label="Defense tuning" />
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <NumberField
+                label="Detector sensitivity"
+                hint="detector_sensitivity · 0–1"
+                step={0.05}
+                value={draft.detector_sensitivity}
+                disabled={disabled || !draft.defense_enabled}
+                onChange={(v) => setNumber("detector_sensitivity", v, false)}
+              />
+              <NumberField
+                label="False-quarantine rate"
+                hint="false_quarantine_rate · subverted authority"
+                step={0.01}
+                value={draft.false_quarantine_rate}
+                disabled={disabled}
+                onChange={(v) => setNumber("false_quarantine_rate", v, false)}
+              />
+            </div>
           </div>
         )}
 
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-          <p className="text-2xs text-fg-subtle">
-            Backend <span className="font-mono">Field(...)</span> bounds are the source of truth;
-            these inputs mirror them for convenience and the backend re-validates every value.
-          </p>
+        <div className="mt-5 flex flex-wrap items-center justify-end gap-3 border-t border-line pt-4">
+          {footnote && <p className="mr-auto text-2xs text-fg-subtle">{footnote}</p>}
           <Button type="submit" variant="primary" disabled={disabled}>
             {submitLabel}
           </Button>
@@ -410,6 +406,25 @@ export function RunConfigurator({
       </form>
     </Panel>
   );
+}
+
+/** What "Advanced settings" holds, in one line, so a closed section hides
+ * nothing that changes the run without saying so. */
+function advancedSummary(config: ExperimentConfig): string {
+  const surface = [
+    [config.tool_count, "tools"],
+    [config.credential_count, "credentials"],
+    [config.resource_count, "resources"],
+    [config.sentinel_count, "sentinels"],
+  ] as const;
+  const declared = surface.filter(([count]) => count > 0);
+  return [
+    declared.length > 0
+      ? declared.map(([count, noun]) => `${count} ${noun}`).join(" · ")
+      : "agent mesh only",
+    `edge density ${config.edge_density}`,
+    `${config.max_ticks} ticks`,
+  ].join(" · ");
 }
 
 /** True when every field a preset sets has that value in `config`. */

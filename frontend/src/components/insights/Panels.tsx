@@ -11,7 +11,6 @@ import { summarizeNonAgentNodes } from "@/lib/security/summary";
 import {
   SECURITY_STATE_LABEL,
   SECURITY_STATE_SEVERITY,
-  SEVERITY_SURFACE,
   type SecurityState,
 } from "@/lib/severity";
 import type { selectMetrics } from "@/lib/stream/reducer";
@@ -19,14 +18,9 @@ import { nodeTypeMeta } from "@/lib/vocabulary";
 
 type StreamMetrics = ReturnType<typeof selectMetrics>;
 
-/** Typed non-agent nodes: what else the attacker can reach besides agents. */
-export function AttackSurfacePanel({
-  graph,
-  onSelectNode,
-}: {
-  graph: SecurityGraphView | null;
-  onSelectNode?: (nodeId: string) => void;
-}) {
+/** Typed non-agent nodes: what else the attacker took besides agents. One row
+ * per type; which nodes were taken is on hover, not a chip per node. */
+export function AttackSurfacePanel({ graph }: { graph: SecurityGraphView | null }) {
   const summary = graph ? summarizeNonAgentNodes(graph) : [];
 
   if (summary.length === 0) {
@@ -44,9 +38,12 @@ export function AttackSurfacePanel({
       {summary.map(({ nodeType, total, compromised }) => {
         const meta = nodeTypeMeta(nodeType);
         const severity = compromised > 0 ? "critical" : "ok";
-        const nodes = graph?.nodes.filter((n) => n.node_type === nodeType) ?? [];
+        const taken =
+          graph?.nodes
+            .filter((n) => n.node_type === nodeType && n.security_state === "compromised")
+            .map((n) => n.id) ?? [];
         return (
-          <div key={nodeType}>
+          <div key={nodeType} title={taken.length > 0 ? `Compromised: ${taken.join(", ")}` : undefined}>
             <div className="flex items-baseline gap-2">
               <ShapeGlyph shape={nodeShape(nodeType)} className="shrink-0 text-fg-subtle" />
               <span className="text-xs font-medium text-fg">{meta.plural}</span>
@@ -63,28 +60,6 @@ export function AttackSurfacePanel({
               fraction={total > 0 ? compromised / total : 0}
               severity={severity}
             />
-            {compromised > 0 && (
-              <ul className="mt-1.5 flex flex-wrap gap-1">
-                {nodes
-                  .filter((n) => n.security_state === "compromised")
-                  .map((node) => (
-                    <li key={node.id}>
-                      <button
-                        type="button"
-                        disabled={!onSelectNode}
-                        onClick={() => onSelectNode?.(node.id)}
-                        className={cn(
-                          "flex h-5 items-center gap-1.5 rounded-xs border px-1.5 font-mono text-2xs text-fg",
-                          SEVERITY_SURFACE.critical,
-                          onSelectNode && "transition-colors hover:border-critical",
-                        )}
-                      >
-                        {node.id}
-                      </button>
-                    </li>
-                  ))}
-              </ul>
-            )}
           </div>
         );
       })}

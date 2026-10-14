@@ -2,11 +2,10 @@
 
 import type { Dispatch } from "react";
 
-import { Button, SegmentedControl } from "@/components/ui/Button";
+import { SpeedSelect } from "@/components/run/SpeedSelect";
+import { Button } from "@/components/ui/Button";
 import { IconPause, IconPlay, IconRestart } from "@/components/ui/icons";
 import type { ReplayControlAction, ReplayControlState } from "@/lib/replay/controlReducer";
-
-const SPEED_OPTIONS = [0.25, 0.5, 1, 2, 4, 8] as const;
 
 /**
  * Replay transport. Visually mirrors the live run-context bar, but wired to
@@ -62,11 +61,10 @@ export function ReplayTransport({
         Restart
       </Button>
 
-      <SegmentedControl
+      <SpeedSelect
         ariaLabel="Replay speed"
         value={control.speed}
         onChange={(speed) => dispatch({ type: "set_speed", speed })}
-        options={SPEED_OPTIONS.map((m) => ({ value: m, label: `${m}×` }))}
       />
 
       <div className="relative flex min-w-48 flex-1 items-center">

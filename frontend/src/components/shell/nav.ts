@@ -62,11 +62,6 @@ export function nextStep(href: string): WorkflowStep | null {
   return WORKFLOW[workflowStep(href).step] ?? null;
 }
 
-/** "Step 2 of 4" — the eyebrow every workflow screen opens with. */
-export function stepLabel(href: string): string {
-  return `Step ${workflowStep(href).step} of ${WORKFLOW.length}`;
-}
-
 /** Prefix match so `/history/<id>` still highlights "Runs". */
 export function isActivePath(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);

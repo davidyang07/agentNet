@@ -3,14 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { Badge, ConfigChip, RunStatusBadge } from "@/components/ui/Badge";
-import { Button, SegmentedControl } from "@/components/ui/Button";
+import { SpeedSelect } from "@/components/run/SpeedSelect";
+import { Badge, RunStatusBadge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { BrandMark, IconPause, IconPlay, IconRestart } from "@/components/ui/icons";
 import { Spinner } from "@/components/ui/States";
 import { useExperiment } from "@/lib/experiment/ExperimentProvider";
 import { shortId } from "@/lib/format";
-
-const SPEED_OPTIONS = [0.25, 0.5, 1, 2, 4, 8] as const;
 
 /**
  * Always-visible answer to "what am I looking at, and is it still moving?".
@@ -74,12 +73,6 @@ export function RunContextBar() {
               </span>
             </div>
 
-            <div className="hidden items-center gap-1.5 xl:flex">
-              <ConfigChip label="seed" value={config.seed} />
-              <ConfigChip label="agents" value={config.node_count} />
-              <ConfigChip label="defense" value={config.defense_enabled ? "on" : "off"} />
-            </div>
-
             <div className="ml-auto flex items-center gap-2">
               {control.status === "paused" ? (
                 <Button size="sm" onClick={resume} disabled={!canResume}>
@@ -101,22 +94,17 @@ export function RunContextBar() {
                 <IconRestart className="size-3.5" />
                 Re-run
               </Button>
-              <SegmentedControl
-                ariaLabel="Playback speed"
+              <SpeedSelect
                 value={control.speed}
                 disabled={!canSetSpeed}
                 onChange={changeSpeed}
-                options={SPEED_OPTIONS.map((m) => ({ value: m, label: `${m}×` }))}
-                className="hidden sm:inline-flex"
+                className="hidden sm:block"
               />
             </div>
           </>
         ) : (
           <>
             <Badge severity="neutral">No active assessment</Badge>
-            <span className="hidden text-xs text-fg-subtle sm:inline">
-              Configure a system and launch a run to begin.
-            </span>
             {pathname !== "/setup" && (
               <div className="ml-auto">
                 <Link

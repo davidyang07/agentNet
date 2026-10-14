@@ -21,10 +21,10 @@ The landing page at `/` is one screen: what AgentShield does, the four steps, an
 
 | Step | Screen | What it answers |
 |---|---|---|
-| 1 | **Set up** (`/setup`) | What are we testing? Pick a preset or describe the system and the attacks, then launch — the run opens in Watch. |
+| 1 | **Set up** (`/setup`) | What are we testing? Pick a preset, or set agents, seed, attacks and defense — tuning parameters sit under Advanced settings. The run opens in Watch. |
 | 2 | **Watch** (`/watch`) | What is happening? The typed security graph coloured by compromise, the outbreak curve under it, and live events beside it. Select a node to trace it back to patient zero, or trace an attack path between two nodes. |
-| 3 | **Results** (`/results`) | How bad was it, and what did the defense cost? Four headline numbers, every metric with its definition, the attack surface and the choke points. |
-| 4 | **Fix & re-test** (`/fix`) | What should change, and does it work? Findings as config changes, each re-tested before → after from the same seed — plus a defense on vs off check. |
+| 3 | **Results** (`/results`) | How bad was it, and what did the defense cost? Four headline numbers, then the other metrics (definitions on demand), the attack surface and the top choke points — one screen. |
+| 4 | **Fix & re-test** (`/fix`) | What should change, and does it work? Findings as config changes, each re-tested before → after from the same seed and listing only the metrics that moved — plus a defense on vs off check. |
 | — | **Runs** (`/history`) | Everything ever run: a filterable table, deterministic replay, and comparison of any two persisted runs. |
 
 ![Watch — the security graph, outbreak curve and live events](docs/screenshots/watch.jpg)
@@ -32,15 +32,16 @@ The landing page at `/` is one screen: what AgentShield does, the four steps, an
 *Watch: colour is security state, shape and size are node type. Selecting a node traces its
 compromise chain back to patient zero and lists what it can reach.*
 
-![Results — headline numbers and every metric with its definition](docs/screenshots/results.jpg)
+![Results — headline numbers, the other metrics, attack surface and choke points](docs/screenshots/results.jpg)
 
-*Results: the four headline numbers, then every metric with the definition the backend computes
-it from.*
+*Results: the four headline numbers, then the other metrics, what the attacker took, and where
+containing it matters most. **Definitions** shows the formula the backend computes each metric
+from; **Run details** shows the seed and configuration that reproduce every number.*
 
 ![Fix & re-test — a finding and its validated before/after](docs/screenshots/fix.jpg)
 
 *Fix & re-test: each finding is a before → after config change, and **Validate fix** runs both to
-completion and reports the per-metric delta — including when a fix makes something else worse.*
+completion and lists every metric that moved — including when a fix makes something else worse.*
 
 Colour is reserved for security state and finding severity, never decoration; node **type** is
 carried by shape and size, so a compromised sentinel and a compromised agent stay distinguishable.

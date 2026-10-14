@@ -101,10 +101,6 @@ export function GraphLegend({
           </li>
         ))}
       </ul>
-
-      <p className="ml-auto hidden text-2xs text-fg-subtle xl:block">
-        Colour is security state; shape and size are node type. LLM-backed agents render larger.
-      </p>
     </div>
   );
 }

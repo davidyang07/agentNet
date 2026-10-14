@@ -58,8 +58,7 @@ export function FindingsList({
               </p>
             </div>
 
-            <div className="ml-8 flex flex-col gap-1.5">
-              <p className="eyebrow">Proposed change</p>
+            <div className="ml-8">
               <ul className="flex flex-col gap-1">
                 {Object.entries(diff).map(([key, value]) => {
                   const current = baseConfig
@@ -95,12 +94,10 @@ export function FindingsList({
                   variant="primary"
                   disabled={disabled || busy || !baseConfig}
                   onClick={() => onValidate(diff)}
+                  title="Runs the current config and the patched config to completion, then compares them"
                 >
                   {busy ? "Re-testing…" : "Validate fix"}
                 </Button>
-                <span className="text-2xs text-fg-subtle">
-                  Runs the current config and the patched config to completion, then compares them.
-                </span>
               </div>
             )}
           </li>
