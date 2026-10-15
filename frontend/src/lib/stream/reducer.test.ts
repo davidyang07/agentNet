@@ -273,6 +273,81 @@ describe("detection", () => {
   });
 });
 
+describe("graduated response", () => {
+  function detect(seq: number, agentId: string, response: "suspicious" | "quarantine") {
+    return evFrame(
+      event({
+        event_type: "ANOMALY_DETECTED",
+        sim_tick: seq,
+        seq,
+        agent_id: agentId,
+        metadata: { sensitivity: 0.5, response },
+      }),
+    );
+  }
+
+  it("flags an infected agent suspicious and still counts it as compromised", () => {
+    let state = reduce(
+      initialGraphState,
+      snapshot({ nodes: [node("agent-000"), { ...node("agent-001", "compromised"), tick_compromised: 0 }] }),
+    );
+    state = reduce(state, detect(1, "agent-001", "suspicious"));
+
+    expect(state.nodes.get("agent-001")?.security_state).toBe("suspicious");
+    expect(selectMetrics(state)).toMatchObject({
+      compromised: 1,
+      healthy: 1,
+      suspicious: 1,
+      total: 2,
+    });
+  });
+
+  it("counts a flagged agent that was never infected (a false positive) as healthy", () => {
+    let state = reduce(initialGraphState, snapshot());
+    state = reduce(state, detect(1, "agent-000", "suspicious"));
+
+    expect(state.nodes.get("agent-000")?.security_state).toBe("suspicious");
+    expect(selectMetrics(state)).toMatchObject({ compromised: 0, healthy: 2, suspicious: 1 });
+  });
+
+  it("restores the state an AGENT_RELEASED event names", () => {
+    let state = reduce(
+      initialGraphState,
+      snapshot({ nodes: [node("agent-000"), { ...node("agent-001", "compromised"), tick_compromised: 0 }] }),
+    );
+    state = reduce(state, detect(1, "agent-000", "suspicious"));
+    state = reduce(state, detect(2, "agent-001", "suspicious"));
+    for (const [seq, agentId, to] of [
+      [3, "agent-000", "healthy"],
+      [4, "agent-001", "compromised"],
+    ] as const) {
+      state = reduce(
+        state,
+        evFrame(
+          event({
+            event_type: "AGENT_RELEASED",
+            sim_tick: seq,
+            seq,
+            agent_id: agentId,
+            metadata: { from: "suspicious", to },
+          }),
+        ),
+      );
+    }
+
+    expect(state.nodes.get("agent-000")?.security_state).toBe("healthy");
+    expect(state.nodes.get("agent-001")?.security_state).toBe("compromised");
+    expect(selectMetrics(state).suspicious).toBe(0);
+  });
+
+  it("leaves a quarantine-response detection to the AGENT_QUARANTINED event that follows", () => {
+    let state = reduce(initialGraphState, snapshot());
+    state = reduce(state, detect(1, "agent-000", "quarantine"));
+
+    expect(state.nodes.get("agent-000")?.security_state).toBe("healthy");
+  });
+});
+
 describe("quarantine", () => {
   it("moves the node from compromised to quarantined via agent_id and updates derived metrics", () => {
     let state = reduce(initialGraphState, snapshot());

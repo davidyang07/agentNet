@@ -1399,6 +1399,26 @@ Inputs, beyond the user's own goals for the redesign:
 - **Density:** each screen shows the answer to its question; definitions, tuning parameters, the
   full configuration and unchanged metrics open on demand. Set up keeps preset, agents, seed,
   scenarios and defense in view, with the rest under Advanced settings.
+- **Phase C in the console** (the "new backend concepts" above):
+  - Set up exposes every Phase C field under Advanced settings, and an **Immune memory** preset —
+    the agentshield gate's canonical immunity case at the API's 100-agent cap (seed 42: R0 0.5,
+    final size 0.02; with no coverage, 3.3 and 1.0).
+  - Results shows R(t) from `/epidemic` and the epidemic metrics (immune-memory and strain metrics
+    only when those features are on); before/after tables include them.
+  - Watch renders `SUSPICIOUS` and releases from events (flagged agents count as compromised or
+    healthy, as the backend's metrics do), and backfills the outbreak curve from `/epidemic`
+    prevalence, closing "the outbreak curve resets on navigation".
+- **Fixed from the defect list:** fix-trial and defense-check runs are cancellable and stop on
+  unmount (their backend runs are stopped, not left polling); render errors fall back to an
+  error boundary inside the console shell; replay shows the version-mismatch header.
+- **Run origin (backend, additive):** migration 0002 adds `experiments.origin` (`assessment`,
+  `fix_trial`, `defense_check`; existing rows are `assessment`). `POST /api/experiments?origin=`
+  records it, the list returns and filters on it, and Runs hides re-test runs by default.
+- **Not addressed yet** (unverified since the review): duplicate sockets on a sequence-gap
+  reconnect; re-run remounting every page;
+  the provenance panel's staleness; 422/409 messages, `reason: error` stops and observe-only runs
+  in the UI. Blast radius is reachability only, so it ignores immune memory: an immune-memory
+  run can hold R below 1 and still report a blast radius of 1.0.
 - **Landing page (`/`):** a standalone, one-screen page outside the console shell: what the tool
   does, a screenshot of Watch, the four steps in one line each, the simulation disclaimer, and a
   link to Set up — or back to the active run when there is one.

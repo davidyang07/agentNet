@@ -6,7 +6,7 @@ import { RunConfigurator } from "@/components/run/RunConfigurator";
 import { PageHeader } from "@/components/shell/AppShell";
 import { Spinner } from "@/components/ui/States";
 import { useExperiment } from "@/lib/experiment/ExperimentProvider";
-import { DEFAULT_CONFIG } from "@/lib/experiment/presets";
+import { PRESETS } from "@/lib/experiment/presets";
 
 /**
  * Step 1: describe the system under test and the attacks, then launch. This
@@ -37,7 +37,7 @@ export default function SetupPage() {
       <div className="p-4 lg:p-5">
         <RunConfigurator
           disabled={!canStart}
-          initialConfig={config ?? DEFAULT_CONFIG}
+          initialConfig={config ?? PRESETS[0].config}
           submitLabel={runId ? "Launch new assessment" : "Launch assessment"}
           footnote={
             runId &&

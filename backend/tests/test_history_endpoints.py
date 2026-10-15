@@ -35,14 +35,14 @@ def _make_runner(**overrides) -> ExperimentRunner:
 
 
 async def _persist_completed_run(
-    pool, runner: ExperimentRunner | None = None, **config_overrides
+    pool, runner: ExperimentRunner | None = None, origin: str = "assessment", **config_overrides
 ) -> ExperimentRunner:
     if runner is None:
         runner = _make_runner(**config_overrides)
     # Mirrors the exact production call site in routes_experiments.py --
     # writer_registry.add() happens at the call site, not inside
     # PostgresWriter itself.
-    writer = PostgresWriter(pool, runner.experiment_id, runner.bus, runner)
+    writer = PostgresWriter(pool, runner.experiment_id, runner.bus, runner, origin=origin)
     await writer.start()
     writer_registry.add(runner.experiment_id, writer)
     await runner.publish_initial()
@@ -246,6 +246,70 @@ def test_list_filters_and_paginates_by_status_and_defense_enabled():
                 assert next_id != body["items"][0]["experiment_id"]
     finally:
         asyncio.run(_cleanup(on_runner.experiment_id, off_runner.experiment_id))
+
+
+def test_list_reports_and_filters_by_origin():
+    async def setup() -> list[ExperimentRunner]:
+        pool = await create_pool(TEST_SETTINGS)
+        try:
+            return [
+                await _persist_completed_run(pool, seed=11),
+                await _persist_completed_run(pool, origin="fix_trial", seed=12),
+                await _persist_completed_run(pool, origin="defense_check", seed=13),
+            ]
+        finally:
+            await pool.close()
+
+    runners = asyncio.run(setup())
+    ids = [str(r.experiment_id) for r in runners]
+    try:
+        with TestClient(app) as client:
+            resp = client.get("/api/experiments", params={"limit": 100})
+            assert resp.status_code == 200
+            origin_of = {item["experiment_id"]: item["origin"] for item in resp.json()["items"]}
+            assert [origin_of[i] for i in ids] == ["assessment", "fix_trial", "defense_check"]
+
+            resp = client.get("/api/experiments", params={"origin": "assessment", "limit": 100})
+            listed = {item["experiment_id"] for item in resp.json()["items"]}
+            assert ids[0] in listed
+            assert ids[1] not in listed and ids[2] not in listed
+
+            resp = client.get("/api/experiments", params={"origin": "fix_trial", "limit": 100})
+            assert {item["origin"] for item in resp.json()["items"]} == {"fix_trial"}
+
+            detail = client.get(f"/api/experiments/{ids[2]}/detail").json()
+            assert detail["origin"] == "defense_check"
+
+            assert client.get("/api/experiments", params={"origin": "bogus"}).status_code == 422
+    finally:
+        asyncio.run(_cleanup(*(r.experiment_id for r in runners)))
+
+
+def test_create_experiment_records_origin_and_rejects_unknown_values():
+    config = {"seed": 21, "node_count": 25, "max_ticks": 1}
+    created: list[str] = []
+    try:
+        with TestClient(app) as client:
+            resp = client.post("/api/experiments", params={"origin": "fix_trial"}, json=config)
+            assert resp.status_code == 201
+            created.append(resp.json()["experiment_id"])
+            detail = client.get(f"/api/experiments/{created[0]}/detail")
+            assert detail.json()["origin"] == "fix_trial"
+
+            # Omitted, a run is an assessment -- what every caller sent before.
+            resp = client.post("/api/experiments", json=config)
+            assert resp.status_code == 201
+            created.append(resp.json()["experiment_id"])
+            detail = client.get(f"/api/experiments/{created[1]}/detail")
+            assert detail.json()["origin"] == "assessment"
+
+            resp = client.post("/api/experiments", params={"origin": "bogus"}, json=config)
+            assert resp.status_code == 422
+
+            for experiment_id in created:
+                client.post(f"/api/experiments/{experiment_id}/stop")
+    finally:
+        asyncio.run(_cleanup(*(uuid.UUID(i) for i in created)))
 
 
 def test_history_endpoints_404_for_unknown_experiment():

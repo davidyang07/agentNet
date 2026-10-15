@@ -1,7 +1,7 @@
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.config import get_settings
 from app.gateway.factory import build_gateway
@@ -10,7 +10,7 @@ from app.orchestrator.runner import ExperimentRunner, InvalidTransitionError
 from app.persistence.registry import writer_registry
 from app.persistence.writer import PostgresWriter
 from app.scenarios.registry import active_scenarios_error
-from app.schemas.experiment import ExperimentConfig, ExperimentSummary, SpeedRequest
+from app.schemas.experiment import ExperimentConfig, ExperimentSummary, RunOrigin, SpeedRequest
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,14 @@ router = APIRouter(prefix="/api/experiments", tags=["experiments"])
 
 
 @router.post("", response_model=ExperimentSummary, status_code=201)
-async def create_experiment(config: ExperimentConfig, request: Request) -> ExperimentSummary:
+async def create_experiment(
+    config: ExperimentConfig,
+    request: Request,
+    origin: RunOrigin = Query(
+        "assessment",
+        description="Why the run exists; recorded for history only, never affects the simulation.",
+    ),
+) -> ExperimentSummary:
     # Checked here rather than on ExperimentConfig, so configs persisted
     # before this check still load for history/replay.
     scenarios_error = active_scenarios_error(config.active_scenarios)
@@ -52,7 +59,7 @@ async def create_experiment(config: ExperimentConfig, request: Request) -> Exper
     # experiment.
     pool = getattr(request.app.state, "pg_pool", None)
     if pool is not None:
-        writer = PostgresWriter(pool, runner.experiment_id, runner.bus, runner)
+        writer = PostgresWriter(pool, runner.experiment_id, runner.bus, runner, origin=origin)
         try:
             await writer.start()
         except Exception:

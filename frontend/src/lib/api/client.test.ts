@@ -108,6 +108,22 @@ describe("api client", () => {
     expect(JSON.parse(init?.body as string)).toEqual(CONFIG);
   });
 
+  it("createExperiment records a re-test run's origin as a query param", async () => {
+    fetchMock.mockResolvedValueOnce(okResponse({ experiment_id: "a", status: "running" }));
+    await createExperiment(CONFIG, "fix_trial");
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toMatch(/\/api\/experiments\?origin=fix_trial$/);
+    // Origin is history metadata, never part of the reproducible config.
+    expect(JSON.parse(init?.body as string)).toEqual(CONFIG);
+  });
+
+  it("listExperiments filters by origin", async () => {
+    fetchMock.mockResolvedValueOnce(okResponse({ items: [], next_cursor: null }));
+    await listExperiments({ origin: "assessment" });
+    const url = new URL(String(fetchMock.mock.calls[0][0]));
+    expect(url.searchParams.get("origin")).toBe("assessment");
+  });
+
   it("createExperiment throws on non-ok response", async () => {
     fetchMock.mockResolvedValueOnce(errResponse(422));
     await expect(createExperiment(CONFIG)).rejects.toThrow("422");

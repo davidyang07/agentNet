@@ -7,7 +7,9 @@ import {
   CriticalNodesPanel,
   ObservedCountersPanel,
 } from "@/components/insights/Panels";
+import { ReproductionChart } from "@/components/insights/ReproductionChart";
 import {
+  EPIDEMIC_METRIC_DESCRIPTORS,
   MetricsList,
   PostureTiles,
   SECONDARY_METRIC_KEYS,
@@ -42,6 +44,8 @@ const PROVENANCE_FIELDS = [
 // The top few are the actionable ones; the rest of the ranking is noise here.
 const CHOKE_POINTS_SHOWN = 5;
 
+const EPIDEMIC_KEYS = EPIDEMIC_METRIC_DESCRIPTORS.map((d) => d.key);
+
 export default function ResultsPage() {
   return (
     <RequiresRun
@@ -54,9 +58,10 @@ export default function ResultsPage() {
 }
 
 /**
- * Step 3: the verdict. The four headline numbers, then the rest of the
- * metrics, what the attacker took, and where containing it matters most —
- * one row. Definitions and the run's provenance open on demand.
+ * Step 3: the verdict. The four headline numbers; the outbreak as an
+ * epidemic (R(t), and the numbers read from the infection tree); then the
+ * rest of the metrics, what the attacker took, and where containing it
+ * matters most. Definitions and the run's provenance open on demand.
  */
 function ResultsContent({ experimentId }: { experimentId: string }) {
   const { control, stream } = useExperiment();
@@ -64,6 +69,7 @@ function ResultsContent({ experimentId }: { experimentId: string }) {
   const counters = useMemo(() => selectMetrics(stream), [stream]);
   const config = control.activeConfig;
   const [showDefinitions, setShowDefinitions] = useState(false);
+  const [showEpidemicDefinitions, setShowEpidemicDefinitions] = useState(false);
   const [showRunDetails, setShowRunDetails] = useState(false);
 
   return (
@@ -84,6 +90,45 @@ function ResultsContent({ experimentId }: { experimentId: string }) {
             <StatListSkeleton rows={2} />
           </Panel>
         )}
+
+        <div className="grid gap-4 xl:grid-cols-3">
+          <Panel className="xl:col-span-2">
+            <PanelHeader
+              title="Reproduction number, R(t)"
+              description="How many agents each infection went on to infect, by the tick it happened. Below 1, the outbreak is dying out."
+            />
+            <div className="h-52">
+              {insights.epidemic ? (
+                <ReproductionChart points={insights.epidemic.r_effective} />
+              ) : (
+                <StatListSkeleton rows={3} />
+              )}
+            </div>
+          </Panel>
+          <Panel>
+            <PanelHeader
+              title="Epidemic"
+              actions={
+                <DisclosureButton
+                  open={showEpidemicDefinitions}
+                  onToggle={() => setShowEpidemicDefinitions((v) => !v)}
+                >
+                  Definitions
+                </DisclosureButton>
+              }
+            />
+            {insights.metrics ? (
+              <MetricsList
+                metrics={insights.metrics}
+                keys={EPIDEMIC_KEYS}
+                withDefinitions={showEpidemicDefinitions}
+                skipMissing
+              />
+            ) : (
+              <StatListSkeleton rows={5} />
+            )}
+          </Panel>
+        </div>
 
         <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
           <Panel>

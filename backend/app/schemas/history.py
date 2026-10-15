@@ -9,7 +9,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from app.schemas.events import Event
-from app.schemas.experiment import ExperimentConfig
+from app.schemas.experiment import ExperimentConfig, RunOrigin
 
 
 class ExperimentListItem(BaseModel):
@@ -25,6 +25,7 @@ class ExperimentListItem(BaseModel):
     # False means the run finished/stopped but a batch failed somewhere
     # mid-run -- never inferred from final_status alone.
     is_complete: bool | None
+    origin: RunOrigin
 
 
 class ExperimentListResponse(BaseModel):

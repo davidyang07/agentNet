@@ -27,7 +27,7 @@ from app.orchestrator.registry import registry
 from app.remediation.analyze import recommend
 from app.schemas.epidemic import EpidemicResponse
 from app.schemas.events import INCIDENT_EVENT_TYPES, Event
-from app.schemas.experiment import EdgeView, ExperimentConfig, NodeView
+from app.schemas.experiment import EdgeView, ExperimentConfig, NodeView, RunOrigin
 from app.schemas.frames import SnapshotFrame
 from app.schemas.graph import (
     AttackPathsResponse,
@@ -63,7 +63,7 @@ REPLAY_VERSION_HEADER = "X-Replay-Version-Mismatch"
 
 _LIST_COLUMNS = (
     "experiment_id, seed, config, created_at, final_status, "
-    "final_sim_tick, final_last_seq, is_complete"
+    "final_sim_tick, final_last_seq, is_complete, origin"
 )
 
 
@@ -100,6 +100,7 @@ def _row_to_list_item(row: asyncpg.Record) -> ExperimentListItem:
         final_sim_tick=row["final_sim_tick"],
         final_last_seq=row["final_last_seq"],
         is_complete=row["is_complete"],
+        origin=row["origin"],
     )
 
 
@@ -133,6 +134,7 @@ async def list_experiments(
     request: Request,
     status: Literal["finished", "stopped", "incomplete"] | None = None,
     defense_enabled: bool | None = None,
+    origin: RunOrigin | None = None,
     limit: int = Query(DEFAULT_LIST_LIMIT, ge=1, le=MAX_LIST_LIMIT),
     cursor: str | None = None,
 ) -> ExperimentListResponse:
@@ -149,6 +151,10 @@ async def list_experiments(
     if defense_enabled is not None:
         params.append(defense_enabled)
         where_clauses.append(f"defense_enabled = ${len(params)}")
+
+    if origin is not None:
+        params.append(origin)
+        where_clauses.append(f"origin = ${len(params)}")
 
     if cursor is not None:
         created_at, experiment_id = _decode_cursor(cursor)

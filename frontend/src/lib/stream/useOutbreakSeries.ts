@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import type { EpidemicResponse } from "@/lib/api/client";
 import { selectMetrics, type GraphState } from "@/lib/stream/reducer";
 
 export type OutbreakSample = {
@@ -17,13 +18,18 @@ export type OutbreakSample = {
 const MAX_SAMPLES = 2000;
 
 /**
- * Samples the fleet's security-state split once per simulated tick.
+ * Samples the fleet's security-state split once per simulated tick, from the
+ * stream the screen is already consuming.
  *
- * The backend exposes only the *current* state, so an outbreak curve has to be
- * accumulated client-side from the stream the dashboard is already consuming —
- * no new endpoint, no extra requests.
+ * A screen opened mid-run (or after it) only sees the ticks streamed while it
+ * was open. `history` — the backend's per-tick prevalence, from the epidemic
+ * endpoint — fills in the ticks before the first streamed sample, so the
+ * curve always starts at tick 0.
  */
-export function useOutbreakSeries(state: GraphState): OutbreakSample[] {
+export function useOutbreakSeries(
+  state: GraphState,
+  history?: EpidemicResponse["prevalence"] | null,
+): OutbreakSample[] {
   const [series, setSeries] = useState<OutbreakSample[]>([]);
   const lastTick = useRef(-1);
   const experimentId = useRef<string | null>(null);
@@ -55,5 +61,30 @@ export function useOutbreakSeries(state: GraphState): OutbreakSample[] {
     });
   }, [state]);
 
-  return series;
+  const total = state.nodes.size;
+  return useMemo(() => withHistory(series, history, total), [series, history, total]);
+}
+
+/**
+ * Prepends the backend's prevalence for every tick before the first streamed
+ * sample. Streamed samples always win where both exist: they are what this
+ * screen's graph is showing.
+ */
+export function withHistory(
+  series: OutbreakSample[],
+  history: EpidemicResponse["prevalence"] | null | undefined,
+  total: number,
+): OutbreakSample[] {
+  if (!history || history.length === 0 || total === 0) return series;
+  const firstStreamed = series[0]?.tick ?? Infinity;
+  const earlier = history
+    .filter((point) => point.tick < firstStreamed)
+    .map((point) => ({
+      tick: point.tick,
+      compromised: point.infectious,
+      quarantined: point.quarantined,
+      healthy: Math.max(0, total - point.infectious - point.quarantined),
+      total,
+    }));
+  return earlier.length > 0 ? [...earlier, ...series] : series;
 }

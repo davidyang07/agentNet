@@ -15,12 +15,21 @@ export type CriticalNodeView = components["schemas"]["CriticalNodeView"];
 export type ProvenanceResponse = components["schemas"]["ProvenanceResponse"];
 export type MetricsResponse = components["schemas"]["MetricsResponse"];
 export type RemediationResponse = components["schemas"]["RemediationResponse"];
+export type EpidemicResponse = components["schemas"]["EpidemicResponse"];
+/** Why a run exists: launched by the operator, or one arm of a re-test the
+ * console runs on their behalf. Recorded for history only. */
+export type RunOrigin = ExperimentListItem["origin"];
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
 const BACKEND_WS_URL = process.env.NEXT_PUBLIC_BACKEND_WS_URL ?? "ws://localhost:8000";
 
-export async function createExperiment(config: ExperimentConfig): Promise<ExperimentSummary> {
-  const res = await fetch(`${BACKEND_URL}/api/experiments`, {
+export async function createExperiment(
+  config: ExperimentConfig,
+  origin: RunOrigin = "assessment",
+): Promise<ExperimentSummary> {
+  // An assessment is the backend's default, so only re-test runs say so.
+  const query = origin === "assessment" ? "" : `?origin=${origin}`;
+  const res = await fetch(`${BACKEND_URL}/api/experiments${query}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(config),
@@ -90,6 +99,7 @@ export function backendWsUrl(experimentId: string, sinceSeq?: number): string {
 export type ListExperimentsParams = {
   status?: "finished" | "stopped" | "incomplete";
   defenseEnabled?: boolean;
+  origin?: RunOrigin;
   limit?: number;
   cursor?: string;
 };
@@ -102,6 +112,7 @@ export async function listExperiments(
   if (params.defenseEnabled !== undefined) {
     url.searchParams.set("defense_enabled", String(params.defenseEnabled));
   }
+  if (params.origin) url.searchParams.set("origin", params.origin);
   if (params.limit !== undefined) url.searchParams.set("limit", String(params.limit));
   if (params.cursor) url.searchParams.set("cursor", params.cursor);
 
@@ -153,12 +164,27 @@ export function fetchIncidents(
   return fetchEventPage("incidents", experimentId, sinceSeq, limit);
 }
 
+// Set by the backend on a replay response when the run was recorded by a
+// different build, whose engine may not reproduce it exactly.
+const REPLAY_VERSION_HEADER = "X-Replay-Version-Mismatch";
+
 export async function fetchReplaySnapshot(experimentId: string): Promise<HistorySnapshotFrame> {
+  return (await fetchReplaySnapshotWithVersion(experimentId)).snapshot;
+}
+
+/** The replay snapshot, plus the backend's version-mismatch note (e.g.
+ * "recorded=abc; server=def") when the run was recorded by another build. */
+export async function fetchReplaySnapshotWithVersion(
+  experimentId: string,
+): Promise<{ snapshot: HistorySnapshotFrame; versionMismatch: string | null }> {
   const res = await fetch(`${BACKEND_URL}/api/experiments/${experimentId}/replay-snapshot`);
   if (!res.ok) {
     throw new Error(`failed to fetch replay snapshot: ${res.status}`);
   }
-  return res.json();
+  return {
+    snapshot: await res.json(),
+    versionMismatch: res.headers?.get(REPLAY_VERSION_HEADER) ?? null,
+  };
 }
 
 // Security graph + analysis (docs/PLAN.md §2.5/§8) -- live experiment only.
@@ -225,6 +251,16 @@ export async function getMetrics(experimentId: string): Promise<MetricsResponse>
   const res = await fetch(`${BACKEND_URL}/api/experiments/${experimentId}/metrics`);
   if (!res.ok) {
     throw new Error(`failed to get metrics: ${res.status}`);
+  }
+  return res.json();
+}
+
+/** The epidemic curve and infection tree: prevalence and R(t) per tick, and
+ * offspring per generation (docs/PLAN.md §14.4 C.1). */
+export async function getEpidemic(experimentId: string): Promise<EpidemicResponse> {
+  const res = await fetch(`${BACKEND_URL}/api/experiments/${experimentId}/epidemic`);
+  if (!res.ok) {
+    throw new Error(`failed to get epidemic: ${res.status}`);
   }
   return res.json();
 }
@@ -311,6 +347,14 @@ export async function getReplayMetrics(experimentId: string): Promise<MetricsRes
   const res = await fetch(`${BACKEND_URL}/api/experiments/${experimentId}/replay/metrics`);
   if (!res.ok) {
     throw new Error(`failed to get replay metrics: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getReplayEpidemic(experimentId: string): Promise<EpidemicResponse> {
+  const res = await fetch(`${BACKEND_URL}/api/experiments/${experimentId}/replay/epidemic`);
+  if (!res.ok) {
+    throw new Error(`failed to get replay epidemic: ${res.status}`);
   }
   return res.json();
 }

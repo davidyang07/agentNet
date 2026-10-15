@@ -3,8 +3,10 @@
 import { useState } from "react";
 
 import {
+  ALL_METRIC_DESCRIPTORS,
+  EPIDEMIC_METRIC_DESCRIPTORS,
+  betterDirection,
   formatMetric,
-  METRIC_DESCRIPTORS,
   metricSeverity,
   type MetricDescriptor,
 } from "@/components/insights/SecurityMetrics";
@@ -14,12 +16,12 @@ import { Td, TableWrap, Th, Tr } from "@/components/ui/Table";
 import { cn } from "@/lib/cn";
 import type { MetricsResponse } from "@/lib/api/client";
 
-/** Whether a *decrease* in this metric is an improvement. */
-function lowerIsBetter(descriptor: MetricDescriptor): boolean {
-  return descriptor.kind !== "health";
-}
+// Epidemic metrics are null for a feature a run doesn't use (no immune
+// memory, no strains); a row with no value on either side says nothing.
+const OPTIONAL_KEYS = new Set(EPIDEMIC_METRIC_DESCRIPTORS.map((d) => d.key));
 
-export type DeltaDirection = "better" | "worse" | "same" | "unknown";
+/** "changed" is a move in a metric where neither direction is better. */
+export type DeltaDirection = "better" | "worse" | "changed" | "same" | "unknown";
 
 export function deltaDirection(
   descriptor: MetricDescriptor,
@@ -28,8 +30,9 @@ export function deltaDirection(
 ): DeltaDirection {
   if (before === null || after === null) return "unknown";
   if (before === after) return "same";
-  const decreased = after < before;
-  return decreased === lowerIsBetter(descriptor) ? "better" : "worse";
+  const better = betterDirection(descriptor);
+  if (better === null) return "changed";
+  return after < before === (better === "lower") ? "better" : "worse";
 }
 
 function formatDelta(descriptor: MetricDescriptor, before: number | null, after: number | null) {
@@ -40,6 +43,8 @@ function formatDelta(descriptor: MetricDescriptor, before: number | null, after:
   const magnitude = Math.abs(diff);
   if (descriptor.kind === "count") return `${sign}${magnitude}`;
   if (descriptor.kind === "latency") return `${sign}${magnitude.toFixed(1)} ticks`;
+  if (descriptor.kind === "tick") return `${sign}${magnitude} ticks`;
+  if (descriptor.kind === "reproduction") return `${sign}${magnitude.toFixed(2)}`;
   return `${sign}${Math.round(magnitude * 100)} pts`;
 }
 
@@ -67,13 +72,16 @@ export function MetricsDeltaTable({
 }) {
   const [showUnchanged, setShowUnchanged] = useState(false);
 
-  const rows = METRIC_DESCRIPTORS.map((descriptor) => {
+  const rows = ALL_METRIC_DESCRIPTORS.map((descriptor) => {
     const rawBefore = before?.[descriptor.key];
     const rawAfter = after?.[descriptor.key];
     const beforeValue = typeof rawBefore === "number" ? rawBefore : null;
     const afterValue = typeof rawAfter === "number" ? rawAfter : null;
     return { descriptor, beforeValue, afterValue, changed: beforeValue !== afterValue };
-  });
+  }).filter(
+    (row) =>
+      !OPTIONAL_KEYS.has(row.descriptor.key) || row.beforeValue !== null || row.afterValue !== null,
+  );
   // Until both arms are in, every row stays so the table's shape is visible.
   const collapsing = collapseUnchanged && before !== null && after !== null;
   const unchanged = rows.filter((row) => !row.changed).length;

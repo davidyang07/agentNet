@@ -9,12 +9,25 @@ import { Button, ButtonLink, SegmentedControl } from "@/components/ui/Button";
 import { Panel } from "@/components/ui/Panel";
 import { Mono, TableWrap, Td, Th, Tr } from "@/components/ui/Table";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/States";
-import { listExperiments, type ExperimentListItem } from "@/lib/api/client";
+import { listExperiments, type ExperimentListItem, type RunOrigin } from "@/lib/api/client";
 import { formatTimestamp, shortId } from "@/lib/format";
 import { scenarioMeta } from "@/lib/vocabulary";
 
 type StatusFilter = "all" | "finished" | "stopped" | "incomplete";
 type DefenseFilter = "all" | "true" | "false";
+type ScopeFilter = "assessments" | "all";
+
+// Fix & re-test starts two runs per re-test; listing them by default would
+// bury the assessments an operator launched.
+const SCOPE_OPTIONS = [
+  { value: "assessments" as const, label: "Assessments" },
+  { value: "all" as const, label: "Include re-tests" },
+];
+
+const ORIGIN_LABEL: Record<Exclude<RunOrigin, "assessment">, string> = {
+  fix_trial: "Fix re-test",
+  defense_check: "Defense check",
+};
 
 const STATUS_OPTIONS = [
   { value: "all" as const, label: "All" },
@@ -29,10 +42,11 @@ const DEFENSE_OPTIONS = [
   { value: "false" as const, label: "Undefended" },
 ];
 
-function toListParams(status: StatusFilter, defenseEnabled: DefenseFilter) {
+function toListParams(status: StatusFilter, defenseEnabled: DefenseFilter, scope: ScopeFilter) {
   return {
     status: status === "all" ? undefined : status,
     defenseEnabled: defenseEnabled === "all" ? undefined : defenseEnabled === "true",
+    origin: scope === "assessments" ? ("assessment" as const) : undefined,
   };
 }
 
@@ -43,11 +57,13 @@ function toListParams(status: StatusFilter, defenseEnabled: DefenseFilter) {
 function HistoryList({
   status,
   defenseEnabled,
+  scope,
   selected,
   onToggleSelect,
 }: {
   status: StatusFilter;
   defenseEnabled: DefenseFilter;
+  scope: ScopeFilter;
   selected: string[];
   onToggleSelect: (id: string) => void;
 }) {
@@ -58,7 +74,7 @@ function HistoryList({
 
   useEffect(() => {
     let cancelled = false;
-    listExperiments(toListParams(status, defenseEnabled)).then(
+    listExperiments(toListParams(status, defenseEnabled, scope)).then(
       (resp) => {
         if (cancelled) return;
         setItems(resp.items);
@@ -84,7 +100,7 @@ function HistoryList({
     setLoading(true);
     try {
       const resp = await listExperiments({
-        ...toListParams(status, defenseEnabled),
+        ...toListParams(status, defenseEnabled, scope),
         cursor: nextCursor,
       });
       setItems((prev) => [...prev, ...resp.items]);
@@ -155,8 +171,13 @@ function HistoryList({
                     aria-label={`Select ${item.experiment_id} for comparison`}
                   />
                 </Td>
-                <Td>
+                <Td className="whitespace-nowrap">
                   <Mono>{shortId(item.experiment_id)}</Mono>
+                  {item.origin !== "assessment" && (
+                    <Badge severity="neutral" className="ml-2">
+                      {ORIGIN_LABEL[item.origin]}
+                    </Badge>
+                  )}
                 </Td>
                 <Td className="whitespace-nowrap">{formatTimestamp(item.created_at)}</Td>
                 <Td className="text-right font-mono text-fg">{item.seed}</Td>
@@ -233,6 +254,7 @@ function HistoryList({
 export default function HistoryPage() {
   const [status, setStatus] = useState<StatusFilter>("all");
   const [defenseEnabled, setDefenseEnabled] = useState<DefenseFilter>("all");
+  const [scope, setScope] = useState<ScopeFilter>("assessments");
   // Selection for comparison -- at most two, FIFO eviction on a third pick,
   // deliberately a plain list rather than a Set for stable A/B ordering.
   const [selected, setSelected] = useState<string[]>([]);
@@ -270,6 +292,12 @@ export default function HistoryPage() {
         <Panel flush>
           <div className="flex flex-wrap items-center gap-3 border-b border-line px-3 py-2">
             <SegmentedControl
+              ariaLabel="Which runs to list"
+              value={scope}
+              onChange={setScope}
+              options={SCOPE_OPTIONS}
+            />
+            <SegmentedControl
               ariaLabel="Filter by outcome"
               value={status}
               onChange={setStatus}
@@ -294,9 +322,10 @@ export default function HistoryPage() {
           </div>
 
           <HistoryList
-            key={`${status}-${defenseEnabled}`}
+            key={`${status}-${defenseEnabled}-${scope}`}
             status={status}
             defenseEnabled={defenseEnabled}
+            scope={scope}
             selected={selected}
             onToggleSelect={toggleSelect}
           />

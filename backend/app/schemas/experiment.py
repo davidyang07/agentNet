@@ -157,6 +157,12 @@ class EdgeView(BaseModel):
     target: str
 
 
+# Why a run exists: launched by an operator, or one arm of a fix trial or a
+# defense check that the console runs on their behalf. Not part of the config:
+# it never affects the simulation, only how history lists the run.
+RunOrigin = Literal["assessment", "fix_trial", "defense_check"]
+
+
 class ExperimentSummary(BaseModel):
     experiment_id: UUID
     status: Literal["running", "paused", "finished", "stopped"]

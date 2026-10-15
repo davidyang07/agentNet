@@ -890,6 +890,11 @@ export interface components {
             final_last_seq: number | null;
             /** Is Complete */
             is_complete: boolean | null;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "assessment" | "fix_trial" | "defense_check";
             /** App Version */
             app_version: string;
             /** Schema Version */
@@ -920,6 +925,11 @@ export interface components {
             final_last_seq: number | null;
             /** Is Complete */
             is_complete: boolean | null;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "assessment" | "fix_trial" | "defense_check";
         };
         /** ExperimentListResponse */
         ExperimentListResponse: {
@@ -1163,6 +1173,7 @@ export interface operations {
             query?: {
                 status?: ("finished" | "stopped" | "incomplete") | null;
                 defense_enabled?: boolean | null;
+                origin?: ("assessment" | "fix_trial" | "defense_check") | null;
                 limit?: number;
                 cursor?: string | null;
             };
@@ -1194,7 +1205,10 @@ export interface operations {
     };
     create_experiment_api_experiments_post: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Why the run exists; recorded for history only, never affects the simulation. */
+                origin?: "assessment" | "fix_trial" | "defense_check";
+            };
             header?: never;
             path?: never;
             cookie?: never;

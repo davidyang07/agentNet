@@ -83,17 +83,21 @@ function recordIncident(
 }
 
 /**
- * Metrics not stored in GraphState because they're pure functions of `nodes`
- * (M1's security-state machine only ever moves HEALTHY -> COMPROMISED ->
- * QUARANTINED, and quarantine is terminal — no recovery path exists — so a
- * live tally of current node state is always exactly "ever compromised,"
- * and is automatically correct across a fresh-snapshot reconnect).
+ * Metrics not stored in GraphState because they're pure functions of `nodes`,
+ * so they are automatically correct across a fresh-snapshot reconnect.
+ *
+ * Under graduated response (docs/PLAN.md §14.4 C.5) an agent can be
+ * SUSPICIOUS: flagged, but not yet quarantined. Like the backend's metrics,
+ * a suspicious agent that is infected counts as compromised and one that
+ * isn't counts as healthy, so the three buckets still add up to the fleet.
+ * `suspicious` reports how many are flagged, across both.
  */
 export function selectMetrics(state: GraphState): {
   total: number;
   healthy: number;
   compromised: number;
   quarantined: number;
+  suspicious: number;
   newCompromises: number;
   totalExposure: number;
   outbreakDuration: number;
@@ -102,16 +106,23 @@ export function selectMetrics(state: GraphState): {
   let healthy = 0;
   let compromised = 0;
   let quarantined = 0;
+  let suspicious = 0;
   for (const node of state.nodes.values()) {
     if (node.security_state === "compromised") compromised += 1;
     else if (node.security_state === "quarantined") quarantined += 1;
     else if (node.security_state === "healthy") healthy += 1;
+    else if (node.security_state === "suspicious") {
+      suspicious += 1;
+      if (node.tick_compromised != null) compromised += 1;
+      else healthy += 1;
+    }
   }
   return {
     total: state.nodes.size,
     healthy,
     compromised,
     quarantined,
+    suspicious,
     newCompromises: state.metrics.newCompromises,
     totalExposure: compromised + quarantined,
     outbreakDuration: state.tick,
@@ -195,6 +206,32 @@ export function reduce(state: GraphState, frame: StreamFrame): GraphState {
     if (existing) {
       nodes = new Map(nodes);
       nodes.set(event.agent_id, { ...existing, security_state: "quarantined" });
+    }
+  }
+
+  // Graduated response (docs/PLAN.md §14.4 C.5): a first detection only
+  // flags the agent, and whether it is infected underneath is unchanged. A
+  // second detection quarantines it (AGENT_QUARANTINED, above).
+  if (
+    event.event_type === "ANOMALY_DETECTED" &&
+    event.agent_id &&
+    event.metadata?.["response"] === "suspicious"
+  ) {
+    const existing = state.nodes.get(event.agent_id);
+    if (existing) {
+      nodes = new Map(nodes);
+      nodes.set(event.agent_id, { ...existing, security_state: "suspicious" });
+    }
+  }
+
+  // An agent not detected again within review_ticks is released back to
+  // what it was: compromised if infected, else healthy.
+  if (event.event_type === "AGENT_RELEASED" && event.agent_id) {
+    const to = event.metadata?.["to"];
+    const existing = state.nodes.get(event.agent_id);
+    if (existing && (to === "healthy" || to === "compromised")) {
+      nodes = new Map(nodes);
+      nodes.set(event.agent_id, { ...existing, security_state: to });
     }
   }
 

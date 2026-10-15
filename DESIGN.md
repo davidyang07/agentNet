@@ -450,6 +450,12 @@ Graph node **type** is carried by shape and size, never colour:
   - axes and grid use `line` and `fg-subtle` at 11px
   - the hover crosshair uses `line-strong`
   - there is always a legend, and the end of each band is labelled directly with ink text
+- **R(t) chart.** One series, so no legend; the panel title names it.
+  - a neutral `fg-subtle` line joins the cohorts; each point is coloured by its severity —
+    `ok` below 1, `high` from 1, `critical` from 2 — the only meaning colour carries here
+  - the R = 1 threshold is a dashed `line-strong` rule, labelled; whole numbers are `line` gridlines
+  - a censored cohort (still infectious, so its value may rise) is a hollow ring, not a
+    different colour, and the tooltip says so
 - **Status is never colour alone.** Every state appears with its label in the legend, the
   inspector, the badge or the tooltip.
 

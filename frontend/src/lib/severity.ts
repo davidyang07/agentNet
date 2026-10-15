@@ -81,6 +81,15 @@ export function severityForRisk(fraction: number): Severity {
   return "ok";
 }
 
+/** Severity of a reproduction number: below 1 each infection causes less
+ * than one more, so the outbreak dies out; at 2 or more it doubles a
+ * generation. */
+export function severityForReproduction(r: number): Severity {
+  if (r >= 2) return "critical";
+  if (r >= 1) return "high";
+  return "ok";
+}
+
 /** Severity of a 0..1 fraction where *higher is better* (retained utility,
  * security-plane integrity). */
 export function severityForHealth(fraction: number): Severity {

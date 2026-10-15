@@ -40,11 +40,17 @@ export default function ReplayPage(props: PageProps<"/history/[id]">) {
 // target remounts fresh -- useReplayStream relies on this.
 function ReplayContent({ experimentId }: { experimentId: string }) {
   const [control, dispatch] = useReducer(replayControlReducer, initialReplayControlState);
-  const { state, loading, loadedEvents, error, incomplete, totalEvents, playedCount, seek } = useReplayStream(
-    experimentId,
-    control.speed,
-    control.playing,
-  );
+  const {
+    state,
+    loading,
+    loadedEvents,
+    error,
+    incomplete,
+    versionMismatch,
+    totalEvents,
+    playedCount,
+    seek,
+  } = useReplayStream(experimentId, control.speed, control.playing);
   const insights = useSecurityInsights(experimentId, "replay");
   // Collapsed by default: the graph is the point of this screen, and on a
   // laptop viewport an open log squeezes it to a strip.
@@ -113,6 +119,14 @@ function ReplayContent({ experimentId }: { experimentId: string }) {
           This run is marked incomplete — persistence detected a gap, or the process never
           finalized it. Replay shows only what was actually recorded; treat its metrics as
           partial, not a trustworthy final result.
+        </WarningBanner>
+      )}
+
+      {versionMismatch && (
+        <WarningBanner className="mx-4 mt-3 lg:mx-5">
+          This run was recorded by a different build of AgentShield (
+          <span className="font-mono">{versionMismatch}</span>). Replay re-simulates it with this
+          build&apos;s engine, so it may not reproduce the original run exactly.
         </WarningBanner>
       )}
 

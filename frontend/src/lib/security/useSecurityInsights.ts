@@ -5,16 +5,19 @@ import { useCallback, useEffect, useState } from "react";
 import {
   getBlastRadius,
   getCriticalNodes,
+  getEpidemic,
   getMetrics,
   getRemediation,
   getReplayBlastRadius,
   getReplayCriticalNodes,
+  getReplayEpidemic,
   getReplayMetrics,
   getReplayRemediation,
   getReplaySecurityGraph,
   getSecurityGraph,
   type BlastRadiusResponse,
   type CriticalNodeView,
+  type EpidemicResponse,
   type MetricsResponse,
   type RemediationResponse,
   type SecurityGraphView,
@@ -35,6 +38,8 @@ export type SecurityInsights = {
   criticalNodes: CriticalNodeView[];
   blastRadius: BlastRadiusResponse | null;
   remediation: RemediationResponse | null;
+  /** Prevalence and R(t) per tick, and offspring per generation. */
+  epidemic: EpidemicResponse | null;
   /** True until the first successful load; false forever after, so a poll
    * failure mid-run shows an error next to stale data rather than wiping the
    * screen back to a spinner. */
@@ -48,6 +53,7 @@ const EMPTY: SecurityInsights = {
   criticalNodes: [],
   blastRadius: null,
   remediation: null,
+  epidemic: null,
   loading: true,
   error: null,
 };
@@ -72,6 +78,7 @@ export function useSecurityInsights(
             getCriticalNodes(id, CRITICAL_NODE_COUNT),
             getRemediation(id),
             getBlastRadius(id),
+            getEpidemic(id),
           ])
         : Promise.all([
             getReplayMetrics(id),
@@ -79,6 +86,7 @@ export function useSecurityInsights(
             getReplayCriticalNodes(id, CRITICAL_NODE_COUNT),
             getReplayRemediation(id),
             getReplayBlastRadius(id),
+            getReplayEpidemic(id),
           ]),
     [mode],
   );
@@ -90,7 +98,7 @@ export function useSecurityInsights(
 
     const poll = () => {
       fetchAll(experimentId)
-        .then(([metrics, graph, critical, remediation, blastRadius]) => {
+        .then(([metrics, graph, critical, remediation, blastRadius, epidemic]) => {
           if (cancelled) return;
           setInsights({
             metrics,
@@ -98,6 +106,7 @@ export function useSecurityInsights(
             criticalNodes: critical.nodes,
             blastRadius,
             remediation,
+            epidemic,
             loading: false,
             error: null,
           });

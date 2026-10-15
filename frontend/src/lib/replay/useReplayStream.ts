@@ -21,6 +21,8 @@ export type ReplayStreamResult = {
   loadedEvents: number;
   error: string | null;
   incomplete: boolean;
+  /** Set when the run was recorded by a different build (see ReplayData). */
+  versionMismatch: string | null;
   totalEvents: number;
   playedCount: number;
   seek: (index: number) => void;
@@ -48,6 +50,7 @@ export function useReplayStream(
   const [loadedEvents, setLoadedEvents] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [incomplete, setIncomplete] = useState(false);
+  const [versionMismatch, setVersionMismatch] = useState<string | null>(null);
   const [playedCount, setPlayedCount] = useState(0);
   const [totalEvents, setTotalEvents] = useState(0);
 
@@ -67,6 +70,7 @@ export function useReplayStream(
         snapshotStateRef.current = data.initialState;
         eventsRef.current = data.events;
         setIncomplete(data.incomplete);
+        setVersionMismatch(data.versionMismatch);
         setTotalEvents(data.events.length);
         setState(data.initialState);
         setLoading(false);
@@ -113,5 +117,15 @@ export function useReplayStream(
     setState(next);
   }
 
-  return { state, loading, loadedEvents, error, incomplete, totalEvents, playedCount, seek };
+  return {
+    state,
+    loading,
+    loadedEvents,
+    error,
+    incomplete,
+    versionMismatch,
+    totalEvents,
+    playedCount,
+    seek,
+  };
 }

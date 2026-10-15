@@ -181,6 +181,30 @@ describe("runBothArms", () => {
     expect(calledConfigs).toContainEqual({ ...BASE_CONFIG, defense_enabled: false });
   });
 
+  it("records both arms as defense-check runs and forwards the abort signal", async () => {
+    mockedRun.mockResolvedValue({ experimentId: "exp", metrics: fakeMetrics() });
+    const controller = new AbortController();
+
+    await runBothArms(BASE_CONFIG, vi.fn(), controller.signal);
+
+    for (const [, opts] of mockedRun.mock.calls) {
+      expect(opts).toEqual({ signal: controller.signal, origin: "defense_check" });
+    }
+  });
+
+  it("reports nothing for an arm cancelled through the signal", async () => {
+    const controller = new AbortController();
+    mockedRun.mockImplementation(async () => {
+      controller.abort();
+      throw new DOMException("Aborted", "AbortError");
+    });
+    const onArmUpdate = vi.fn();
+
+    await runBothArms(BASE_CONFIG, onArmUpdate, controller.signal);
+
+    expect(onArmUpdate).not.toHaveBeenCalled();
+  });
+
   it("converts non-Error throws to a string message", async () => {
     mockedRun.mockImplementation(async (config: ExperimentConfig) => {
       if (config.defense_enabled) {

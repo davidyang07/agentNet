@@ -19,6 +19,7 @@ import asyncpg
 from app.events.version import SCHEMA_VERSION
 from app.persistence.registry import writer_registry
 from app.schemas.events import Event
+from app.schemas.experiment import RunOrigin
 from app.version import APP_VERSION
 
 if TYPE_CHECKING:
@@ -65,11 +66,13 @@ class PostgresWriter:
         experiment_id: UUID,
         bus: EventBus,
         runner: ExperimentRunner,
+        origin: RunOrigin = "assessment",
     ) -> None:
         self._pool = pool
         self._experiment_id = experiment_id
         self._bus = bus
         self._runner = runner
+        self._origin = origin
         self._queue: asyncio.Queue[Event] | None = None
         self._task: asyncio.Task[None] | None = None
 
@@ -109,14 +112,16 @@ class PostgresWriter:
         config = self._runner.config
         await self._pool.execute(
             """
-            INSERT INTO experiments (experiment_id, seed, config, schema_version, app_version)
-            VALUES ($1, $2, $3::jsonb, $4, $5)
+            INSERT INTO experiments
+                (experiment_id, seed, config, schema_version, app_version, origin)
+            VALUES ($1, $2, $3::jsonb, $4, $5, $6)
             """,
             self._experiment_id,
             config.seed,
             config.model_dump_json(),
             SCHEMA_VERSION,
             APP_VERSION,
+            self._origin,
         )
 
     async def _drain_loop(self) -> None:

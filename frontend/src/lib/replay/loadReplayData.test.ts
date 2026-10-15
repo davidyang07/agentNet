@@ -89,6 +89,38 @@ describe("loadReplayData", () => {
     expect(data.initialState).toEqual(expectedInitialState);
   });
 
+  it("passes on the backend's note when the run was recorded by another build", async () => {
+    const note = "recorded=abc1234; server=def5678";
+    fetchMock.mockImplementation(async (url: string) => {
+      const u = String(url);
+      if (u.endsWith("/detail")) return okResponse({ is_complete: true });
+      if (u.endsWith("/replay-snapshot")) {
+        return {
+          ...okResponse(snapshotFrame),
+          headers: new Headers({ "X-Replay-Version-Mismatch": note }),
+        } as Response;
+      }
+      if (u.includes("/events")) return okResponse({ events: [], next_seq: null });
+      throw new Error(`unexpected fetch: ${u}`);
+    });
+
+    const data = await loadReplayData(EXPERIMENT_ID);
+
+    expect(data.versionMismatch).toBe(note);
+  });
+
+  it("reports no version note when the builds match", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      const u = String(url);
+      if (u.endsWith("/detail")) return okResponse({ is_complete: true });
+      if (u.endsWith("/replay-snapshot")) return okResponse(snapshotFrame);
+      if (u.includes("/events")) return okResponse({ events: [], next_seq: null });
+      throw new Error(`unexpected fetch: ${u}`);
+    });
+
+    expect((await loadReplayData(EXPERIMENT_ID)).versionMismatch).toBeNull();
+  });
+
   it.each([
     [true, false],
     [false, true],

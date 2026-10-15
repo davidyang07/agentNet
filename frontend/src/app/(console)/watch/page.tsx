@@ -35,7 +35,8 @@ export default function WatchPage() {
 function WatchContent({ experimentId }: { experimentId: string }) {
   const { control, stream } = useExperiment();
   const insights = useSecurityInsights(experimentId);
-  const series = useOutbreakSeries(stream);
+  // The epidemic report backfills ticks streamed before this screen opened.
+  const series = useOutbreakSeries(stream, insights.epidemic?.prevalence);
   const metrics = useMemo(() => selectMetrics(stream), [stream]);
   const events = stream.recentEvents;
   const eventGap = liveLogGapHint(control.status, events.length > 0);
@@ -73,6 +74,16 @@ function WatchContent({ experimentId }: { experimentId: string }) {
                     <span className="text-fg-subtle">{item.label}</span>
                   </li>
                 ))}
+                {metrics.suspicious > 0 && (
+                  <li
+                    className="flex items-center gap-1.5"
+                    title="Flagged by the detector under graduated response, not yet quarantined. Already counted as compromised or healthy."
+                  >
+                    <SeverityDot severity="warn" />
+                    <span className="font-mono tabular text-fg">{metrics.suspicious}</span>
+                    <span className="text-fg-subtle">Flagged</span>
+                  </li>
+                )}
                 <li className="text-fg-subtle">of {metrics.total} agents</li>
               </ul>
             </div>

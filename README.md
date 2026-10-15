@@ -21,22 +21,24 @@ The landing page at `/` is one screen: what AgentShield does, the four steps, an
 
 | Step | Screen | What it answers |
 |---|---|---|
-| 1 | **Set up** (`/setup`) | What are we testing? Pick a preset, or set agents, seed, attacks and defense — tuning parameters sit under Advanced settings. The run opens in Watch. |
-| 2 | **Watch** (`/watch`) | What is happening? The typed security graph coloured by compromise, the outbreak curve under it, and live events beside it. Select a node to trace it back to patient zero, or trace an attack path between two nodes. |
-| 3 | **Results** (`/results`) | How bad was it, and what did the defense cost? Four headline numbers, then the other metrics (definitions on demand), the attack surface and the top choke points — one screen. |
+| 1 | **Set up** (`/setup`) | What are we testing? Pick a preset (including **Immune memory**, a herd-immunity case), or set agents, seed, attacks and defense. Tuning parameters — topology, attack surface, who can spread, worm strains, immune memory, detection and response — sit under Advanced settings. The run opens in Watch. |
+| 2 | **Watch** (`/watch`) | What is happening? The typed security graph coloured by compromise (agents flagged under graduated response in amber), the outbreak curve under it, and live events beside it. Select a node to trace it back to patient zero, or trace an attack path between two nodes. Opened mid-run or after it, the curve still starts at tick 0. |
+| 3 | **Results** (`/results`) | How bad was it, and what did the defense cost? Four headline numbers; R(t) and the epidemic numbers (R0, final size, peak, and immune-memory block rates when it is on); then the other metrics (definitions on demand), the attack surface and the top choke points. |
 | 4 | **Fix & re-test** (`/fix`) | What should change, and does it work? Findings as config changes, each re-tested before → after from the same seed and listing only the metrics that moved — plus a defense on vs off check. |
-| — | **Runs** (`/history`) | Everything ever run: a filterable table, deterministic replay, and comparison of any two persisted runs. |
+| — | **Runs** (`/history`) | Every assessment you ran — the extra runs Fix & re-test starts are one switch away — with a filterable table, deterministic replay, and comparison of any two persisted runs. |
 
 ![Watch — the security graph, outbreak curve and live events](docs/screenshots/watch.jpg)
 
 *Watch: colour is security state, shape and size are node type. Selecting a node traces its
 compromise chain back to patient zero and lists what it can reach.*
 
-![Results — headline numbers, the other metrics, attack surface and choke points](docs/screenshots/results.jpg)
+![Results — headline numbers, R(t), the epidemic numbers, and the other metrics](docs/screenshots/results.jpg)
 
-*Results: the four headline numbers, then the other metrics, what the attacker took, and where
-containing it matters most. **Definitions** shows the formula the backend computes each metric
-from; **Run details** shows the seed and configuration that reproduce every number.*
+*Results: the four headline numbers; R(t), each infection cohort's mean offspring against the
+R = 1 threshold, with the numbers read from the infection tree; then the other metrics, what the
+attacker took, and where containing it matters most. **Definitions** shows the formula the backend
+computes each metric from; **Run details** shows the seed and configuration that reproduce every
+number.*
 
 ![Fix & re-test — a finding and its validated before/after](docs/screenshots/fix.jpg)
 
@@ -141,10 +143,14 @@ active run is remembered per browser tab across reloads.
 
 ## History and replay
 
-Every run is persisted event by event as it happens. **Runs** (`/history`) lists them with an
-**Integrity** column marking whether each run's event log is provably complete. **Replay** opens
+Every run is persisted event by event as it happens, with its origin: an `assessment` the
+operator launched, or one arm of a `fix_trial` or `defense_check` that Fix & re-test ran
+(`POST /api/experiments?origin=…`; `GET /api/experiments?origin=assessment` lists only the
+operator's own). **Runs** (`/history`) lists assessments by default — **Include re-tests** shows
+the rest, badged — and marks any run whose event log isn't provably complete. **Replay** opens
 `/history/[id]` — the same topology, inspector, and event log as the live view, driven entirely
-client-side from a single fetch, with play/pause/speed/scrub and reconstructed final metrics.
+client-side from a single fetch, with play/pause/speed/scrub and reconstructed final metrics. It
+warns when the run was recorded by a different build, whose engine may not reproduce it exactly.
 Select two rows and **Compare selected** scores both on identical metrics as a delta, warning you
 when the runs differ in more than their defense setting.
 

@@ -111,8 +111,11 @@ function FindingsSection({
                 </span>
               </span>
               {trial.running && (
-                <span className="flex items-center gap-1.5 text-2xs text-fg-muted">
+                <span className="flex items-center gap-2 text-2xs text-fg-muted">
                   <Spinner /> Running before and after
+                  <Button size="sm" variant="ghost" onClick={trial.cancel}>
+                    Cancel
+                  </Button>
                 </span>
               )}
             </div>
@@ -136,7 +139,7 @@ function FindingsSection({
 }
 
 function DefenseCheckSection({ config }: { config: ExperimentConfig | null }) {
-  const { armA, armB, runComparison } = useComparison();
+  const { armA, armB, runComparison, cancel } = useComparison();
   const running = armA.status === "running" || armB.status === "running";
   const started = armA.status !== "idle" || armB.status !== "idle";
   // The arm cards report progress and failures; once both finished cleanly
@@ -149,14 +152,21 @@ function DefenseCheckSection({ config }: { config: ExperimentConfig | null }) {
         title="Is the defense worth it?"
         description="Runs this configuration with the defense off, then on — same seed, everything else equal."
         actions={
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={running || !config}
-            onClick={() => config && runComparison(config)}
-          >
-            {running ? "Running both…" : started ? "Run again" : "Run defense check"}
-          </Button>
+          <>
+            {running && (
+              <Button size="sm" variant="ghost" onClick={cancel}>
+                Cancel
+              </Button>
+            )}
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={running || !config}
+              onClick={() => config && runComparison(config)}
+            >
+              {running ? "Running both…" : started ? "Run again" : "Run defense check"}
+            </Button>
+          </>
         }
       />
       {started && (

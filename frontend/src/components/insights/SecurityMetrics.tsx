@@ -1,13 +1,23 @@
 import { MetricTile, StatList, StatRow } from "@/components/ui/Metric";
 import { formatLatency, formatPercent } from "@/lib/format";
 import type { MetricsResponse } from "@/lib/api/client";
-import { severityForHealth, severityForRisk, type Severity } from "@/lib/severity";
+import {
+  severityForHealth,
+  severityForReproduction,
+  severityForRisk,
+  type Severity,
+} from "@/lib/severity";
 
 export type MetricDescriptor = {
   key: keyof MetricsResponse;
   label: string;
   definition: string;
-  kind: "risk" | "health" | "count" | "latency";
+  kind: "risk" | "health" | "count" | "latency" | "reproduction" | "tick";
+  /** Which way is an improvement, when that isn't the kind's usual one;
+   * null when neither is (when an outbreak peaks is not better or worse). */
+  better?: "lower" | "higher" | null;
+  /** Severity, when the kind's usual rule would mislead. */
+  severity?: (value: number) => Severity;
 };
 
 /**
@@ -83,10 +93,91 @@ export const METRIC_DESCRIPTORS: readonly MetricDescriptor[] = [
   },
 ];
 
+/**
+ * The epidemic view of the same run (docs/PLAN.md §6, §14.4 C.1–C.4), read
+ * from the infection tree. The immune-memory and strain metrics are null
+ * unless those features are on, and are then left out of lists.
+ */
+export const EPIDEMIC_METRIC_DESCRIPTORS: readonly MetricDescriptor[] = [
+  {
+    key: "r0_estimate",
+    label: "R0 estimate",
+    definition:
+      "Mean offspring of generations 0 and 1 of the infection tree: how many agents each early infection went on to infect. Below 1, the outbreak dies out.",
+    kind: "reproduction",
+  },
+  {
+    key: "final_size",
+    label: "Final size",
+    definition: "Agents ever infected ÷ all agents.",
+    kind: "risk",
+  },
+  {
+    key: "peak_prevalence",
+    label: "Peak prevalence",
+    definition: "The largest fraction of agents compromised at the end of a tick.",
+    kind: "risk",
+  },
+  {
+    key: "peak_tick",
+    label: "Peak tick",
+    definition: "The first tick at which prevalence reached its peak.",
+    kind: "tick",
+    better: null,
+  },
+  {
+    key: "serial_interval",
+    label: "Serial interval",
+    definition: "Mean ticks from a source's infection to its target's.",
+    kind: "latency",
+    better: null,
+  },
+  {
+    key: "strains_observed",
+    label: "Strains observed",
+    definition: "Distinct worm strains among infected agents. Tracked when strains mutate.",
+    kind: "count",
+    // One strain is an outbreak that never mutated; only variants matter.
+    severity: (value) => (value > 1 ? "warn" : "neutral"),
+  },
+  {
+    key: "immunity_coverage",
+    label: "Immunity coverage",
+    definition: "Agents holding a legitimate threat signature ÷ all agents.",
+    kind: "health",
+  },
+  {
+    key: "signature_block_rate",
+    label: "Signature block rate",
+    definition: "Attacks blocked by a held signature ÷ attack attempts.",
+    kind: "health",
+  },
+  {
+    key: "benign_block_rate",
+    label: "Benign block rate",
+    definition:
+      "Benign traffic blocked ÷ benign traffic screened — the autoimmune cost of immune memory.",
+    kind: "risk",
+  },
+];
+
+export const ALL_METRIC_DESCRIPTORS: readonly MetricDescriptor[] = [
+  ...METRIC_DESCRIPTORS,
+  ...EPIDEMIC_METRIC_DESCRIPTORS,
+];
+
+/** Which way is an improvement for this metric, if either. */
+export function betterDirection(descriptor: MetricDescriptor): "lower" | "higher" | null {
+  if (descriptor.better !== undefined) return descriptor.better;
+  return descriptor.kind === "health" ? "higher" : "lower";
+}
+
 export function metricSeverity(descriptor: MetricDescriptor, value: number | null): Severity {
   if (value === null) return "neutral";
+  if (descriptor.severity) return descriptor.severity(value);
   if (descriptor.kind === "risk") return severityForRisk(value);
   if (descriptor.kind === "health") return severityForHealth(value);
+  if (descriptor.kind === "reproduction") return severityForReproduction(value);
   if (descriptor.kind === "count") return value > 0 ? "high" : "ok";
   return "neutral";
 }
@@ -95,6 +186,8 @@ export function formatMetric(descriptor: MetricDescriptor, value: number | null)
   if (value === null) return "—";
   if (descriptor.kind === "latency") return formatLatency(value);
   if (descriptor.kind === "count") return String(value);
+  if (descriptor.kind === "reproduction") return value.toFixed(2);
+  if (descriptor.kind === "tick") return `t${value}`;
   return formatPercent(value);
 }
 
@@ -142,14 +235,18 @@ export function MetricsList({
   metrics,
   keys,
   withDefinitions,
+  skipMissing,
 }: {
   metrics: MetricsResponse;
   keys?: ReadonlyArray<keyof MetricsResponse>;
   withDefinitions?: boolean;
+  /** Leave out metrics the run has no value for (a feature that is off). */
+  skipMissing?: boolean;
 }) {
-  const descriptors = keys
-    ? METRIC_DESCRIPTORS.filter((d) => keys.includes(d.key))
-    : METRIC_DESCRIPTORS;
+  const descriptors = (keys
+    ? ALL_METRIC_DESCRIPTORS.filter((d) => keys.includes(d.key))
+    : METRIC_DESCRIPTORS
+  ).filter((d) => !skipMissing || typeof metrics[d.key] === "number");
 
   return (
     <StatList>

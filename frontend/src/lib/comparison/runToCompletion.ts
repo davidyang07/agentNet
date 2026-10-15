@@ -6,6 +6,7 @@ import {
   backendWsUrl,
   type ExperimentConfig,
   type MetricsResponse,
+  type RunOrigin,
 } from "@/lib/api/client";
 import { reduce, initialGraphState, type GraphState, type StreamFrame } from "@/lib/stream/reducer";
 
@@ -40,9 +41,9 @@ export type RunResult = {
  */
 export async function runExperimentToCompletion(
   config: ExperimentConfig,
-  opts?: { signal?: AbortSignal },
+  opts?: { signal?: AbortSignal; origin?: RunOrigin },
 ): Promise<RunResult> {
-  const summary = await createExperiment(config);
+  const summary = await createExperiment(config, opts?.origin);
   const experimentId = summary.experiment_id;
 
   let graphState: GraphState = initialGraphState;

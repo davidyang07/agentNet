@@ -75,7 +75,28 @@ export const BOUNDS = {
   sentinel_compromise_rate: [0, 1],
   attestation_replay_rate: [0, 1],
   byzantine_collusion_rate: [0, 1],
+  inference_fraction: [0, 1],
+  signature_bits: [8, 256],
+  strain_benign_distance: [0, 256],
+  mutation_rate: [0, 1],
+  mutation_bits: [1, 64],
+  immunity_coverage: [0, 1],
+  signature_radius: [0, 256],
+  signature_delay_ticks: [0, 50],
+  benign_probes_per_tick: [0, 10],
+  detector_ramp_ticks: [0, 50],
+  detector_false_positive_rate: [0, 1],
+  suspicious_transmission_factor: [0, 1],
+  review_ticks: [1, 100],
 } as const satisfies Record<string, readonly [number, number]>;
+
+/** Fields the backend also caps at `signature_bits` (a strain is that many
+ * bits, so no distance or flip count can exceed it). */
+export const WITHIN_SIGNATURE_BITS = [
+  "strain_benign_distance",
+  "mutation_bits",
+  "signature_radius",
+] as const;
 
 export function clamp(value: number, min: number, max: number): number {
   if (Number.isNaN(value)) return min;
@@ -101,7 +122,9 @@ export const PRESETS: readonly Preset[] = [
     label: "Baseline propagation",
     description:
       "Homogeneous agent mesh, lateral compromise spread, anomaly-detection defense enabled.",
-    config: DEFAULT_CONFIG,
+    // The backend's default scenarios also list prompt injection, which needs
+    // LLM-backed agents and is a no-op here; the baseline is propagation only.
+    config: { ...DEFAULT_CONFIG, active_scenarios: ["propagation"] },
   },
   {
     id: "undefended",
@@ -158,6 +181,32 @@ export const PRESETS: readonly Preset[] = [
       resource_count: 4,
       sentinel_count: 3,
       active_scenarios: ["adaptive_attacker"],
+    },
+  },
+  {
+    id: "immune-memory",
+    label: "Immune memory",
+    description:
+      "A random graph where each infection would cause about 3 more. Shared immune memory, pre-seeded with patient zero's signature, on 90% of agents holds R below 1.",
+    // The agentshield gate's canonical immunity case (backend
+    // app/benchmark/epidemiology.py IMMUNITY_BASE at 90% coverage), at the
+    // API's 100-agent limit: at seed 42, R0 0.5 and final size 0.02, against
+    // 3.3 and 1.0 with no coverage.
+    config: {
+      ...DEFAULT_CONFIG,
+      node_count: 100,
+      topology: "erdos_renyi",
+      edge_density: 3,
+      p_same: 0.4,
+      p_cross: 0.4,
+      max_ticks: 60,
+      defense_enabled: false,
+      initial_compromised: "random_node",
+      immunity_enabled: true,
+      immunity_coverage: 0.9,
+      preseed_patient_zero_signature: true,
+      strain_benign_distance: 12,
+      active_scenarios: ["propagation"],
     },
   },
 ] as const;

@@ -1,4 +1,8 @@
-import { fetchEventHistory, fetchReplaySnapshot, getExperimentDetail } from "@/lib/api/client";
+import {
+  fetchEventHistory,
+  fetchReplaySnapshotWithVersion,
+  getExperimentDetail,
+} from "@/lib/api/client";
 import {
   type Event,
   type GraphState,
@@ -15,6 +19,9 @@ export type ReplayData = {
   // (is_complete still null) is exactly as untrustworthy for replay as a
   // detected gap (is_complete === false).
   incomplete: boolean;
+  // The backend's note when this run was recorded by a different build,
+  // whose engine may not reproduce it exactly; null when the builds match.
+  versionMismatch: string | null;
   initialState: GraphState;
   events: Event[];
 };
@@ -35,7 +42,7 @@ export async function loadReplayData(
   onProgress?: (loaded: number) => void,
 ): Promise<ReplayData> {
   const detail = await getExperimentDetail(experimentId);
-  const snapshot = await fetchReplaySnapshot(experimentId);
+  const { snapshot, versionMismatch } = await fetchReplaySnapshotWithVersion(experimentId);
   const initialState = reduce(initialGraphState, snapshot as StreamFrame);
 
   const events: Event[] = [];
@@ -48,7 +55,7 @@ export async function loadReplayData(
     sinceSeq = page.next_seq;
   }
 
-  return { incomplete: detail.is_complete !== true, initialState, events };
+  return { incomplete: detail.is_complete !== true, versionMismatch, initialState, events };
 }
 
 /** Cheap at this project's data volumes: folds `count` events from `events`
